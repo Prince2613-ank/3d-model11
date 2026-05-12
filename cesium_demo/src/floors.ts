@@ -10,6 +10,7 @@ import { loadChairsForFloor, secondFloorChairs, thirdFloorChairs, type ChairMode
 import { renderCameraControls } from "./ui";
 import { updateNavigationVisibility } from "./navigation";
 import { showToast } from "./booking";
+import { clearCctvViewshed } from "./cameraShed/cctvViewshed";
 
 let selectedFloor = 0;
 let autoIndoorEnabled = true;
@@ -68,6 +69,7 @@ function applyVisibility(floor: number): void {
   setShow(models.second, floor === 3);
   setShow(models.third, floor === 4);
   setShow(models.meetingRoom, floor === 4);
+  setShow(models.thirdFloorPiller, floor === 4);
   const activeCctv = getActiveCctvModel();
   models.cameras.forEach((camera) => {
     const shouldShow = (camera.cameraFloor === floor) && camera !== activeCctv;
@@ -124,6 +126,7 @@ export function showFloor(floor: number): void {
     return;
   }
 
+  clearCctvViewshed();
   selectedFloor = floor;
   const token = ++floorSwitchToken;
 
@@ -146,6 +149,7 @@ export function openFloorProfessional(floorNumber: number): Promise<void> {
     return Promise.resolve();
   }
 
+  clearCctvViewshed();
   if (typeof (viewer.camera as any).cancelFlight === "function") {
     (viewer.camera as any).cancelFlight();
   }

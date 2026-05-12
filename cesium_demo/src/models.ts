@@ -17,6 +17,7 @@ import camera4Url from "../3rd_cc4.glb?url";
 import camera5Url from "../3rd_cc5.glb?url";
 import camera6Url from "../3rd_cc6.glb?url";
 import conferenceRoomCamUrl from "../3rd_cc6 (1).glb?url";
+import camera8Url from "../3rd_cc8.glb?url";
 import meetingRoomUrl from "../3rd_cc_meeting_room.glb?url";
 
 import nd2dCam1Url from "../2nd_cc1.glb?url";
@@ -32,6 +33,7 @@ import fullBuildingUrl from "../full_building.glb?url";
 import groundFloorUrl from "../ground_floor_final.glb?url";
 import outdoorModelUrl from "../outdoor_model.glb?url";
 import thirdFloorUrl from "../optimized.glb?url";
+import thirdFloorPillerUrl from "../3rd_floor_piller.glb?url";
 
 const chairModelAssets = import.meta.glob<string>(
   ["../[0-9].glb", "../[0-9][0-9].glb", "../final_2nd_floor_[0-9].glb", "../final_2nd_floor_[0-9][0-9].glb"],
@@ -50,6 +52,7 @@ const modelAssets: Record<string, string> = {
   "../3rd_cc5.glb": camera5Url,
   "../3rd_cc6.glb": camera6Url,
   "../3rd_cc6 (1).glb": conferenceRoomCamUrl,
+  "../3rd_cc8.glb": camera8Url,
   "../3rd_cc_meeting_room.glb": meetingRoomUrl,
 
   "../2nd_cc1.glb": nd2dCam1Url,
@@ -64,6 +67,7 @@ const modelAssets: Record<string, string> = {
   "../1st_floor_up_final.glb": firstFloorUrl,
   "../final_2nd_floor_without_chair.glb": secondFloorUrl,
   "../optimized.glb": thirdFloorUrl,
+  "../3rd_floor_piller.glb": thirdFloorPillerUrl,
   "../outdoor_model.glb": outdoorModelUrl,
   ...chairModelAssets
 };
@@ -110,6 +114,7 @@ export type CameraConfig = {
   pitchMin?: number;
   pitchMax?: number;
   fovDeg?: number;
+  maxRangeMeters?: number;
   eyeOffsetMeters?: number;
   moveBounds?: {
     minLon: number;
@@ -139,6 +144,7 @@ export interface BuildingModels {
   cameras: CameraModel[];
   outdoor: Cesium.Model | null;
   meetingRoom: Cesium.Model | null;
+  thirdFloorPiller: Cesium.Model | null;
 }
 
 export const models: BuildingModels = {
@@ -149,7 +155,8 @@ export const models: BuildingModels = {
   third: null,
   cameras: [],
   outdoor: null,
-  meetingRoom: null
+  meetingRoom: null,
+  thirdFloorPiller: null
 };
 
 async function loadModel(fileName: string, altitude: number): Promise<Cesium.Model> {
@@ -333,6 +340,18 @@ function configureCameraModel(camera: CameraModel, index: number, floor: number)
       pitchMin: -60,
       pitchMax: -35,
       fovDeg: 110
+    },
+    {
+      lon: 77.133663,
+      lat: 28.670975,
+      height: 11.55,
+      heading: 61,
+      pitch: -56,
+      headingMin: 45,
+      headingMax: 73,
+      pitchMin: -85,
+      pitchMax: -45,
+      fovDeg: 110
     }
   ];
 
@@ -378,7 +397,13 @@ export function ensureFloorModelLoaded(floor: number): Promise<void> {
         addPrimitiveHidden(cam);
       }
     } else if (floor === 4 && !models.cameras.some((camera) => camera.cameraFloor === 4)) {
-      const cameraFiles = ["3rd_cc1.glb", "3rd_cc2.glb", "3rd_cc3.glb", "3rd_cc4.glb", "3rd_cc5.glb", "3rd_cc6.glb", "3rd_cc6 (1).glb", "3rd_cc_meeting_room.glb"];
+      if (!models.thirdFloorPiller) {
+        const piller = await loadModel("3rd_floor_piller.glb", ALT_3RD);
+        models.thirdFloorPiller = piller;
+        addPrimitiveHidden(piller);
+      }
+
+      const cameraFiles = ["3rd_cc1.glb", "3rd_cc2.glb", "3rd_cc3.glb", "3rd_cc4.glb", "3rd_cc5.glb", "3rd_cc6.glb", "3rd_cc6 (1).glb", "3rd_cc_meeting_room.glb", "3rd_cc8.glb"];
       for (let i = 0; i < cameraFiles.length; i++) {
         const cam = await loadModel(cameraFiles[i], ALT_3RD) as CameraModel;
         configureCameraModel(cam, i, 4);

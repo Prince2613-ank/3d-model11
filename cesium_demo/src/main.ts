@@ -11,6 +11,7 @@ import {
   getActiveNavigationStartFloor,
   setNavigationFloorSwitchHandler,
 } from "./navigation";
+import { clearCctvViewshed } from "./cameraShed/cctvViewshed";
 import {
   bindCctvPanel,
   bindUiControls,
@@ -55,6 +56,7 @@ async function bootstrap(): Promise<void> {
     showFloor: openFloorProfessional,
 
     startNavigation: async () => {
+      clearCctvViewshed();
       showFloorSpinner("Preparing navigation...");
       try {
         await startNavigation();

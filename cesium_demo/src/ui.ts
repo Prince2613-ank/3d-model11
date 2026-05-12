@@ -12,10 +12,19 @@ import {
   ensureFloorModelLoaded,
   resetCctvDefaultView,
   getCctvDebugInfo,
+  models,
 } from "./models";
 import { GlobalEvent, matchRoomName, showToast, cancelBooking, currentUserEmail } from "./booking";
 import { BOOKABLE_ROOMS } from "./rooms";
 import { FLOOR_CAMERAS } from "./config";
+import {
+  clearCctvViewshed,
+  showBlindSpots,
+  showCameraViewshed,
+  showCoverageAndBlindSpots,
+  showCoverageOnly,
+  type CctvCoverageStats,
+} from "./cameraShed/cctvViewshed";
 
 export type NavigationStep = {
   icon: string;
@@ -232,6 +241,11 @@ let loadingMessageTimer: number | null = null;
 let loadingOverlayDepth = 0;
 let cameraControlsLocked = false;
 let cameraViewWarningShownAt = 0;
+type CctvViewshedMode = "camera" | "coverage" | "blind" | "both";
+let activeCctvCamera: CameraModel | null = null;
+let activeCctvViewshedMode: CctvViewshedMode = "camera";
+let cctvViewshedUiToken = 0;
+let activeCameraControlFloor: number | null = null;
 
 function showExitCameraViewToast(): void {
   const now = Date.now();
@@ -648,6 +662,101 @@ function bindHoldButton(button: HTMLElement, onTick: () => void): void {
   button.addEventListener("touchcancel", stop);
 }
 
+function getActiveViewshedFloor(): number | null {
+  const floor = activeCctvCamera?.cameraFloor ?? activeCameraControlFloor;
+  return floor === 3 || floor === 4 ? floor : null;
+}
+
+function getActiveFloorCameras(): CameraModel[] {
+  const floor = getActiveViewshedFloor();
+  if (!floor) return [];
+  return models.cameras.filter((camera) => camera?.cameraConfig && camera.cameraFloor === floor);
+}
+
+function setViewshedStatus(stats: CctvCoverageStats | null): void {
+  const node = optionalElement<HTMLElement>("cctvViewshedStats");
+  if (!node) return;
+  node.textContent = stats
+    ? `Coverage ${stats.coveragePercent.toFixed(1)}% | Blind ${stats.blindPercent.toFixed(1)}%`
+    : "";
+}
+
+function syncViewshedModeButtons(): void {
+  document.querySelectorAll<HTMLButtonElement>("[data-cctv-viewshed]").forEach((button) => {
+    const isActive = button.dataset.cctvViewshed === activeCctvViewshedMode;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+async function renderActiveCctvViewshed(): Promise<void> {
+  const token = ++cctvViewshedUiToken;
+  syncViewshedModeButtons();
+
+  const camera = activeCctvCamera;
+  const floor = getActiveViewshedFloor();
+  if (!floor) {
+    clearCctvViewshed();
+    setViewshedStatus(null);
+    return;
+  }
+
+  try {
+    const floorCameras = getActiveFloorCameras();
+    let stats: CctvCoverageStats;
+    if (activeCctvViewshedMode === "coverage") {
+      stats = await showCoverageOnly(floorCameras, floor);
+    } else if (activeCctvViewshedMode === "blind") {
+      stats = await showBlindSpots(floorCameras, floor);
+    } else if (activeCctvViewshedMode === "both") {
+      stats = await showCoverageAndBlindSpots(floorCameras, floor);
+    } else if (camera) {
+      stats = await showCameraViewshed(camera, floor);
+    } else {
+      stats = await showCoverageOnly(floorCameras, floor);
+    }
+
+    if (token === cctvViewshedUiToken) setViewshedStatus(stats);
+  } catch (error) {
+    console.warn("[CCTV Viewshed] Failed to render:", error);
+    if (token === cctvViewshedUiToken) setViewshedStatus(null);
+  }
+}
+
+function clearActiveCctvViewshed(): void {
+  cctvViewshedUiToken += 1;
+  activeCctvCamera = null;
+  activeCctvViewshedMode = "camera";
+  clearCctvViewshed();
+  setViewshedStatus(null);
+  syncViewshedModeButtons();
+}
+
+function syncCameraListSlider(): void {
+  const list = optionalElement<HTMLElement>("cameraPanelBody");
+  const slider = optionalElement<HTMLInputElement>("cameraListSlider");
+  if (!list || !slider) return;
+
+  const maxScroll = Math.max(0, list.scrollHeight - list.clientHeight);
+  slider.max = String(Math.ceil(maxScroll));
+  slider.value = String(Math.min(Math.ceil(list.scrollTop), maxScroll));
+  slider.hidden = maxScroll <= 1;
+  slider.disabled = maxScroll <= 1;
+}
+
+function bindCameraListSlider(): void {
+  const list = optionalElement<HTMLElement>("cameraPanelBody");
+  const slider = optionalElement<HTMLInputElement>("cameraListSlider");
+  if (!list || !slider || slider.dataset.bound === "1") return;
+
+  slider.dataset.bound = "1";
+  slider.addEventListener("input", () => {
+    list.scrollTop = Number(slider.value);
+  });
+  list.addEventListener("scroll", syncCameraListSlider, { passive: true });
+  window.addEventListener("resize", syncCameraListSlider);
+}
+
 export function showCctvPanel(heading: number, pitch: number): void {
   const panel = optionalElement<HTMLElement>("cctvPanel");
   if (panel) panel.style.display = "block";
@@ -689,9 +798,23 @@ export function bindCctvPanel(): void {
   bindHoldButton(upBtn, () => setCctvPitch(0.5));
   bindHoldButton(downBtn, () => setCctvPitch(-0.5));
   defaultBtn.addEventListener("click", resetCctvDefaultView);
+  document.querySelectorAll<HTMLButtonElement>("[data-cctv-viewshed]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const mode = button.dataset.cctvViewshed;
+      if (mode === "clear") {
+        clearActiveCctvViewshed();
+        return;
+      }
+      if (mode !== "camera" && mode !== "coverage" && mode !== "blind" && mode !== "both") return;
+      if (mode === activeCctvViewshedMode) return;
+      activeCctvViewshedMode = mode;
+      void renderActiveCctvViewshed();
+    });
+  });
   viewer.scene.preRender.addEventListener(updateCctvDebugInfo);
 
   exitBtn.addEventListener("click", () => {
+    clearActiveCctvViewshed();
     exitCctvMode();
     hideCctvPanel();
   });
@@ -699,12 +822,21 @@ export function bindCctvPanel(): void {
 
 // ── Camera presets ────────────────────────────────────────────────
 export function openCameraView(camera: CameraModel): void {
+  if (!camera?.cameraConfig) {
+    clearActiveCctvViewshed();
+    showToast("Camera data is not ready yet.", "error");
+    return;
+  }
+
+  clearCctvViewshed();
+  activeCctvCamera = camera;
   enterCctvMode(camera.cameraConfig, (h, p) => {
     setText("cctvHeadingDisplay", `${Math.round(h)}°`);
     setText("cctvPitchDisplay", `${Math.round(p)}°`);
   }, camera);
   setCameraViewControlsLocked(true);
   showCctvPanel(camera.cameraConfig.heading, camera.cameraConfig.pitch);
+  void renderActiveCctvViewshed();
 
   // Sync UI highlight
   const container = document.getElementById("cameraButtons");
@@ -722,15 +854,21 @@ export function renderCameraControls(floor: number): void {
   const container = document.getElementById("cameraButtons");
   if (!panel || !container) return;
 
+  bindCameraListSlider();
+  activeCameraControlFloor = floor === 3 || floor === 4 ? floor : null;
   const cameras = (FLOOR_CAMERAS[floor] || []).filter((camera) => camera.showInControls !== false);
 
   if (cameras.length === 0) {
     panel.style.display = "none";
+    syncCameraListSlider();
     return;
   }
 
   container.innerHTML = "";
   cameras.forEach((cam) => {
+    const row = document.createElement("div");
+    row.className = "camera-coverage-row";
+
     const btn = document.createElement("button");
     btn.className = "btn";
     btn.type = "button";
@@ -755,12 +893,38 @@ export function renderCameraControls(floor: number): void {
         btn.disabled = false;
       }
     };
-    container.appendChild(btn);
+    const coverageBtn = document.createElement("button");
+    coverageBtn.className = "btn";
+    coverageBtn.type = "button";
+    coverageBtn.textContent = "Coverage";
+    coverageBtn.disabled = cameraControlsLocked;
+    coverageBtn.onclick = async () => {
+      if (cameraControlsLocked) return;
+      coverageBtn.disabled = true;
+      try {
+        await ensureFloorModelLoaded(floor);
+        const model = getCameraByName(cam.name, floor);
+        if (!model) {
+          showToast("Camera model is not ready yet.", "error");
+          return;
+        }
+        activeCctvCamera = model;
+        activeCctvViewshedMode = "camera";
+        void renderActiveCctvViewshed();
+      } finally {
+        coverageBtn.disabled = false;
+      }
+    };
+
+    row.appendChild(btn);
+    row.appendChild(coverageBtn);
+    container.appendChild(row);
   });
 
-  panel.style.display = cameraControlsLocked ? "none" : "block";
+  panel.style.display = cameraControlsLocked ? "none" : "flex";
   panel.style.pointerEvents = cameraControlsLocked ? "none" : "auto";
   panel.style.opacity = cameraControlsLocked ? "0.5" : "1";
+  requestAnimationFrame(syncCameraListSlider);
 }
 
 

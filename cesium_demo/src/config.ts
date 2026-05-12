@@ -24,6 +24,10 @@ export const ROOM_CALENDARS: Record<string, string> = {
   "Conference Room": "c_18811n8dsq2v8haakdhev0subolt4@resource.calendar.google.com",
 };
 
+export const CLOSED_ROOMS_BY_FLOOR: Record<number, string[]> = {
+  3: ["Pantry", "Stairs"],
+  4: ["Pantry", "Stairs", "Meeting Room", "Conference Room"],
+};
 
 export const FLOOR_CAMERAS: Record<number, CameraPreset[]> = {
   3: [
@@ -100,6 +104,11 @@ export const FLOOR_CAMERAS: Record<number, CameraPreset[]> = {
       name: "Conference Room Cam",
       destination: Cesium.Cartesian3.fromDegrees(77.133595, 28.670980, 11.21),
       orientation: { heading: Cesium.Math.toRadians(83), pitch: Cesium.Math.toRadians(-54), roll: 0 },
+    },
+    {
+      name: "3rd Floor Employee Area Cam 3",
+      destination: Cesium.Cartesian3.fromDegrees(77.133663, 28.670975, 11.55),
+      orientation: { heading: Cesium.Math.toRadians(61), pitch: Cesium.Math.toRadians(-56), roll: 0 },
     },
   ],
 };
