@@ -104,6 +104,17 @@ function requestChairFloor(floor: number): void {
     });
 }
 
+export async function preloadFloor(floor: number): Promise<void> {
+  if (floor <= 0) return;
+
+  await ensureFloorModelLoaded(floor);
+
+  if (floor === 3 || floor === 4) {
+    requestedChairFloors.add(floor);
+    await loadChairsForFloor(floor, showLoadedChairIfSelected);
+  }
+}
+
 async function ensureFloorCompletelyLoaded(floor: number, token: number): Promise<void> {
   if (floor <= 0) return;
 

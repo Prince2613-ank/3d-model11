@@ -1,10 +1,9 @@
 import "./styles.css";
 import { Cesium, viewer } from "./viewer";
 import { loadModels } from "./models";
-import { getSelectedFloor, initSmartFloorCamera, openFloorProfessional, showFloor } from "./floors";
+import { getSelectedFloor, initSmartFloorCamera, openFloorProfessional, preloadFloor, showFloor } from "./floors";
 import { getNavigableRoomNames, loadRooms } from "./rooms";
 import { initializeCalendar } from "./calendar";
-import { initCameraDebug } from "./camera-debug";
 import {
   exitNavigation,
   startNavigation,
@@ -54,6 +53,7 @@ async function bootstrap(): Promise<void> {
   setNavigationFloorSwitchHandler(openFloorProfessional);
   bindUiControls({
     showFloor: openFloorProfessional,
+    preloadFloor,
 
     startNavigation: async () => {
       clearCctvViewshed();
@@ -134,7 +134,6 @@ async function bootstrap(): Promise<void> {
   });
 
   void initializeCalendar();
-  initCameraDebug();
   setNavigationMessage("Choose rooms to start navigation.");
 
   // ── Hamburger Menu ──

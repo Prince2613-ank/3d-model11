@@ -273,6 +273,10 @@
     </div>
   </section>
 
+  <section id="cameraExitCard" class="common-panel" aria-label="Exit camera view" hidden>
+    <button id="cameraViewExitBtn" type="button" disabled>Exit Camera View</button>
+  </section>
+
 
   <section id="bookingPanel" class="common-panel" aria-live="polite">
     <div class="panel-header">
@@ -396,63 +400,6 @@
 
   <div id="tooltip" class="tooltip"></div>
   <div id="toastContainer" aria-live="assertive"></div>
-
-  <!-- Camera Debug Panel -->
-  <div id="cameraDebugPanel" class="camera-debug-panel">
-    <div class="debug-header">
-      <h4>Camera Debug</h4>
-      <button id="debugToggleBtn" class="debug-toggle" type="button" title="Minimize">−</button>
-    </div>
-    <div class="debug-content">
-      <div class="debug-section">
-        <label>Position</label>
-        <div class="debug-values">
-          <div><small>Lon:</small> <span id="debugLon">0</span></div>
-          <div><small>Lat:</small> <span id="debugLat">0</span></div>
-          <div><small>Height:</small> <span id="debugHeight">0</span></div>
-        </div>
-      </div>
-
-      <div class="debug-section">
-        <label>Orientation</label>
-        <div class="debug-values">
-          <div><small>Heading (°):</small> <span id="debugHeading">0</span></div>
-          <div><small>Pitch (°):</small> <span id="debugPitch">0</span></div>
-          <div><small>Roll (°):</small> <span id="debugRoll">0</span></div>
-        </div>
-      </div>
-
-      <div class="debug-controls">
-        <div class="control-row">
-          <button class="debug-btn" id="debugUp" type="button" title="Move up">↑ Up</button>
-          <button class="debug-btn" id="debugDown" type="button" title="Move down">↓ Down</button>
-        </div>
-        <div class="control-row">
-          <button class="debug-btn" id="debugLeft" type="button" title="Move left">← Left</button>
-          <button class="debug-btn" id="debugRight" type="button" title="Move right">Right →</button>
-        </div>
-        <div class="control-row">
-          <button class="debug-btn" id="debugZoomIn" type="button" title="Zoom in">🔍+ Zoom</button>
-          <button class="debug-btn" id="debugZoomOut" type="button" title="Zoom out">Zoom −</button>
-        </div>
-        <div class="control-row">
-          <button class="debug-btn" id="debugAltitudeUp" type="button" title="Raise altitude">Alt +</button>
-          <button class="debug-btn" id="debugAltitudeDown" type="button" title="Lower altitude">Alt -</button>
-        </div>
-        <div class="control-row">
-          <button class="debug-btn" id="debugHeadingLeft" type="button" title="Turn left">↻ Turn L</button>
-          <button class="debug-btn" id="debugHeadingRight" type="button" title="Turn right">Turn R ↺</button>
-        </div>
-        <div class="control-row">
-          <button class="debug-btn" id="debugPitchUp" type="button" title="Look up">△ Pitch Up</button>
-          <button class="debug-btn" id="debugPitchDown" type="button" title="Look down">Pitch Dn ▽</button>
-        </div>
-      </div>
-
-      <button id="debugCopyCode" class="debug-copy-btn" type="button">📋 Copy Camera Code</button>
-      <div id="debugCopyFeedback" class="debug-feedback" style="display: none;">Copied!</div>
-    </div>
-  </div>
 
   <script type="module" src="/src/main.ts"></script>
 </body>

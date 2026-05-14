@@ -43,6 +43,7 @@ export type NavigationSummary = {
 
 type UiCallbacks = {
   showFloor: (floor: number) => void | Promise<void>;
+  preloadFloor?: (floor: number) => void | Promise<void>;
   startNavigation: () => void | Promise<void>;
   exitNavigation: () => void;
 };
@@ -234,7 +235,7 @@ export function displayAllEventsInCard(events: GlobalEvent[], showAllBookings = 
 }
 
 // ── Nav UI ────────────────────────────────────────────────────────
-const FLOOR_SPINNER_MIN_MS = 2500;
+const FLOOR_SPINNER_MIN_MS = 900;
 let floorSwitchInProgress = false;
 let navigationAllowedFloors: Set<number> | null = null;
 let loadingMessageTimer: number | null = null;
@@ -304,6 +305,11 @@ export function enableCameraControls(): void {
 function setCameraViewControlsLocked(locked: boolean): void {
   document.body.classList.toggle("camera-view-active", locked);
   document.body.classList.remove("side-panel-open");
+
+  const exitCard = optionalElement<HTMLElement>("cameraExitCard");
+  const exitButton = optionalElement<HTMLButtonElement>("cameraViewExitBtn");
+  if (exitCard) exitCard.hidden = !locked;
+  if (exitButton) exitButton.disabled = !locked;
 
   const hamburger = optionalElement<HTMLButtonElement>("hamburgerMenu");
   if (hamburger) {
@@ -463,10 +469,6 @@ async function performWindowAnimation(floor: number): Promise<void> {
     easingFunction: Cesium.EasingFunction.CUBIC_IN_OUT,
   });
 
-  showFloorSpinner("Preparing Workspace…");
-
-  await new Promise<void>((resolve) => setTimeout(resolve, 450));
-
   await flyToDefaultFloorView();
 }
 
@@ -501,16 +503,16 @@ export function bindUiControls(callbacks: UiCallbacks): void {
         try {
           if (floor !== 0) {
             void callbacks.showFloor(0);
+            const preloadPromise = Promise.resolve(callbacks.preloadFloor?.(floor));
             await performWindowAnimation(floor);
 
             showFloorSpinner(label);
-
             const loadPromise = Promise.resolve(callbacks.showFloor(floor));
             const minDelay = new Promise<void>((resolve) => setTimeout(resolve, FLOOR_SPINNER_MIN_MS));
 
-            await Promise.allSettled([loadPromise, minDelay]);
+            await Promise.allSettled([preloadPromise, loadPromise, minDelay]);
             showFloorSpinnerMessageOnce(welcomeLabel);
-            await new Promise<void>((resolve) => setTimeout(resolve, 550));
+            await new Promise<void>((resolve) => setTimeout(resolve, 220));
             hideFloorSpinner();
           } else {
             await flyToPromise({
@@ -757,9 +759,21 @@ function bindCameraListSlider(): void {
   window.addEventListener("resize", syncCameraListSlider);
 }
 
+function setDynamicButtonText(button: HTMLButtonElement, label: string): void {
+  button.textContent = label;
+  button.title = label;
+  button.setAttribute("aria-label", label);
+
+  const compactSize =
+    label.length > 22 ? "9px" :
+    label.length > 16 ? "10px" :
+    label.length > 12 ? "11px" :
+    label.length > 9 ? "12px" :
+    "13px";
+  button.style.fontSize = compactSize;
+}
+
 export function showCctvPanel(heading: number, pitch: number): void {
-  const panel = optionalElement<HTMLElement>("cctvPanel");
-  if (panel) panel.style.display = "block";
   setText("cctvHeadingDisplay", `${Math.round(heading)}°`);
   setText("cctvPitchDisplay", `${Math.round(pitch)}°`);
 }
@@ -768,6 +782,12 @@ export function hideCctvPanel(): void {
   const panel = optionalElement<HTMLElement>("cctvPanel");
   if (panel) panel.style.display = "none";
   setCameraViewControlsLocked(false);
+}
+
+function exitCameraView(): void {
+  clearActiveCctvViewshed();
+  exitCctvMode();
+  hideCctvPanel();
 }
 
 function updateCctvDebugInfo(): void {
@@ -791,6 +811,7 @@ export function bindCctvPanel(): void {
   const downBtn = optionalElement<HTMLButtonElement>("cctvDown");
   const defaultBtn = optionalElement<HTMLButtonElement>("cctvDefault");
   const exitBtn = optionalElement<HTMLButtonElement>("cctvExit");
+  const cameraViewExitBtn = optionalElement<HTMLButtonElement>("cameraViewExitBtn");
   if (!leftBtn || !rightBtn || !upBtn || !downBtn || !defaultBtn || !exitBtn) return;
 
   bindHoldButton(leftBtn, () => setCctvHeading(-0.6));
@@ -813,11 +834,8 @@ export function bindCctvPanel(): void {
   });
   viewer.scene.preRender.addEventListener(updateCctvDebugInfo);
 
-  exitBtn.addEventListener("click", () => {
-    clearActiveCctvViewshed();
-    exitCctvMode();
-    hideCctvPanel();
-  });
+  exitBtn.addEventListener("click", exitCameraView);
+  cameraViewExitBtn?.addEventListener("click", exitCameraView);
 }
 
 // ── Camera presets ────────────────────────────────────────────────
@@ -872,7 +890,7 @@ export function renderCameraControls(floor: number): void {
     const btn = document.createElement("button");
     btn.className = "btn";
     btn.type = "button";
-    btn.textContent = cam.name;
+    setDynamicButtonText(btn, cam.name);
     btn.disabled = cameraControlsLocked;
     btn.onclick = async () => {
       if (cameraControlsLocked) return;
@@ -896,7 +914,7 @@ export function renderCameraControls(floor: number): void {
     const coverageBtn = document.createElement("button");
     coverageBtn.className = "btn";
     coverageBtn.type = "button";
-    coverageBtn.textContent = "Coverage";
+    setDynamicButtonText(coverageBtn, "Coverage");
     coverageBtn.disabled = cameraControlsLocked;
     coverageBtn.onclick = async () => {
       if (cameraControlsLocked) return;
