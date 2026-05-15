@@ -251,7 +251,11 @@
 
   <section id="cameraPanel" class="panel common-panel" aria-label="Camera controls"
     style="display: none; top: 360px; right: 10px; left: auto;">
-    <h3>Camera Controls</h3>
+    <div class="camera-panel-header">
+      <h3>Camera Controls</h3>
+      <button id="cameraPanelToggle" class="camera-panel-toggle" type="button" aria-expanded="true"
+        aria-label="Minimize camera controls" title="Minimize camera controls">-</button>
+    </div>
     <div class="camera-card-scroll-shell">
       <div id="cameraPanelBody" class="camera-card-scroll">
         <div class="camera-coverage-actions" aria-label="Camera coverage controls">

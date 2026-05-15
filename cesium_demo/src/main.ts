@@ -42,9 +42,6 @@ async function playOnboardingSplash(): Promise<void> {
   const splash = document.getElementById("onboardingSplash");
   if (!splash) return;
 
-  await new Promise<void>((resolve) => setTimeout(resolve, 7200));
-  splash.classList.add("splash-hidden");
-  await new Promise<void>((resolve) => setTimeout(resolve, 600));
   splash.remove();
 }
 

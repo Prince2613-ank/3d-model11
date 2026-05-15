@@ -33,6 +33,8 @@ import fullBuildingUrl from "../full_building.glb?url";
 import groundFloorUrl from "../ground_floor_final.glb?url";
 import outdoorModelUrl from "../outdoor_model.glb?url";
 import thirdFloorUrl from "../optimized.glb?url";
+import thirdFloorLoadingBaseUrl from "../3rd_floor_base.glb?url";
+import thirdFloorLoadingBaseWallUrl from "../3rd_floor_base_wall.glb?url";
 import thirdFloorPillerUrl from "../3rd_floor_piller.glb?url";
 
 const chairModelAssets = import.meta.glob<string>(
@@ -67,6 +69,8 @@ const modelAssets: Record<string, string> = {
   "../1st_floor_up_final.glb": firstFloorUrl,
   "../final_2nd_floor_without_chair.glb": secondFloorUrl,
   "../optimized.glb": thirdFloorUrl,
+  "../3rd_floor_base.glb": thirdFloorLoadingBaseUrl,
+  "../3rd_floor_base_wall.glb": thirdFloorLoadingBaseWallUrl,
   "../3rd_floor_piller.glb": thirdFloorPillerUrl,
   "../outdoor_model.glb": outdoorModelUrl,
   ...chairModelAssets
@@ -74,6 +78,12 @@ const modelAssets: Record<string, string> = {
 
 const floorLoadPromises = new Map<number, Promise<void>>();
 let glbUploadQueue = Promise.resolve();
+let thirdFloorLoadingPreviewToken = 0;
+let thirdFloorLoadingPreviewActive = false;
+let thirdFloorLoadingPreviewStage: "off" | "base" | "floor" = "off";
+let thirdFloorLoadingPreviewTimer: number | null = null;
+let thirdFloorLoadingBasePromise: Promise<Cesium.Model> | null = null;
+let thirdFloorLoadingBaseWallPromise: Promise<Cesium.Model> | null = null;
 
 export function modelUrl(fileName: string): string {
   const url = modelAssets[`../${fileName}`];
@@ -145,6 +155,8 @@ export interface BuildingModels {
   outdoor: Cesium.Model | null;
   meetingRoom: Cesium.Model | null;
   thirdFloorPiller: Cesium.Model | null;
+  thirdFloorLoadingBase: Cesium.Model | null;
+  thirdFloorLoadingBaseWall: Cesium.Model | null;
 }
 
 export const models: BuildingModels = {
@@ -156,7 +168,9 @@ export const models: BuildingModels = {
   cameras: [],
   outdoor: null,
   meetingRoom: null,
-  thirdFloorPiller: null
+  thirdFloorPiller: null,
+  thirdFloorLoadingBase: null,
+  thirdFloorLoadingBaseWall: null
 };
 
 async function loadModel(fileName: string, altitude: number): Promise<Cesium.Model> {
@@ -174,6 +188,109 @@ async function loadModel(fileName: string, altitude: number): Promise<Cesium.Mod
 function addPrimitiveHidden(model: Cesium.Model): void {
   model.show = false;
   viewer.scene.primitives.add(model);
+}
+
+async function loadThirdFloorLoadingPreviewModel(fileName: string): Promise<Cesium.Model> {
+  const model = await Cesium.Model.fromGltfAsync({
+    url: modelUrl(fileName),
+    modelMatrix: computeMatrix(ALT_3RD),
+    scale: MODEL_SCALE,
+    shadows: Cesium.ShadowMode.DISABLED,
+    allowPicking: false,
+    cull: true,
+    incrementallyLoadTextures: true
+  } as any);
+  addPrimitiveHidden(model);
+  return model;
+}
+
+function ensureThirdFloorLoadingBase(): Promise<Cesium.Model> {
+  if (models.thirdFloorLoadingBase) return Promise.resolve(models.thirdFloorLoadingBase);
+  if (!thirdFloorLoadingBasePromise) {
+    thirdFloorLoadingBasePromise = loadThirdFloorLoadingPreviewModel("3rd_floor_base.glb")
+      .then((model) => {
+        models.thirdFloorLoadingBase = model;
+        return model;
+      })
+      .catch((error) => {
+        thirdFloorLoadingBasePromise = null;
+        throw error;
+      });
+  }
+  return thirdFloorLoadingBasePromise;
+}
+
+function ensureThirdFloorLoadingBaseWall(): Promise<Cesium.Model> {
+  if (models.thirdFloorLoadingBaseWall) return Promise.resolve(models.thirdFloorLoadingBaseWall);
+  if (!thirdFloorLoadingBaseWallPromise) {
+    thirdFloorLoadingBaseWallPromise = loadThirdFloorLoadingPreviewModel("3rd_floor_base_wall.glb")
+      .then((model) => {
+        models.thirdFloorLoadingBaseWall = model;
+        return model;
+      })
+      .catch((error) => {
+        thirdFloorLoadingBaseWallPromise = null;
+        throw error;
+      });
+  }
+  return thirdFloorLoadingBaseWallPromise;
+}
+
+export function stopThirdFloorLoadingPreview(): void {
+  thirdFloorLoadingPreviewToken += 1;
+  thirdFloorLoadingPreviewActive = false;
+  thirdFloorLoadingPreviewStage = "off";
+  if (thirdFloorLoadingPreviewTimer !== null) {
+    window.clearTimeout(thirdFloorLoadingPreviewTimer);
+    thirdFloorLoadingPreviewTimer = null;
+  }
+
+  if (models.thirdFloorLoadingBase) models.thirdFloorLoadingBase.show = false;
+  if (models.thirdFloorLoadingBaseWall) models.thirdFloorLoadingBaseWall.show = false;
+  viewer.scene.requestRender();
+}
+
+export function isThirdFloorLoadingPreviewActive(): boolean {
+  return thirdFloorLoadingPreviewActive;
+}
+
+export function isThirdFloorLoadingFloorVisible(): boolean {
+  return thirdFloorLoadingPreviewActive && thirdFloorLoadingPreviewStage === "floor";
+}
+
+export function startThirdFloorLoadingPreview(): void {
+  const token = ++thirdFloorLoadingPreviewToken;
+  thirdFloorLoadingPreviewActive = true;
+  thirdFloorLoadingPreviewStage = "base";
+  if (thirdFloorLoadingPreviewTimer !== null) {
+    window.clearTimeout(thirdFloorLoadingPreviewTimer);
+    thirdFloorLoadingPreviewTimer = null;
+  }
+
+  if (models.thirdFloorLoadingBaseWall) models.thirdFloorLoadingBaseWall.show = false;
+
+  // Prefetch wall model in background so it is ready by the time we need it
+  void ensureThirdFloorLoadingBaseWall()
+    .catch((error) => console.error("Failed to preload 3rd floor wall:", error));
+
+  void ensureThirdFloorLoadingBase()
+    .then((base) => {
+      if (token !== thirdFloorLoadingPreviewToken) { base.show = false; return; }
+      base.show = true;
+      if (models.thirdFloorLoadingBaseWall) models.thirdFloorLoadingBaseWall.show = false;
+      viewer.scene.requestRender();
+    })
+    .catch((error) => console.error("Failed to load 3rd floor base preview:", error));
+}
+
+export async function showThirdFloorWallPreview(): Promise<void> {
+  const token = thirdFloorLoadingPreviewToken;
+  const baseWall = await ensureThirdFloorLoadingBaseWall();
+  if (token !== thirdFloorLoadingPreviewToken) return;
+  if (models.thirdFloorLoadingBase) models.thirdFloorLoadingBase.show = false;
+  baseWall.show = true;
+  thirdFloorLoadingPreviewStage = "floor";
+  viewer.scene.requestRender();
 }
 
 function floorFileName(floor: number): string | null {

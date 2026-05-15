@@ -327,6 +327,7 @@ export function showFloorSpinner(text = "Loading floor…"): void {
   const overlay = document.getElementById("floorLoadingOverlay");
   const label = overlay?.querySelector<HTMLElement>(".floor-loading-text");
   if (label) label.textContent = text;
+  overlay?.classList.toggle("third-floor-preview", /3rd\s+floor/i.test(text));
   overlay?.classList.add("active");
   disableInteractiveControlsDuringLoad();
   if (loadingMessageTimer !== null) window.clearInterval(loadingMessageTimer);
@@ -364,7 +365,8 @@ export function hideFloorSpinner(): void {
     window.clearInterval(loadingMessageTimer);
     loadingMessageTimer = null;
   }
-  document.getElementById("floorLoadingOverlay")?.classList.remove("active");
+  const overlay = document.getElementById("floorLoadingOverlay");
+  overlay?.classList.remove("active", "third-floor-preview");
   restoreInteractiveControlsAfterLoad();
 }
 
@@ -759,6 +761,35 @@ function bindCameraListSlider(): void {
   window.addEventListener("resize", syncCameraListSlider);
 }
 
+function syncCameraPanelToggle(): void {
+  const panel = optionalElement<HTMLElement>("cameraPanel");
+  const toggle = optionalElement<HTMLButtonElement>("cameraPanelToggle");
+  if (!panel || !toggle) return;
+
+  const isMinimized = panel.classList.contains("camera-panel-minimized");
+  toggle.textContent = isMinimized ? "+" : "-";
+  toggle.title = isMinimized ? "Maximize camera controls" : "Minimize camera controls";
+  toggle.setAttribute("aria-label", toggle.title);
+  toggle.setAttribute("aria-expanded", String(!isMinimized));
+}
+
+function bindCameraPanelToggle(): void {
+  const panel = optionalElement<HTMLElement>("cameraPanel");
+  const toggle = optionalElement<HTMLButtonElement>("cameraPanelToggle");
+  if (!panel || !toggle) return;
+
+  if (toggle.dataset.bound !== "1") {
+    toggle.dataset.bound = "1";
+    toggle.addEventListener("click", () => {
+      panel.classList.toggle("camera-panel-minimized");
+      syncCameraPanelToggle();
+      requestAnimationFrame(syncCameraListSlider);
+    });
+  }
+
+  syncCameraPanelToggle();
+}
+
 function setDynamicButtonText(button: HTMLButtonElement, label: string): void {
   button.textContent = label;
   button.title = label;
@@ -872,6 +903,7 @@ export function renderCameraControls(floor: number): void {
   const container = document.getElementById("cameraButtons");
   if (!panel || !container) return;
 
+  bindCameraPanelToggle();
   bindCameraListSlider();
   activeCameraControlFloor = floor === 3 || floor === 4 ? floor : null;
   const cameras = (FLOOR_CAMERAS[floor] || []).filter((camera) => camera.showInControls !== false);

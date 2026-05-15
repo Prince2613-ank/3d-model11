@@ -4,6 +4,7 @@ import cesium from "vite-plugin-cesium";
 export default defineConfig({
   plugins: [cesium()],
   server: {
-    port: 5500
+    port: 5500,
+    strictPort: true
   }
 });

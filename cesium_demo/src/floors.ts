@@ -4,7 +4,14 @@ import {
   SECOND_FLOOR_COOL_AMBIENT_LIGHT,
   viewer
 } from "./viewer";
-import { ensureFloorModelLoaded, getActiveCctvModel, isCctvActive, isFloorModelLoaded, models } from "./models";
+import {
+  ensureFloorModelLoaded,
+  getActiveCctvModel,
+  isThirdFloorLoadingPreviewActive,
+  isCctvActive,
+  isFloorModelLoaded,
+  models
+} from "./models";
 import { geo2, geo3 } from "./rooms";
 import { loadChairsForFloor, secondFloorChairs, thirdFloorChairs, type ChairModel } from "./chairs";
 import { renderCameraControls } from "./ui";
@@ -22,6 +29,7 @@ const requestedChairFloors = new Set<3 | 4>();
 
 const ENTER_INDOOR = 12;
 const EXIT_OUTDOOR = 18;
+const THIRD_FLOOR_CHAIR_COUNT = 34;
 
 
 
@@ -36,7 +44,8 @@ function setShow(target: { show: boolean } | null | undefined, show: boolean): v
 }
 
 function showLoadedChairIfSelected(chair: ChairModel): void {
-  const shouldShow = chair.chairFloor === selectedFloor;
+  const shouldShow = chair.chairFloor === selectedFloor
+    && !(chair.chairFloor === 4 && isThirdFloorLoadingPreviewActive());
   if (chair.show !== shouldShow) {
     chair.show = shouldShow;
     viewer.scene.requestRender();
@@ -46,6 +55,7 @@ function showLoadedChairIfSelected(chair: ChairModel): void {
 // Pure visibility-only update — no async triggers, no DOM rebuilds.
 // Used by async callbacks so they don't re-enter showFloor and cause render storms.
 function applyVisibility(floor: number): void {
+  const thirdFloorPreviewActive = floor === 4 && isThirdFloorLoadingPreviewActive();
   const ambientLight = floor === 3 ? SECOND_FLOOR_COOL_AMBIENT_LIGHT : DEFAULT_AMBIENT_LIGHT;
   if ((viewer.scene as any).ambientLightColor !== ambientLight) {
     (viewer.scene as any).ambientLightColor = ambientLight;
@@ -67,20 +77,24 @@ function applyVisibility(floor: number): void {
   setShow(models.ground, floor === 1);
   setShow(models.first, floor === 2);
   setShow(models.second, floor === 3);
-  setShow(models.third, floor === 4);
-  setShow(models.meetingRoom, floor === 4);
-  setShow(models.thirdFloorPiller, floor === 4);
+  setShow(models.third, floor === 4 && !thirdFloorPreviewActive);
+  setShow(models.meetingRoom, floor === 4 && !thirdFloorPreviewActive);
+  setShow(models.thirdFloorPiller, floor === 4 && !thirdFloorPreviewActive);
+  if (!thirdFloorPreviewActive) {
+    setShow(models.thirdFloorLoadingBase, false);
+    setShow(models.thirdFloorLoadingBaseWall, false);
+  }
   const activeCctv = getActiveCctvModel();
   models.cameras.forEach((camera) => {
-    const shouldShow = (camera.cameraFloor === floor) && camera !== activeCctv;
+    const shouldShow = (camera.cameraFloor === floor) && camera !== activeCctv && !(thirdFloorPreviewActive && camera.cameraFloor === 4);
     setShow(camera, shouldShow);
   });
 
-  for (const chair of thirdFloorChairs) setShow(chair, floor === 4);
+  for (const chair of thirdFloorChairs) setShow(chair, floor === 4 && !thirdFloorPreviewActive);
   for (const chair of secondFloorChairs) setShow(chair, floor === 3);
 
   setShow(geo2, floor === 3);
-  setShow(geo3, floor === 4);
+  setShow(geo3, floor === 4 && !thirdFloorPreviewActive);
 
   updateNavigationVisibility(floor);
 }
@@ -181,7 +195,17 @@ export function openFloorProfessional(floorNumber: number): Promise<void> {
   renderCameraControls(floorNumber);
   viewer.scene.requestRender();
 
-  return ensureFloorCompletelyLoaded(floorNumber, token);
+  return (async () => {
+    const chairPromise = (floorNumber === 3 || floorNumber === 4)
+      ? (requestedChairFloors.add(floorNumber as 3 | 4), loadChairsForFloor(floorNumber))
+      : Promise.resolve();
+
+    await Promise.all([ensureFloorModelLoaded(floorNumber), chairPromise]);
+    if (token !== floorSwitchToken || selectedFloor !== floorNumber) return;
+
+    applyVisibility(floorNumber);
+    viewer.scene.requestRender();
+  })();
 }
 
 function detectFloorFromScreenCenter(): number | null {

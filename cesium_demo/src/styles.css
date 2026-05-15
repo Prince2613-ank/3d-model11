@@ -3432,11 +3432,20 @@ body.camera-view-active #cameraExitCard {
   background: #a8322f;
 }
 
-#cameraPanel h3 {
-  margin: 0 0 10px !important;
-  display: block;
+.camera-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   flex: 0 0 auto;
-  text-align: center;
+  margin: 0 0 10px;
+}
+
+#cameraPanel h3 {
+  margin: 0 !important;
+  display: block;
+  flex: 1 1 auto;
+  text-align: left;
   font-size: 18px;
   font-weight: 800;
   letter-spacing: 0;
@@ -3445,6 +3454,38 @@ body.camera-view-active #cameraExitCard {
 
 #cameraPanel h3::before,
 #cameraPanel h3::after {
+  display: none;
+}
+
+.camera-panel-toggle {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  border-radius: 8px;
+  background: #fff;
+  color: #172033;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.camera-panel-toggle:active {
+  transform: translateY(1px);
+}
+
+#cameraPanel.camera-panel-minimized {
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+#cameraPanel.camera-panel-minimized .camera-panel-header {
+  margin-bottom: 0;
+}
+
+#cameraPanel.camera-panel-minimized .camera-card-scroll-shell {
   display: none;
 }
 
@@ -3755,6 +3796,13 @@ button.floor-route-active {
   opacity: 1;
 }
 
+#floorLoadingOverlay.third-floor-preview {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  pointer-events: none;
+}
+
 body.floor-loading-active .hamburger-btn,
 body.floor-loading-active .left-sidebar,
 body.floor-loading-active .user-profile-header,
@@ -3788,6 +3836,10 @@ body.floor-loading-active #toastContainer {
   cursor: progress;
 }
 
+#floorLoadingOverlay.third-floor-preview .floor-loading-card {
+  display: none;
+}
+
 .floor-loading-card::before {
   content: "";
   position: absolute;
@@ -3796,6 +3848,12 @@ body.floor-loading-active #toastContainer {
   border: 1px solid rgba(255, 255, 255, 0.72);
   box-shadow: inset 0 0 22px rgba(255, 255, 255, 0.45);
   pointer-events: none;
+}
+
+#floorLoadingOverlay.third-floor-preview .floor-loading-card::before,
+#floorLoadingOverlay.third-floor-preview .floor-loading-logo-wrap,
+#floorLoadingOverlay.third-floor-preview .floor-loading-icons {
+  display: none;
 }
 
 .floor-loading-logo-wrap {
@@ -5084,8 +5142,23 @@ body.camera-view-active .hamburger-btn {
   }
 
   #cameraPanel h3 {
-    margin-bottom: 8px !important;
     font-size: 14px;
+  }
+
+  .camera-panel-header {
+    margin-bottom: 8px;
+  }
+
+  .camera-panel-toggle {
+    width: 30px;
+    height: 30px;
+    font-size: 17px;
+  }
+
+  #cameraPanel.camera-panel-minimized {
+    left: auto !important;
+    width: min(220px, calc(100vw - 20px)) !important;
+    padding: 10px 12px !important;
   }
 
   .camera-card-scroll-shell {

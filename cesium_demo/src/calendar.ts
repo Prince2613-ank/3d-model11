@@ -23,9 +23,20 @@ let tokenClient: any = null;
 let isAllowedDomain = false;
 let isSignedIn = false;
 let currentAccessToken: string | null = null;
+let controlsBound = false;
+let setupInProgress: Promise<void> | null = null;
+let redirectHandled = false;
 
 const STORAGE_KEY = "cesium_google_auth";
 let defaultAvatarHtml = "";
+
+function getGoogleGlobal(): any {
+  return (globalThis as any).google;
+}
+
+function getGapiGlobal(): any {
+  return (globalThis as any).gapi;
+}
 
 function getButton(): HTMLElement | null {
   return document.getElementById("userProfile") as HTMLElement | null;
@@ -129,7 +140,76 @@ function handleSignOut(): void {
 }
 
 function waitForGoogleApis(): Promise<void> {
-  return new Promise((resolve, reject) => {
+  const waitUntilReady = (isReady: () => boolean, timeoutMs: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const started = Date.now();
+      const timer = window.setInterval(() => {
+        if (isReady()) {
+          window.clearInterval(timer);
+          resolve();
+        } else if (Date.now() - started > timeoutMs) {
+          window.clearInterval(timer);
+          reject(new Error("Timed out waiting for Google API"));
+        }
+      }, 100);
+    });
+  };
+
+  const loadScript = (id: string, src: string, isReady: () => boolean): Promise<void> => {
+    if (isReady()) return Promise.resolve();
+
+    return new Promise((resolve, reject) => {
+      document.getElementById(id)?.remove();
+      const script = document.createElement("script");
+      script.id = id;
+      script.src = src;
+      script.async = true;
+      script.defer = true;
+      script.onload = () => {
+        waitUntilReady(isReady, 5000).then(resolve).catch(() => {
+          reject(new Error(`Loaded ${src}, but API was not available`));
+        });
+      };
+      script.onerror = () => reject(new Error(`Failed to load ${src}`));
+      document.head.appendChild(script);
+    });
+  };
+
+  const loadScriptWithRetry = async (id: string, src: string, isReady: () => boolean): Promise<void> => {
+    if (isReady()) return;
+    const existing = document.getElementById(id);
+    if (existing) {
+      try {
+        await waitUntilReady(isReady, 12000);
+        return;
+      } catch {
+        existing.remove();
+      }
+    }
+
+    let lastError: unknown = null;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        await loadScript(id, src, isReady);
+        return;
+      } catch (error) {
+        lastError = error;
+        document.getElementById(id)?.remove();
+        await new Promise((resolve) => window.setTimeout(resolve, attempt * 750));
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(`Failed to load ${src}`);
+  };
+
+  return new Promise(async (resolve, reject) => {
+    try {
+      await loadScriptWithRetry("google-gsi-client", "https://accounts.google.com/gsi/client", () => Boolean(getGoogleGlobal()?.accounts?.oauth2));
+      await loadScriptWithRetry("google-api-client", "https://apis.google.com/js/api.js", () => Boolean(getGapiGlobal()?.load));
+    } catch (error) {
+      reject(error);
+      return;
+    }
+
     const started = Date.now();
     const timer = window.setInterval(() => {
       if (typeof google !== "undefined" && typeof gapi !== "undefined") {
@@ -140,6 +220,90 @@ function waitForGoogleApis(): Promise<void> {
         reject(new Error("Google API scripts did not load"));
       }
     }, 100);
+  });
+}
+
+function getOAuthRedirectUri(): string {
+  return `${window.location.origin}${window.location.pathname}`;
+}
+
+function startRedirectSignIn(): void {
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: getOAuthRedirectUri(),
+    response_type: "token",
+    scope: SCOPES,
+    include_granted_scopes: "true",
+    prompt: "consent",
+    state: "cesium-google-auth",
+  });
+  window.location.assign(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+}
+
+function consumeRedirectToken(): boolean {
+  if (redirectHandled || !window.location.hash) return false;
+
+  const hash = new URLSearchParams(window.location.hash.slice(1));
+  const accessToken = hash.get("access_token");
+  const error = hash.get("error");
+  const state = hash.get("state");
+  if (state !== "cesium-google-auth" && !accessToken && !error) return false;
+
+  redirectHandled = true;
+  history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}`);
+
+  if (accessToken) {
+    gapi.client.setToken({ access_token: accessToken });
+    void verifyDomainAndLoad(accessToken);
+    return true;
+  }
+
+  console.warn("Google redirect sign-in failed:", error || "unknown error");
+  setButtonState("ready");
+  alert(`Google sign-in failed: ${error || "unknown error"}`);
+  return true;
+}
+
+function bindCalendarControls(button: HTMLElement): void {
+  if (controlsBound) return;
+  controlsBound = true;
+
+  button.addEventListener("click", async () => {
+    if (isSignedIn) {
+      toggleUserMenu();
+      return;
+    }
+
+    setButtonState("loading");
+    if (!tokenClient) {
+      try {
+        await initializeCalendar();
+      } catch {
+        setButtonState("ready");
+        return;
+      }
+    }
+
+    if (tokenClient) {
+      try {
+        tokenClient.requestAccessToken({ prompt: "consent" });
+      } catch (error) {
+        console.warn("Google popup sign-in failed, trying redirect:", error);
+        startRedirectSignIn();
+      }
+    } else {
+      setButtonState("ready");
+      button.title = "Calendar unavailable. Click to retry";
+    }
+  });
+
+  document.getElementById("logoutBtn")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    handleSignOut();
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!button.contains(event.target as Node)) closeUserMenu();
   });
 }
 
@@ -232,18 +396,25 @@ export async function initializeCalendar(): Promise<void> {
   const button = document.getElementById("userProfile") as HTMLElement | null;
   if (!button) return;
   defaultAvatarHtml = getAvatar()?.innerHTML ?? "";
+  bindCalendarControls(button);
 
   if (!CLIENT_ID || !API_KEY) {
-    button.style.pointerEvents = "none";
+    button.style.pointerEvents = "auto";
     button.style.opacity = "0.5";
     button.title = "Set VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY to enable Calendar";
     return;
   }
 
   try {
-    await waitForGoogleApis();
-    await loadGapi();
-    initGoogleAuth();
+    setupInProgress ??= (async () => {
+      await waitForGoogleApis();
+      await loadGapi();
+      initGoogleAuth();
+    })();
+    await setupInProgress;
+    setButtonState("ready");
+
+    if (consumeRedirectToken()) return;
 
     // Check for persisted session
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -262,28 +433,12 @@ export async function initializeCalendar(): Promise<void> {
       }
     }
 
-    button.addEventListener("click", () => {
-      if (isSignedIn) {
-        toggleUserMenu();
-        return;
-      }
-      setButtonState("loading");
-      tokenClient?.requestAccessToken({ prompt: "consent" });
-    });
-
-    document.getElementById("logoutBtn")?.addEventListener("click", (event) => {
-      event.stopPropagation();
-      handleSignOut();
-    });
-
-    document.addEventListener("click", (event) => {
-      if (!button.contains(event.target as Node)) closeUserMenu();
-    });
   } catch (error) {
+    setupInProgress = null;
     console.error("Google Calendar setup failed:", error);
-    button.style.pointerEvents = "none";
+    button.style.pointerEvents = "auto";
     button.style.opacity = "0.5";
-    button.setAttribute("aria-disabled", "true");
-    button.title = "Calendar unavailable";
+    button.removeAttribute("aria-disabled");
+    button.title = "Calendar unavailable. Click to retry";
   }
 }
