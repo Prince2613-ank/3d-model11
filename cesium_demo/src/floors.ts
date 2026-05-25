@@ -29,9 +29,6 @@ const requestedChairFloors = new Set<3 | 4>();
 
 const ENTER_INDOOR = 12;
 const EXIT_OUTDOOR = 18;
-const THIRD_FLOOR_CHAIR_COUNT = 34;
-
-
 
 export function getSelectedFloor(): number {
   return selectedFloor;

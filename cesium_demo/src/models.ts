@@ -32,7 +32,7 @@ import secondFloorUrl from "../final_2nd_floor_without_chair.glb?url";
 import fullBuildingUrl from "../full_building.glb?url";
 import groundFloorUrl from "../ground_floor_final.glb?url";
 import outdoorModelUrl from "../outdoor_model.glb?url";
-import thirdFloorUrl from "../optimized.glb?url";
+import thirdFloorUrl from "../3rd_floor_updated1.glb?url";
 import thirdFloorLoadingBaseUrl from "../3rd_floor_base.glb?url";
 import thirdFloorLoadingBaseWallUrl from "../3rd_floor_base_wall.glb?url";
 import thirdFloorPillerUrl from "../3rd_floor_piller.glb?url";
@@ -68,7 +68,7 @@ const modelAssets: Record<string, string> = {
   "../ground_floor_final.glb": groundFloorUrl,
   "../1st_floor_up_final.glb": firstFloorUrl,
   "../final_2nd_floor_without_chair.glb": secondFloorUrl,
-  "../optimized.glb": thirdFloorUrl,
+  "../3rd_floor_updated1.glb": thirdFloorUrl,
   "../3rd_floor_base.glb": thirdFloorLoadingBaseUrl,
   "../3rd_floor_base_wall.glb": thirdFloorLoadingBaseWallUrl,
   "../3rd_floor_piller.glb": thirdFloorPillerUrl,
@@ -302,7 +302,7 @@ function floorFileName(floor: number): string | null {
     case 3:
       return "final_2nd_floor_without_chair.glb";
     case 4:
-      return "optimized.glb";
+      return "3rd_floor_updated1.glb";
     default:
       return null;
   }
