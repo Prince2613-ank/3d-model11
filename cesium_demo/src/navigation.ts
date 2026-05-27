@@ -5,7 +5,7 @@ import {
   viewer
 } from "./viewer";
 import { geo2, geo3, geoJsonUrl, normalizeRoomName } from "./rooms";
-import { setNavigationAllowedFloors, setNavigationMessage, updateNavigationUI, disableCameraControls, enableCameraControls, showFloorSpinner, hideFloorSpinner } from "./ui";
+import { setNavigationAllowedFloors, setNavigationMessage, updateNavigationUI, disableCameraControls, enableCameraControls, showFloorSpinner, hideFloorSpinner, updateNavigationHud, hideNavigationHud, type NavigationHudState } from "./ui";
 import { ensureFloorModelLoaded } from "./models";
 
 type DoorFeature = {
@@ -48,18 +48,32 @@ const routeBubbleCollectionB = viewer.scene.primitives.add(new Cesium.BillboardC
 const routeGlowCollectionA = viewer.scene.primitives.add(new Cesium.BillboardCollection());
 const routeGlowCollectionB = viewer.scene.primitives.add(new Cesium.BillboardCollection());
 
+const ROAD_VIEW_EYE_HEIGHT_METERS = 1.45;
+const ROAD_VIEW_LOOK_HEIGHT_METERS = 0.55;
+const ROAD_VIEW_BACK_OFFSET_METERS = 0.9;
+const ROAD_VIEW_FOV_DEGREES = 58;
+const ROAD_VIEW_LOOK_AHEAD_STEPS = 1;
+const LIVE_NAVIGATION_STEP_MS = 420;
+
 let liveNavTimer: number | null = null;
 let liveNavPath: Cesium.Cartesian3[] = [];
 let liveNavFloorByIndex: number[] = [];
 let liveNavIndex = 0;
+let liveNavFirstSegmentLength = 0;
+let liveNavStairStartIndex = -1;
+let liveNavStairEndIndex = -1;
 let liveNavActiveFloor: number | null = null;
 let liveNavPendingFloor: number | null = null;
+let liveNavDestinationName = "";
 let navigationFloorSwitchHandler: ((floor: number) => void | Promise<void>) | null = null;
-let routeGlowTimer: number | null = null;
-let routeGlowTick = 0;
+let routeAnimRemove: (() => void) | null = null;
+let routeAnimStart = 0;
+let routeDotTValuesA: number[] = [];
+let routeDotTValuesB: number[] = [];
 let routeBubbleBillboardsA: Cesium.Billboard[] = [];
 let routeBubbleBillboardsB: Cesium.Billboard[] = [];
 let routeBubbleDensityStride = 1;
+
 const MAX_CORRIDOR_EDGE_METERS = 8.0;
 const JUNCTION_LINK_METERS = 0.5;
 const SECOND_FLOOR_PANTRY_EMPLOYEE_SIDE_DOOR = Cesium.Cartesian3.fromDegrees(
@@ -79,22 +93,24 @@ const THIRD_FLOOR_PANTRY_LOWER_DOOR = Cesium.Cartesian3.fromDegrees(
 );
 
 const ROUTE_BUBBLE_SVG = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-  <circle cx="32" cy="32" r="27" fill="none" stroke="rgba(255,255,255,0.96)" stroke-width="7"/>
-  <circle cx="32" cy="32" r="21" fill="#0B3D91"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56">
+  <circle cx="28" cy="28" r="25" fill="none" stroke="rgba(255,255,255,0.92)" stroke-width="5"/>
+  <circle cx="28" cy="28" r="18" fill="#00CCFF"/>
+  <circle cx="28" cy="28" r="9" fill="white" fill-opacity="0.65"/>
 </svg>
 `)}`;
 
 const ROUTE_GLOW_SVG = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="140" viewBox="0 0 140 140">
   <defs>
     <radialGradient id="g" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#8FD6FF" stop-opacity="0.76"/>
-      <stop offset="35%" stop-color="#1A57D6" stop-opacity="0.38"/>
-      <stop offset="100%" stop-color="#1A57D6" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="20%" stop-color="#00DDFF" stop-opacity="0.80"/>
+      <stop offset="55%" stop-color="#0066FF" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#0044FF" stop-opacity="0"/>
     </radialGradient>
   </defs>
-  <circle cx="60" cy="60" r="54" fill="url(#g)"/>
+  <circle cx="70" cy="70" r="65" fill="url(#g)"/>
 </svg>
 `)}`;
 
@@ -129,13 +145,15 @@ function clearRouteEntities(): void {
   routeBubbleCollectionB.removeAll();
   routeBubbleBillboardsA = [];
   routeBubbleBillboardsB = [];
+  routeDotTValuesA = [];
+  routeDotTValuesB = [];
   routeBubbleDensityStride = 1;
   routeGlowCollectionA.removeAll();
   routeGlowCollectionB.removeAll();
 
-  if (routeGlowTimer !== null) {
-    window.clearInterval(routeGlowTimer);
-    routeGlowTimer = null;
+  if (routeAnimRemove !== null) {
+    routeAnimRemove();
+    routeAnimRemove = null;
   }
 }
 
@@ -147,9 +165,14 @@ function stopLiveNavigationMarker(): void {
   liveNavPath = [];
   liveNavFloorByIndex = [];
   liveNavIndex = 0;
+  liveNavFirstSegmentLength = 0;
+  liveNavStairStartIndex = -1;
+  liveNavStairEndIndex = -1;
   liveNavActiveFloor = null;
   liveNavPendingFloor = null;
+  liveNavDestinationName = "";
   viewer.entities.removeById("liveNavigationMarker");
+  hideNavigationHud();
 }
 
 function requestLiveNavigationFloor(floor: number | undefined): void {
@@ -170,24 +193,196 @@ function requestLiveNavigationFloor(floor: number | undefined): void {
     });
 }
 
-function startLiveNavigationMarker(path: Cesium.Cartesian3[], floorByIndex: number[]): void {
+function offsetAlongLocalUp(position: Cesium.Cartesian3, meters: number): Cesium.Cartesian3 {
+  const up = Cesium.Cartesian3.normalize(position, new Cesium.Cartesian3());
+  return Cesium.Cartesian3.add(
+    position,
+    Cesium.Cartesian3.multiplyByScalar(up, meters, new Cesium.Cartesian3()),
+    new Cesium.Cartesian3()
+  );
+}
+
+function applyRoadNavigationView(index: number, smooth = true): void {
+  if (liveNavPath.length < 2) return;
+
+  const current = liveNavPath[index];
+  const next = liveNavPath[Math.min(index + ROAD_VIEW_LOOK_AHEAD_STEPS, liveNavPath.length - 1)] ?? current;
+  const previous = liveNavPath[Math.max(index - 1, 0)] ?? current;
+  const forwardSource = Cesium.Cartesian3.distance(current, next) > 0.05 ? next : previous;
+  const forward = Cesium.Cartesian3.subtract(forwardSource, current, new Cesium.Cartesian3());
+  if (Cesium.Cartesian3.magnitudeSquared(forward) < 0.000001) return;
+
+  Cesium.Cartesian3.normalize(forward, forward);
+  const localUp = Cesium.Cartesian3.normalize(current, new Cesium.Cartesian3());
+  const eyeBase = offsetAlongLocalUp(current, ROAD_VIEW_EYE_HEIGHT_METERS);
+  const eye = Cesium.Cartesian3.subtract(
+    eyeBase,
+    Cesium.Cartesian3.multiplyByScalar(forward, ROAD_VIEW_BACK_OFFSET_METERS, new Cesium.Cartesian3()),
+    new Cesium.Cartesian3()
+  );
+  const target = offsetAlongLocalUp(forwardSource, ROAD_VIEW_LOOK_HEIGHT_METERS);
+  const direction = Cesium.Cartesian3.normalize(
+    Cesium.Cartesian3.subtract(target, eye, new Cesium.Cartesian3()),
+    new Cesium.Cartesian3()
+  );
+  const right = Cesium.Cartesian3.cross(direction, localUp, new Cesium.Cartesian3());
+  if (Cesium.Cartesian3.magnitudeSquared(right) < 0.000001) return;
+
+  Cesium.Cartesian3.normalize(right, right);
+  const up = Cesium.Cartesian3.normalize(
+    Cesium.Cartesian3.cross(right, direction, new Cesium.Cartesian3()),
+    new Cesium.Cartesian3()
+  );
+
+  if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
+    viewer.camera.frustum.fov = Cesium.Math.toRadians(ROAD_VIEW_FOV_DEGREES);
+  }
+
+  if (!smooth) {
+    viewer.camera.setView({
+      destination: eye,
+      orientation: { direction, up }
+    });
+    return;
+  }
+
+  if (typeof (viewer.camera as any).cancelFlight === "function") {
+    (viewer.camera as any).cancelFlight();
+  }
+  viewer.camera.flyTo({
+    destination: eye,
+    orientation: { direction, up },
+    duration: 0.18,
+    easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT,
+  });
+}
+
+function remainingPathDistance(path: Cesium.Cartesian3[], fromIndex: number): number {
+  let total = 0;
+  for (let index = Math.max(1, fromIndex + 1); index < path.length; index += 1) {
+    total += Cesium.Cartesian3.distance(path[index - 1], path[index]);
+  }
+  return total;
+}
+
+function liveNavigationHudState(index: number): NavigationHudState {
+  const floor = liveNavFloorByIndex[index];
+  const nextFloor = liveNavFloorByIndex[Math.min(index + 1, liveNavFloorByIndex.length - 1)];
+  const remaining = remainingPathDistance(liveNavPath, index);
+  const contextBase = liveNavDestinationName
+    ? `${floorLabel(floor)} to ${liveNavDestinationName}`
+    : floorLabel(floor);
+
+  if (index >= liveNavPath.length - 1) {
+    return {
+      icon: "arrive",
+      instruction: "Arrived",
+      context: contextBase,
+      distanceMeters: 0
+    };
+  }
+
+  if (index >= liveNavStairStartIndex && index <= liveNavStairEndIndex) {
+    const targetFloor = activeNavToFloor ?? nextFloor;
+    return {
+      icon: "stairs",
+      instruction: "Use stairs",
+      context: `Be careful - move to ${floorLabel(targetFloor)}`,
+      distanceMeters: remaining
+    };
+  }
+
+  if (nextFloor !== floor) {
+    return {
+      icon: "stairs",
+      instruction: "Stairs ahead",
+      context: `Be careful - move to ${floorLabel(nextFloor)}`,
+      distanceMeters: remaining
+    };
+  }
+
+  if (index < 1 || index >= liveNavPath.length - 2) {
+    return {
+      icon: "forward",
+      instruction: "Forward",
+      context: contextBase,
+      distanceMeters: remaining
+    };
+  }
+
+  const currentHeading = headingENU(liveNavPath[index - 1], liveNavPath[index]);
+  const nextHeading = headingENU(liveNavPath[index], liveNavPath[index + 1]);
+  let angleDiff = nextHeading - currentHeading;
+  while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+  while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+  if (Math.abs(angleDiff) < 0.45) {
+    return {
+      icon: "forward",
+      instruction: "Forward",
+      context: contextBase,
+      distanceMeters: remaining
+    };
+  }
+
+  const turnLeft = angleDiff > 0;
+  return {
+    icon: turnLeft ? "left" : "right",
+    instruction: `Turn ${turnLeft ? "left" : "right"}`,
+    context: `Next: ${contextBase}`,
+    distanceMeters: remaining
+  };
+}
+
+function updateLiveNavigationHud(index: number): void {
+  updateNavigationHud(liveNavigationHudState(index));
+}
+
+function isRouteBubbleAhead(segment: "A" | "B", index: number): boolean {
+  if (liveNavPath.length === 0) return true;
+  if (segment === "A") return index > liveNavIndex;
+  return liveNavIndex < liveNavFirstSegmentLength || index > liveNavIndex - liveNavFirstSegmentLength;
+}
+
+function updateCompletedRouteDots(): void {
+  routeBubbleBillboardsA.forEach((billboard, index) => {
+    billboard.show = isRouteBubbleAhead("A", index) && (index % routeBubbleDensityStride === 0 || index === routeBubbleBillboardsA.length - 1);
+  });
+  routeBubbleBillboardsB.forEach((billboard, index) => {
+    billboard.show = isRouteBubbleAhead("B", index) && (index % routeBubbleDensityStride === 0 || index === routeBubbleBillboardsB.length - 1);
+  });
+}
+
+function startLiveNavigationMarker(
+  path: Cesium.Cartesian3[],
+  floorByIndex: number[],
+  destinationName: string,
+  firstSegmentLength: number,
+  stairRange?: { startIndex: number; endIndex: number }
+): void {
   stopLiveNavigationMarker();
 
   if (path.length < 2) return;
 
   liveNavPath = path;
   liveNavFloorByIndex = floorByIndex;
+  liveNavDestinationName = destinationName;
+  liveNavFirstSegmentLength = firstSegmentLength;
+  liveNavStairStartIndex = stairRange?.startIndex ?? -1;
+  liveNavStairEndIndex = stairRange?.endIndex ?? -1;
   liveNavIndex = 0;
   requestLiveNavigationFloor(liveNavFloorByIndex[0]);
+  applyRoadNavigationView(0, false);
+  updateLiveNavigationHud(0);
 
   viewer.entities.add({
     id: "liveNavigationMarker",
     position: path[0],
     point: {
-      pixelSize: 14,
-      color: Cesium.Color.fromCssColorString("#1a57d6"),
+      pixelSize: new Cesium.CallbackProperty(() => 17 + 5 * Math.abs(Math.sin(performance.now() * 0.005)), false),
+      color: Cesium.Color.fromCssColorString("#00CCFF"),
       outlineColor: Cesium.Color.WHITE,
-      outlineWidth: 3,
+      outlineWidth: 4,
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
     },
   });
@@ -196,12 +391,27 @@ function startLiveNavigationMarker(path: Cesium.Cartesian3[], floorByIndex: numb
     const marker = viewer.entities.getById("liveNavigationMarker");
     if (!marker || liveNavPath.length === 0) return;
 
-    liveNavIndex = (liveNavIndex + 1) % liveNavPath.length;
+    if (liveNavIndex >= liveNavPath.length - 1) {
+      if (liveNavTimer !== null) {
+        window.clearInterval(liveNavTimer);
+        liveNavTimer = null;
+      }
+      clearRouteEntities();
+      updateLiveNavigationHud(liveNavIndex);
+      setNavigationMessage("You have reached your destination.", false);
+      viewer.scene.requestRender();
+      return;
+    }
+
+    liveNavIndex += 1;
     marker.position = new Cesium.ConstantPositionProperty(liveNavPath[liveNavIndex]);
     requestLiveNavigationFloor(liveNavFloorByIndex[liveNavIndex]);
+    applyRoadNavigationView(liveNavIndex);
+    updateLiveNavigationHud(liveNavIndex);
+    updateCompletedRouteDots();
 
     viewer.scene.requestRender();
-  }, 300);
+  }, LIVE_NAVIGATION_STEP_MS);
 }
 
 export function setNavigationFloorSwitchHandler(
@@ -233,10 +443,10 @@ export function updateNavigationVisibility(activeFloor: number): void {
   
   const lineA = viewer.entities.getById("navigationLineA");
   if (lineA) lineA.show = false;
-  
+
   const lineB = viewer.entities.getById("navigationLineB");
   if (lineB) lineB.show = false;
-  
+
   const stairs = viewer.entities.getById("stairsLine");
   if (stairs) stairs.show = false;
   
@@ -420,6 +630,19 @@ function nearest(graph: GraphNode[], position: Cesium.Cartesian3): GraphNode {
   return best;
 }
 
+function nearestPathIndex(path: Cesium.Cartesian3[], position: Cesium.Cartesian3): number {
+  let bestIndex = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  path.forEach((point, index) => {
+    const distance = Cesium.Cartesian3.distance(point, position);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  });
+  return bestIndex;
+}
+
 function headingENU(start: Cesium.Cartesian3, end: Cesium.Cartesian3): number {
   const enu = Cesium.Transforms.eastNorthUpToFixedFrame(start);
   const inverse = Cesium.Matrix4.inverse(enu, new Cesium.Matrix4());
@@ -462,18 +685,22 @@ function addRouteBubbles(
 ): Cesium.Cartesian3[] {
   const points = samplePathByDistance(path, spacingMeters);
   const billboards = collection === routeBubbleCollectionA ? routeBubbleBillboardsA : routeBubbleBillboardsB;
+  const tValues = collection === routeBubbleCollectionA ? routeDotTValuesA : routeDotTValuesB;
 
   points.forEach((position, index) => {
+    const t = points.length > 1 ? index / (points.length - 1) : 0;
     const billboard = collection.add({
       position,
       image: ROUTE_BUBBLE_SVG,
-      scale: index === 0 || index === points.length - 1 ? 0.175 : 0.125,
+      scale: 0.09,
+      color: Cesium.Color.WHITE.withAlpha(0.32),
       scaleByDistance: new Cesium.NearFarScalar(8, 1.2, 100, 1.5),
       verticalOrigin: Cesium.VerticalOrigin.CENTER,
       horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
     });
     billboards.push(billboard);
+    tValues.push(t);
   });
 
   return points;
@@ -493,9 +720,10 @@ function applyRouteBubbleDensity(force = false): void {
 
   routeBubbleDensityStride = stride;
   const updateBillboards = (billboards: Cesium.Billboard[]) => {
+    const segment = billboards === routeBubbleBillboardsA ? "A" : "B";
     const lastIndex = billboards.length - 1;
     billboards.forEach((billboard, index) => {
-      billboard.show = index === 0 || index === lastIndex || index % stride === 0;
+      billboard.show = isRouteBubbleAhead(segment, index) && (index === lastIndex || index % stride === 0);
     });
   };
 
@@ -506,23 +734,21 @@ function applyRouteBubbleDensity(force = false): void {
 
 function addGlowBillboards(
   collection: Cesium.BillboardCollection,
-  count = 3
+  count = 2
 ): Cesium.Billboard[] {
   const glows: Cesium.Billboard[] = [];
-
   for (let i = 0; i < count; i += 1) {
     glows.push(collection.add({
       position: Cesium.Cartesian3.ZERO,
       image: ROUTE_GLOW_SVG,
-      scale: 0.3,
-      color: Cesium.Color.WHITE.withAlpha(0.5),
+      scale: 0.32,
+      color: Cesium.Color.WHITE.withAlpha(0.85),
       verticalOrigin: Cesium.VerticalOrigin.CENTER,
       horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
       show: false,
     }));
   }
-
   return glows;
 }
 
@@ -530,42 +756,58 @@ function startRouteGlowAnimation(
   pointsA: Cesium.Cartesian3[],
   pointsB: Cesium.Cartesian3[]
 ): void {
-  if (routeGlowTimer !== null) {
-    window.clearInterval(routeGlowTimer);
-    routeGlowTimer = null;
+  if (routeAnimRemove !== null) {
+    routeAnimRemove();
+    routeAnimRemove = null;
   }
 
   routeGlowCollectionA.removeAll();
   routeGlowCollectionB.removeAll();
 
-  const glowsA = addGlowBillboards(routeGlowCollectionA, 3);
-  const glowsB = addGlowBillboards(routeGlowCollectionB, 3);
+  const glowsA = addGlowBillboards(routeGlowCollectionA, 2);
+  const glowsB = addGlowBillboards(routeGlowCollectionB, 2);
 
-  routeGlowTick = 0;
+  routeAnimStart = performance.now();
 
-  routeGlowTimer = window.setInterval(() => {
-    routeGlowTick += 1;
+  // 3 pulse waves flow from start→end simultaneously at 60fps
+  const WAVES = 3;
+  const SPEED = 0.55;  // path traversals per second
+  const SIGMA = 0.16;  // gaussian half-width (fraction of path)
 
+  routeAnimRemove = viewer.scene.postRender.addEventListener(() => {
+    const elapsed = (performance.now() - routeAnimStart) * 0.001;
+    const cycleT = elapsed * SPEED;
+
+    // Flowing brightness wave across dots
+    const updateDots = (billboards: Cesium.Billboard[], tValues: number[]) => {
+      billboards.forEach((bb, i) => {
+        if (!bb.show) return;
+        const dotT = tValues[i] ?? 0;
+        let peak = 0;
+        for (let w = 0; w < WAVES; w++) {
+          const waveT = (cycleT + w / WAVES) % 1;
+          let dist = Math.abs(waveT - dotT);
+          if (dist > 0.5) dist = 1 - dist;
+          peak = Math.max(peak, Math.exp(-(dist * dist) / (2 * SIGMA * SIGMA)));
+        }
+        bb.scale = 0.085 + 0.135 * peak;
+        bb.color = Cesium.Color.WHITE.withAlpha(0.30 + 0.70 * peak);
+      });
+    };
+
+    updateDots(routeBubbleBillboardsA, routeDotTValuesA);
+    updateDots(routeBubbleBillboardsB, routeDotTValuesB);
+
+    // Two bright glow orbs ride the path
     const updateGlows = (points: Cesium.Cartesian3[], glows: Cesium.Billboard[]) => {
-      if (points.length === 0) {
-        glows.forEach((glow) => {
-          glow.show = false;
-        });
-        return;
-      }
-
-      glows.forEach((glow, index) => {
-        const offset = index * Math.max(3, Math.floor(points.length / 3));
-        const pointIndex = (routeGlowTick + offset) % points.length;
-        const lowered = Cesium.Cartesian3.add(
-          points[pointIndex],
-          new Cesium.Cartesian3(0, 0, -0.08),
-          new Cesium.Cartesian3()
-        );
-
-        glow.position = lowered;
+      if (points.length === 0) { glows.forEach((g) => { g.show = false; }); return; }
+      glows.forEach((glow, i) => {
+        const waveT = (cycleT + i / glows.length) % 1;
+        const idx = Math.min(Math.floor(waveT * points.length), points.length - 1);
+        glow.position = points[idx];
         glow.show = true;
-        glow.scale = 0.26 + 0.05 * Math.sin((routeGlowTick + index * 8) * 0.22);
+        glow.scale = 0.30 + 0.10 * Math.sin(elapsed * 4.5 + i * 2.5);
+        glow.color = Cesium.Color.WHITE.withAlpha(0.75 + 0.20 * Math.sin(elapsed * 3 + i));
       });
     };
 
@@ -573,7 +815,7 @@ function startRouteGlowAnimation(
     updateGlows(pointsB, glowsB);
 
     viewer.scene.requestRender();
-  }, 90);
+  });
 }
 
 function generateTurnSteps(path: Cesium.Cartesian3[]): Array<{ icon: string; title: string; primary: string }> {
@@ -670,10 +912,10 @@ function drawRoute(
     id: "startMarker",
     position: start,
     point: {
-      pixelSize: 24,
-      color: Cesium.Color.fromCssColorString("#0B3D91"),
+      pixelSize: 28,
+      color: Cesium.Color.fromCssColorString("#0055FF"),
       outlineColor: Cesium.Color.WHITE,
-      outlineWidth: 5,
+      outlineWidth: 6,
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
     },
   });
@@ -682,10 +924,10 @@ function drawRoute(
     id: "endMarker",
     position: end,
     point: {
-      pixelSize: 26,
-      color: Cesium.Color.fromCssColorString("#e53935"),
+      pixelSize: new Cesium.CallbackProperty(() => 24 + 6 * Math.abs(Math.sin(performance.now() * 0.004)), false),
+      color: Cesium.Color.fromCssColorString("#FF2200"),
       outlineColor: Cesium.Color.WHITE,
-      outlineWidth: 5,
+      outlineWidth: 6,
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
     },
   });
@@ -863,6 +1105,8 @@ export async function startNavigation(): Promise<void> {
   const zLift = 0.5;
   let pathFloorA: Cesium.Cartesian3[] = [];
   let pathFloorB: Cesium.Cartesian3[] = [];
+  let stairStartPosition: Cesium.Cartesian3 | null = null;
+  let stairEndPosition: Cesium.Cartesian3 | null = null;
 
   if (fromFloor === toFloor) {
     const path = findPath(graphA, nearest(graphA, startDoorPosition), nearest(graphA, endDoorPosition));
@@ -887,6 +1131,8 @@ export async function startNavigation(): Promise<void> {
       }
       return Cesium.Cartesian3.fromDegrees(point.lon, point.lat, height + zLift);
     });
+    stairStartPosition = stairPath3D[0];
+    stairEndPosition = stairPath3D[stairPath3D.length - 1];
 
     const part1 = findPath(graphA, nearest(graphA, startDoorPosition), nearest(graphA, stairPath3D[0]));
     const part2 = findPath(graphB, nearest(graphB, stairPath3D[stairPath3D.length - 1]), nearest(graphB, endDoorPosition));
@@ -922,10 +1168,17 @@ export async function startNavigation(): Promise<void> {
     }
   }
 
+  await Promise.resolve(navigationFloorSwitchHandler?.(fromFloor));
   disableCameraControls();
 
   const { pointsA, pointsB } = drawRoute(pathFloorA, pathFloorB);
   const fullPath = [...pointsA, ...pointsB];
+  const stairRange = stairStartPosition && stairEndPosition
+    ? {
+        startIndex: Math.max(0, nearestPathIndex(fullPath, stairStartPosition) - 1),
+        endIndex: nearestPathIndex(fullPath, stairEndPosition) + 1
+      }
+    : undefined;
   const fullPathFloors = [
     ...pointsA.map((position) => floorForNavigationPosition(position, fromFloor)),
     ...pointsB.map((position) => floorForNavigationPosition(position, toFloor)),
@@ -954,7 +1207,7 @@ export async function startNavigation(): Promise<void> {
     list: allSteps
   });
 
-  startLiveNavigationMarker(fullPath, fullPathFloors);
+  startLiveNavigationMarker(fullPath, fullPathFloors, toSelection.displayName, pointsA.length, stairRange);
   setNavigationMessage(
     fromFloor === toFloor
       ? "Live navigation started. Follow the blue route."

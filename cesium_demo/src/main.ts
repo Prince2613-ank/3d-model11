@@ -7,7 +7,6 @@ import { initializeCalendar } from "./calendar";
 import {
   exitNavigation,
   startNavigation,
-  getActiveNavigationStartFloor,
   setNavigationFloorSwitchHandler,
 } from "./navigation";
 import { clearCctvViewshed } from "./cameraShed/cctvViewshed";
@@ -19,11 +18,12 @@ import {
   setNavigationMessage,
   openBookingPanel,
   closeBookingPanel,
-  flyToDefaultFloorView,
   getBookingPanelRoom,
   getBookingTimes,
   hideFloorSpinner,
+  installMapDirectionsControl,
   showFloorSpinner,
+  setEnterBuildingFloorSwitchCallback,
 } from "./ui";
 import { createBooking, getCurrentEvents, showToast } from "./booking";
 
@@ -48,6 +48,7 @@ async function playOnboardingSplash(): Promise<void> {
 async function bootstrap(): Promise<void> {
   installContextLossGuard();
   setNavigationFloorSwitchHandler(openFloorProfessional);
+  setEnterBuildingFloorSwitchCallback(openFloorProfessional);
   bindUiControls({
     showFloor: openFloorProfessional,
     preloadFloor,
@@ -57,12 +58,6 @@ async function bootstrap(): Promise<void> {
       showFloorSpinner("Preparing navigation...");
       try {
         await startNavigation();
-
-        const floor = getActiveNavigationStartFloor();
-        if (floor) {
-          await openFloorProfessional(floor);
-          await flyToDefaultFloorView();
-        }
       } finally {
         hideFloorSpinner();
       }
@@ -71,6 +66,7 @@ async function bootstrap(): Promise<void> {
     exitNavigation,
   });
   bindCctvPanel();
+  installMapDirectionsControl();
   setNavigationMessage("Loading building data...");
 
   const applySelectedFloor = (): void => showFloor(getSelectedFloor());

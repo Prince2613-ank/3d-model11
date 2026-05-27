@@ -11,7 +11,6 @@ if (ionToken) {
 export const viewer = new Cesium.Viewer("cesiumContainer", {
   terrainProvider: undefined,
   baseLayerPicker: true,
-  geocoder: false,
   shadows: false,
   shouldAnimate: true,
   infoBox: false,
@@ -29,8 +28,6 @@ viewer.scene.screenSpaceCameraController.maximumZoomDistance = 300.0;
 (viewer.scene.screenSpaceCameraController as any).maximumPitch = Cesium.Math.toRadians(-5);
 viewer.scene.postProcessStages.fxaa.enabled = true;
 viewer.resolutionScale = Math.min(window.devicePixelRatio, 1.5);
-viewer.scene.fog.enabled = false;
-if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
 // Indoor-friendly brightness
 viewer.scene.globe.enableLighting = false;
 viewer.shadows = false;

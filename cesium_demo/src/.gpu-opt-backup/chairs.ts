@@ -22,9 +22,6 @@ export const thirdFloorChairs: ChairModel[] = [];
 export const secondFloorChairs: ChairModel[] = [];
 const chairLoadMap = new Map<3 | 4, Promise<void>>();
 const SECOND_FLOOR_CHAIR_BATCH_SIZE = 6;
-const THIRD_FLOOR_CHAIR_BATCH_SIZE = 6;
-// One shared IBL object — all chairs use identical parameters so no need for 52 separate GPU allocations
-const sharedIndoorIBL = createIndoorImageBasedLighting();
 
 const thirdFloorChairNames: Record<number, string> = {
   1: "Kush",
@@ -94,7 +91,7 @@ async function loadChair(fileName: string, altitude: number, name: string, index
     incrementallyLoadTextures: true,
     enablePick: true,
     lightColor: INDOOR_MODEL_LIGHT_COLOR,
-    imageBasedLighting: sharedIndoorIBL
+    imageBasedLighting: createIndoorImageBasedLighting()
   } as any)) as ChairModel;
 
   model.chairName = name;
@@ -131,38 +128,34 @@ async function loadSecondFloorChairs(onChairLoaded?: (chair: ChairModel) => void
 }
 
 async function loadThirdFloorChairs(onChairLoaded?: (chair: ChairModel) => void): Promise<void> {
-  const indexes = Array.from({ length: 34 }, (_, i) => i + 1);
-  for (let start = 0; start < indexes.length; start += THIRD_FLOOR_CHAIR_BATCH_SIZE) {
-    const batch = indexes.slice(start, start + THIRD_FLOOR_CHAIR_BATCH_SIZE);
-    await Promise.allSettled(
-      batch.map(async (index) => {
-        try {
-          const model = (await Cesium.Model.fromGltfAsync({
-            url: modelUrl(`${index}.glb`),
-            modelMatrix: computeMatrix(ALT_3RD),
-            scale: MODEL_SCALE,
-            shadows: Cesium.ShadowMode.DISABLED,
-            allowPicking: true,
-            cull: true,
-            incrementallyLoadTextures: true,
-            enablePick: true,
-            lightColor: INDOOR_MODEL_LIGHT_COLOR,
-            imageBasedLighting: sharedIndoorIBL
-          } as any)) as ChairModel;
-          model.chairName = thirdFloorChairNames[index] ?? `3F Chair ${index}`;
-          model.chairIndex = index;
-          model.chairFloor = 4;
-          model.id = model;
-          model.show = false;
-          viewer.scene.primitives.add(model);
-          thirdFloorChairs.push(model);
-          onChairLoaded?.(model);
-        } catch (error) {
-          console.warn(`Missing 3rd floor chair file: ${index}.glb`, error);
-        }
-      })
-    );
-  }
+  await Promise.allSettled(
+    Array.from({ length: 34 }, (_, i) => i + 1).map(async (index) => {
+      try {
+        const model = (await Cesium.Model.fromGltfAsync({
+          url: modelUrl(`${index}.glb`),
+          modelMatrix: computeMatrix(ALT_3RD),
+          scale: MODEL_SCALE,
+          shadows: Cesium.ShadowMode.DISABLED,
+          allowPicking: true,
+          cull: true,
+          incrementallyLoadTextures: true,
+          enablePick: true,
+          lightColor: INDOOR_MODEL_LIGHT_COLOR,
+          imageBasedLighting: createIndoorImageBasedLighting()
+        } as any)) as ChairModel;
+        model.chairName = thirdFloorChairNames[index] ?? `3F Chair ${index}`;
+        model.chairIndex = index;
+        model.chairFloor = 4;
+        model.id = model;
+        model.show = false;
+        viewer.scene.primitives.add(model);
+        thirdFloorChairs.push(model);
+        onChairLoaded?.(model);
+      } catch (error) {
+        console.warn(`Missing 3rd floor chair file: ${index}.glb`, error);
+      }
+    })
+  );
 }
 
 export function loadChairsForFloor(floor: number, onChairLoaded?: (chair: ChairModel) => void): Promise<void> {

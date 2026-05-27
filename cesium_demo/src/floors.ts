@@ -7,10 +7,17 @@ import {
 import {
   ensureFloorModelLoaded,
   getActiveCctvModel,
+  isSecondFloorLoadingPreviewActive,
   isThirdFloorLoadingPreviewActive,
   isCctvActive,
   isFloorModelLoaded,
-  models
+  models,
+  showSecondFloorWallPreview,
+  showThirdFloorWallPreview,
+  startSecondFloorLoadingPreview,
+  startThirdFloorLoadingPreview,
+  stopSecondFloorLoadingPreview,
+  stopThirdFloorLoadingPreview
 } from "./models";
 import { geo2, geo3 } from "./rooms";
 import { loadChairsForFloor, secondFloorChairs, thirdFloorChairs, type ChairModel } from "./chairs";
@@ -29,6 +36,9 @@ const requestedChairFloors = new Set<3 | 4>();
 
 const ENTER_INDOOR = 12;
 const EXIT_OUTDOOR = 18;
+const THIRD_FLOOR_BASE_PREVIEW_MS = 500;
+const THIRD_FLOOR_WALL_PREVIEW_MIN_MS = 320;
+const THIRD_FLOOR_CHAIR_DELAY_MS = 220;
 
 export function getSelectedFloor(): number {
   return selectedFloor;
@@ -42,6 +52,7 @@ function setShow(target: { show: boolean } | null | undefined, show: boolean): v
 
 function showLoadedChairIfSelected(chair: ChairModel): void {
   const shouldShow = chair.chairFloor === selectedFloor
+    && !(chair.chairFloor === 3 && isSecondFloorLoadingPreviewActive())
     && !(chair.chairFloor === 4 && isThirdFloorLoadingPreviewActive());
   if (chair.show !== shouldShow) {
     chair.show = shouldShow;
@@ -52,8 +63,9 @@ function showLoadedChairIfSelected(chair: ChairModel): void {
 // Pure visibility-only update — no async triggers, no DOM rebuilds.
 // Used by async callbacks so they don't re-enter showFloor and cause render storms.
 function applyVisibility(floor: number): void {
+  const secondFloorPreviewActive = floor === 3 && isSecondFloorLoadingPreviewActive();
   const thirdFloorPreviewActive = floor === 4 && isThirdFloorLoadingPreviewActive();
-  const ambientLight = floor === 3 ? SECOND_FLOOR_COOL_AMBIENT_LIGHT : DEFAULT_AMBIENT_LIGHT;
+  const ambientLight = secondFloorPreviewActive ? DEFAULT_AMBIENT_LIGHT : floor === 3 ? SECOND_FLOOR_COOL_AMBIENT_LIGHT : DEFAULT_AMBIENT_LIGHT;
   if ((viewer.scene as any).ambientLightColor !== ambientLight) {
     (viewer.scene as any).ambientLightColor = ambientLight;
   }
@@ -73,24 +85,31 @@ function applyVisibility(floor: number): void {
   setShow(models.outdoor, floor === 0);
   setShow(models.ground, floor === 1);
   setShow(models.first, floor === 2);
-  setShow(models.second, floor === 3);
+  setShow(models.second, floor === 3 && !secondFloorPreviewActive);
   setShow(models.third, floor === 4 && !thirdFloorPreviewActive);
   setShow(models.meetingRoom, floor === 4 && !thirdFloorPreviewActive);
   setShow(models.thirdFloorPiller, floor === 4 && !thirdFloorPreviewActive);
+  if (!secondFloorPreviewActive) {
+    setShow(models.secondFloorLoadingBase, false);
+    setShow(models.secondFloorLoadingBaseWall, false);
+  }
   if (!thirdFloorPreviewActive) {
     setShow(models.thirdFloorLoadingBase, false);
     setShow(models.thirdFloorLoadingBaseWall, false);
   }
   const activeCctv = getActiveCctvModel();
   models.cameras.forEach((camera) => {
-    const shouldShow = (camera.cameraFloor === floor) && camera !== activeCctv && !(thirdFloorPreviewActive && camera.cameraFloor === 4);
+    const shouldShow = (camera.cameraFloor === floor)
+      && camera !== activeCctv
+      && !(secondFloorPreviewActive && camera.cameraFloor === 3)
+      && !(thirdFloorPreviewActive && camera.cameraFloor === 4);
     setShow(camera, shouldShow);
   });
 
   for (const chair of thirdFloorChairs) setShow(chair, floor === 4 && !thirdFloorPreviewActive);
-  for (const chair of secondFloorChairs) setShow(chair, floor === 3);
+  for (const chair of secondFloorChairs) setShow(chair, floor === 3 && !secondFloorPreviewActive);
 
-  setShow(geo2, floor === 3);
+  setShow(geo2, floor === 3 && !secondFloorPreviewActive);
   setShow(geo3, floor === 4 && !thirdFloorPreviewActive);
 
   updateNavigationVisibility(floor);
@@ -101,7 +120,7 @@ function requestChairFloor(floor: number): void {
   if (requestedChairFloors.has(floor)) return;
 
   requestedChairFloors.add(floor);
-  void loadChairsForFloor(floor, showLoadedChairIfSelected)
+  void loadChairsForFloor(floor, floor === 4 ? undefined : showLoadedChairIfSelected)
     .then(() => {
       // Use applyVisibility instead of showFloor to avoid recursive DOM rebuilds
       if (selectedFloor === floor) {
@@ -115,6 +134,52 @@ function requestChairFloor(floor: number): void {
     });
 }
 
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function runStagedFloorLoad(
+  floor: 3 | 4,
+  token: number,
+  options: {
+    startPreview: () => void;
+    showWallPreview: () => Promise<void>;
+    stopPreview: () => void;
+  }
+): Promise<void> {
+  options.startPreview();
+  const floorLoadPromise = ensureFloorModelLoaded(floor);
+  requestedChairFloors.add(floor);
+  const chairLoadPromise = loadChairsForFloor(floor);
+  applyVisibility(floor);
+  viewer.scene.requestRender();
+  await wait(THIRD_FLOOR_BASE_PREVIEW_MS);
+  if (token !== floorSwitchToken || selectedFloor !== floor) {
+    options.stopPreview();
+    return;
+  }
+
+  await options.showWallPreview();
+  await Promise.all([floorLoadPromise, wait(THIRD_FLOOR_WALL_PREVIEW_MIN_MS)]);
+  if (token !== floorSwitchToken || selectedFloor !== floor) {
+    options.stopPreview();
+    return;
+  }
+
+  options.stopPreview();
+  applyVisibility(floor);
+  renderCameraControls(floor);
+  viewer.scene.requestRender();
+  await wait(THIRD_FLOOR_CHAIR_DELAY_MS);
+  if (token !== floorSwitchToken || selectedFloor !== floor) return;
+
+  await chairLoadPromise;
+  if (token !== floorSwitchToken || selectedFloor !== floor) return;
+
+  applyVisibility(floor);
+  viewer.scene.requestRender();
+}
+
 export async function preloadFloor(floor: number): Promise<void> {
   if (floor <= 0) return;
 
@@ -122,19 +187,37 @@ export async function preloadFloor(floor: number): Promise<void> {
 
   if (floor === 3 || floor === 4) {
     requestedChairFloors.add(floor);
-    await loadChairsForFloor(floor, showLoadedChairIfSelected);
+    await loadChairsForFloor(floor, floor === 4 ? undefined : showLoadedChairIfSelected);
   }
 }
 
 async function ensureFloorCompletelyLoaded(floor: number, token: number): Promise<void> {
   if (floor <= 0) return;
 
+  if (floor === 3) {
+    await runStagedFloorLoad(3, token, {
+      startPreview: startSecondFloorLoadingPreview,
+      showWallPreview: showSecondFloorWallPreview,
+      stopPreview: stopSecondFloorLoadingPreview
+    });
+    return;
+  }
+
+  if (floor === 4) {
+    await runStagedFloorLoad(4, token, {
+      startPreview: startThirdFloorLoadingPreview,
+      showWallPreview: showThirdFloorWallPreview,
+      stopPreview: stopThirdFloorLoadingPreview
+    });
+    return;
+  }
+
   await ensureFloorModelLoaded(floor);
   if (token !== floorSwitchToken || selectedFloor !== floor) return;
 
   if (floor === 3 || floor === 4) {
     requestedChairFloors.add(floor);
-    await loadChairsForFloor(floor, showLoadedChairIfSelected);
+    await loadChairsForFloor(floor, floor === 4 ? undefined : showLoadedChairIfSelected);
     if (token !== floorSwitchToken || selectedFloor !== floor) return;
   }
 
@@ -151,6 +234,12 @@ export function showFloor(floor: number): void {
   clearCctvViewshed();
   selectedFloor = floor;
   const token = ++floorSwitchToken;
+  if (floor !== 3) {
+    stopSecondFloorLoadingPreview();
+  }
+  if (floor !== 4) {
+    stopThirdFloorLoadingPreview();
+  }
 
   if (floor > 0 && !isFloorModelLoaded(floor)) {
     void ensureFloorCompletelyLoaded(floor, token)
@@ -171,6 +260,15 @@ export function openFloorProfessional(floorNumber: number): Promise<void> {
     return Promise.resolve();
   }
 
+  if (
+    floorNumber === selectedFloor
+    && (floorNumber === 0 || isFloorModelLoaded(floorNumber))
+    && !(floorNumber === 3 && isSecondFloorLoadingPreviewActive())
+    && !(floorNumber === 4 && isThirdFloorLoadingPreviewActive())
+  ) {
+    return Promise.resolve();
+  }
+
   clearCctvViewshed();
   if (typeof (viewer.camera as any).cancelFlight === "function") {
     (viewer.camera as any).cancelFlight();
@@ -179,6 +277,12 @@ export function openFloorProfessional(floorNumber: number): Promise<void> {
   autoIndoorEnabled = false;
   selectedFloor = floorNumber;
   const token = ++floorSwitchToken;
+  if (floorNumber !== 3) {
+    stopSecondFloorLoadingPreview();
+  }
+  if (floorNumber !== 4) {
+    stopThirdFloorLoadingPreview();
+  }
 
   if (floorNumber === 0) {
     mode = "OUTDOOR";
@@ -193,6 +297,24 @@ export function openFloorProfessional(floorNumber: number): Promise<void> {
   viewer.scene.requestRender();
 
   return (async () => {
+    if (floorNumber === 3) {
+      await runStagedFloorLoad(3, token, {
+        startPreview: startSecondFloorLoadingPreview,
+        showWallPreview: showSecondFloorWallPreview,
+        stopPreview: stopSecondFloorLoadingPreview
+      });
+      return;
+    }
+
+    if (floorNumber === 4) {
+      await runStagedFloorLoad(4, token, {
+        startPreview: startThirdFloorLoadingPreview,
+        showWallPreview: showThirdFloorWallPreview,
+        stopPreview: stopThirdFloorLoadingPreview
+      });
+      return;
+    }
+
     const chairPromise = (floorNumber === 3 || floorNumber === 4)
       ? (requestedChairFloors.add(floorNumber as 3 | 4), loadChairsForFloor(floorNumber))
       : Promise.resolve();

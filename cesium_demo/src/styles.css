@@ -11,6 +11,118 @@ body {
   font-family: Inter, Arial, sans-serif;
 }
 
+.navigation-hud {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  z-index: 12000;
+  display: grid;
+  grid-template-columns: 34px minmax(170px, 330px) 34px auto;
+  align-items: center;
+  gap: 8px;
+  transform: translateX(-50%);
+  min-height: 46px;
+  max-width: min(560px, calc(100vw - 24px));
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  border-radius: 8px;
+  background: rgba(17, 24, 39, 0.9);
+  color: #fff;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.3);
+  backdrop-filter: blur(14px);
+  pointer-events: none;
+}
+
+.navigation-hud[hidden] {
+  display: none;
+}
+
+.navigation-hud-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 8px;
+  background: #0ea5e9;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.navigation-hud-main {
+  min-width: 0;
+  text-align: center;
+}
+
+.navigation-hud-instruction {
+  overflow: hidden;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.navigation-hud-context {
+  overflow: hidden;
+  margin-top: 2px;
+  color: rgba(226, 232, 240, 0.9);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navigation-hud-distance {
+  min-width: 52px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #e0f2fe;
+  font-size: 14px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.navigation-hud[data-nav-icon="left"] .navigation-hud-icon,
+.navigation-hud[data-nav-icon="right"] .navigation-hud-icon {
+  background: #ef4444;
+  animation: nav-alert-blink 0.85s ease-in-out infinite;
+}
+
+.navigation-hud[data-nav-icon="left"] .navigation-hud-instruction,
+.navigation-hud[data-nav-icon="right"] .navigation-hud-instruction {
+  color: #fecaca;
+}
+
+.navigation-hud[data-nav-icon="stairs"] .navigation-hud-icon {
+  background: #f59e0b;
+  animation: nav-alert-blink 1.1s ease-in-out infinite;
+}
+
+.navigation-hud[data-nav-icon="stairs"] .navigation-hud-context {
+  color: #fde68a;
+}
+
+.navigation-hud[data-nav-icon="arrive"] .navigation-hud-icon {
+  background: #22c55e;
+}
+
+@keyframes nav-alert-blink {
+  0%, 100% {
+    box-shadow: 0 0 0 rgba(239, 68, 68, 0);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(239, 68, 68, 0.72);
+    transform: scale(1.08);
+  }
+}
+
 #onboardingSplash {
   position: fixed;
   inset: 0;
@@ -3366,6 +3478,193 @@ body {
   top: 0 !important;
   right: 0 !important;
   height: 34px !important;
+}
+
+.google-map-route-btn {
+  order: -2;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.96) !important;
+}
+
+.google-map-route-btn svg {
+  width: 24px;
+  height: 24px;
+  display: block;
+}
+
+.map-directions-panel {
+  position: fixed;
+  top: 66px;
+  right: 14px;
+  z-index: 10003;
+  width: min(340px, calc(100vw - 28px));
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 16px 40px rgba(14, 28, 54, 0.22);
+  box-sizing: border-box;
+}
+
+.map-directions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  color: #202124;
+  font-size: 16px;
+}
+
+.map-directions-header button {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: #eef2f7;
+  color: #1f2937;
+  font-weight: 800;
+}
+
+.map-directions-panel label {
+  display: block;
+  margin: 8px 0 4px;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.map-directions-panel input {
+  width: 100%;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid #d5dbe5;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  box-sizing: border-box;
+}
+
+.map-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 82px;
+  gap: 8px;
+}
+
+.map-input-row button,
+.map-route-btn {
+  height: 38px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #1a73e8;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.map-route-btn {
+  width: 100%;
+  margin-top: 12px;
+  background: #16a34a;
+}
+
+/* ── Enter Building prompt ─────────────────────────────────────────── */
+.enter-building-prompt {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10200;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(10, 14, 26, 0.94);
+  border: 1.5px solid #F59E0B;
+  border-radius: 16px;
+  padding: 14px 20px;
+  box-shadow: 0 6px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(245,158,11,0.18);
+  backdrop-filter: blur(12px);
+  min-width: 320px;
+  max-width: 92vw;
+  animation: entryPromptSlideIn 0.28s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+
+@keyframes entryPromptSlideIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(18px) scale(0.96); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0)   scale(1); }
+}
+
+.enter-building-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.enter-building-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.enter-building-title {
+  color: #F59E0B;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.enter-building-dest {
+  color: rgba(255,255,255,0.82);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.enter-building-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.enter-building-enter-btn {
+  background: #0055cc;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.enter-building-enter-btn:hover {
+  background: #0066ff;
+}
+
+.enter-building-cancel-btn {
+  background: transparent;
+  color: rgba(255,255,255,0.55);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.enter-building-cancel-btn:hover {
+  color: rgba(255,255,255,0.9);
 }
 
 #cameraPanel {

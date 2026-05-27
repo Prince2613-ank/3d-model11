@@ -205,7 +205,7 @@ function addPrimitiveHidden(model: Cesium.Model): void {
 }
 
 async function loadFloorLoadingPreviewModel(fileName: string, altitude: number): Promise<Cesium.Model> {
-  const model = await createQueuedModel({
+  const model = await Cesium.Model.fromGltfAsync({
     url: modelUrl(fileName),
     modelMatrix: computeMatrix(altitude),
     scale: MODEL_SCALE,
@@ -665,7 +665,7 @@ export async function loadModels(): Promise<void> {
 }
 
 export function getPickedCamera(position: Cesium.Cartesian2): CameraModel | null {
-  const pickedObjects = viewer.scene.drillPick(position, 10, 5, 5);
+  const pickedObjects = viewer.scene.drillPick(position);
   for (const picked of pickedObjects) {
     const primitive = picked.primitive as CameraModel | undefined;
     if (primitive?.isCamera) {

@@ -1,0 +1,7 @@
+[31merror when starting dev server:
+Error: Port 5173 is already in use
+    at httpServerStart (file:///C:/Users/princ/Downloads/cesium_demo%20(3)/cesium_demo/node_modules/vite/dist/node/chunks/node.js:10662:10)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async startServer (file:///C:/Users/princ/Downloads/cesium_demo%20(3)/cesium_demo/node_modules/vite/dist/node/chunks/node.js:26333:30)
+    at async Object.listen (file:///C:/Users/princ/Downloads/cesium_demo%20(3)/cesium_demo/node_modules/vite/dist/node/chunks/node.js:26152:4)
+    at async CAC.<anonymous> (file:///C:/Users/princ/Downloads/cesium_demo%20(3)/cesium_demo/node_modules/vite/dist/node/cli.js:722:3)[39m

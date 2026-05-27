@@ -223,6 +223,51 @@
   </div>
 
   <div id="cesiumContainer"></div>
+  <div id="navigationHud" class="navigation-hud" hidden>
+    <div id="navigationHudIconLeft" class="navigation-hud-icon">&uarr;</div>
+    <div class="navigation-hud-main">
+      <div id="navigationHudInstruction" class="navigation-hud-instruction">Go forward</div>
+      <div id="navigationHudContext" class="navigation-hud-context">Navigation ready</div>
+    </div>
+    <div id="navigationHudIconRight" class="navigation-hud-icon">&uarr;</div>
+    <div id="navigationHudDistance" class="navigation-hud-distance">0 m</div>
+  </div>
+
+  <section id="mapDirectionsPanel" class="map-directions-panel" aria-label="Google Maps directions" hidden>
+    <div class="map-directions-header">
+      <strong>Map Route</strong>
+      <button id="mapDirectionsCloseBtn" type="button" aria-label="Close map route">x</button>
+    </div>
+    <label for="mapOriginInput">From</label>
+    <div class="map-input-row">
+      <input id="mapOriginInput" type="text" placeholder="Current location or address" />
+      <button id="useCurrentLocationBtn" type="button" title="Use current location">Locate</button>
+    </div>
+    <label for="mapDestinationInput">To (room or address)</label>
+    <input id="mapDestinationInput" type="text" value="Manthan" placeholder="Room name or address" />
+    <button id="showGoogleRouteBtn" class="map-route-btn" type="button">Show Route</button>
+    <button id="worldRouteIndoorNavBtn" class="map-route-btn" type="button" hidden
+      style="background:#0055cc; margin-top:4px;">
+      &#8594; Start Indoor Navigation
+    </button>
+    <button id="worldRouteDebugBtn" class="map-route-btn" type="button"
+      style="background:#374151; margin-top:4px; font-size:11px;">
+      Debug: Show Room POIs
+    </button>
+  </section>
+
+  <!-- Enter Building prompt — appears when outdoor route reaches the building entrance -->
+  <div id="enterBuildingPrompt" class="enter-building-prompt" hidden aria-live="assertive">
+    <div class="enter-building-icon">&#127970;</div>
+    <div class="enter-building-body">
+      <strong class="enter-building-title">Building Entrance</strong>
+      <span id="enterBuildingDestText" class="enter-building-dest">Walk inside to reach your destination</span>
+    </div>
+    <div class="enter-building-actions">
+      <button id="enterBuildingBtn" type="button" class="enter-building-enter-btn">Enter Building</button>
+      <button id="enterBuildingCancelBtn" type="button" class="enter-building-cancel-btn">Dismiss</button>
+    </div>
+  </div>
   
   <button id="hamburgerMenu" class="hamburger-btn" aria-label="Toggle Controls" title="Toggle Controls">
     <span></span>
