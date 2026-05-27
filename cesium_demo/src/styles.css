@@ -3574,6 +3574,17 @@ body {
   background: #16a34a;
 }
 
+.map-route-summary {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.08);
+  color: #172033;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 /* ── Enter Building prompt ─────────────────────────────────────────── */
 .enter-building-prompt {
   position: fixed;

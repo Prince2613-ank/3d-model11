@@ -1,5 +1,6 @@
 import { Cesium, viewer, ALT_2ND, ALT_3RD } from "./viewer";
-import { BUILDING_ENTRANCE, lookupRoomPOI, ROOM_POIS, type RoomPOI } from "./buildingPOI";
+import { BUILDING_ENTRANCE, lookupRoomPOI, type RoomPOI } from "./buildingPOI";
+import outdoorNavigationPointsUrl from "../Outdoor_navigation_points.geojson?url";
 import { ChairModel, getPickedChair, highlightChair } from "./chairs";
 import {
   CameraModel,
@@ -78,17 +79,22 @@ function setText(id: string, value: string): void {
 }
 
 type MapCoordinate = { lon: number; lat: number };
+type OutdoorRouteResult = {
+  points: MapCoordinate[];
+  distanceMeters: number;
+  outdoorModelStartIndex?: number;
+};
+type OutdoorNavigationNode = MapCoordinate & {
+  id: number;
+  edges: Array<{ index: number; distance: number }>;
+};
 type MapSearchCandidate = MapCoordinate & {
   label: string;
   kind?: string;
   importance?: number;
 };
-const BUILDING_ROOM_MAP_COORDINATE: MapCoordinate = { lat: 28.67094925880298, lon: 77.13370522156849 };
 
 const KNOWN_MAP_PLACES: Record<string, MapCoordinate> = {
-  manthan: BUILDING_ROOM_MAP_COORDINATE,
-  "flodata": BUILDING_ROOM_MAP_COORDINATE,
-  "flodata analytics": BUILDING_ROOM_MAP_COORDINATE,
   "punjabi bagh west metro": { lat: 28.6730178, lon: 77.1373636 },
   "punjabi bagh west metro station": { lat: 28.6730178, lon: 77.1373636 },
   "punjabi bagh west": { lat: 28.6730178, lon: 77.1373636 },
@@ -101,26 +107,6 @@ const KNOWN_MAP_PLACES: Record<string, MapCoordinate> = {
 
 function normalizeLabel(value: string): string {
   return value.toLowerCase().replace(/\s+\((2nd|3rd) floor\)$/i, "").trim();
-}
-
-function findBuildingRoomMapCoordinate(value: string): MapCoordinate | null {
-  const normalized = normalizeLabel(normalizeMapSearchText(value));
-  if (!normalized) return null;
-
-  const selects = [
-    optionalElement<HTMLSelectElement>("fromRoom"),
-    optionalElement<HTMLSelectElement>("toRoom"),
-  ].filter((select): select is HTMLSelectElement => Boolean(select));
-
-  for (const select of selects) {
-    const match = Array.from(select.options).some((option) => {
-      const optionLabel = normalizeMapSearchText(option.value);
-      return normalizeLabel(optionLabel) === normalized;
-    });
-    if (match) return BUILDING_ROOM_MAP_COORDINATE;
-  }
-
-  return null;
 }
 
 function selectIndoorRoom(selectId: string, preferredRoom: string, preferredFloorLabel?: string): boolean {
@@ -179,9 +165,6 @@ async function resolveMapPlace(value: string): Promise<MapCoordinate | null> {
   const known = KNOWN_MAP_PLACES[normalized];
   if (known) return known;
 
-  const buildingRoom = findBuildingRoomMapCoordinate(input);
-  if (buildingRoom) return buildingRoom;
-
   const queryAttempts = buildMapSearchQueries(input);
   for (const query of queryAttempts) {
     const result = await geocodeWithNominatim(query);
@@ -200,18 +183,21 @@ function normalizeMapSearchText(value: string): string {
   return value.toLowerCase().replace(/[,\s]+/g, " ").trim();
 }
 
+// True when the query looks like an Indian location (metro, chowk, nagar, etc.)
+function looksLikeIndiaQuery(normalized: string): boolean {
+  return /metro|station|chowk|nagar|vihar|bagh|marg|delhi|mumbai|india|mandi|bazar|enclave|puri|kunj|puram/.test(normalized);
+}
+
 function buildMapSearchQueries(input: string): string[] {
   const cleaned = input.trim();
   const normalized = normalizeMapSearchText(cleaned);
   const queries = [cleaned];
 
-  // Keep Indian metro searches strong, but do not restrict global searches.
-  if (normalized.includes("metro") && !normalized.includes("india")) {
+  if (looksLikeIndiaQuery(normalized) && !normalized.includes("india")) {
     queries.push(`${cleaned}, India`);
   }
-
-  if (normalized.includes("metro") && !normalized.includes("delhi metro")) {
-    queries.push(`${cleaned}, Delhi Metro`);
+  if (normalized.includes("metro") && !normalized.includes("delhi metro") && !normalized.includes("delhi")) {
+    queries.push(`${cleaned}, Delhi`);
   }
 
   return Array.from(new Set(queries));
@@ -235,8 +221,21 @@ function scoreMapCandidate(query: string, candidate: MapSearchCandidate): number
   }
 
   if (label.startsWith(normalizeMapSearchText(query))) score += 4;
-  if (queryTokens.includes("metro") && /station|subway|railway|halt|stop/.test(`${label} ${kind}`)) score += 5;
+
+  // Strongly prefer transit stations when "metro" or "station" is in the query
+  const transitPattern = /station|subway|railway|halt|stop|transit|platform/;
+  if ((queryTokens.includes("metro") || queryTokens.includes("station")) && transitPattern.test(`${label} ${kind}`)) {
+    score += 8;
+  }
   if (queryTokens.includes("airport") && /airport|aerodrome/.test(`${label} ${kind}`)) score += 5;
+
+  // Prefer results inside India / Delhi NCR bounding box (lat 20-37, lon 68-97)
+  const lat = (candidate as any).lat as number | undefined;
+  const lon = (candidate as any).lon as number | undefined;
+  if (lat && lon && lat >= 20 && lat <= 37 && lon >= 68 && lon <= 97) {
+    if (looksLikeIndiaQuery(normalizeMapSearchText(query))) score += 3;
+  }
+
   return score;
 }
 
@@ -250,13 +249,23 @@ function bestMapCandidate(query: string, candidates: MapSearchCandidate[]): MapC
 async function geocodeWithNominatim(query: string): Promise<MapCoordinate | null> {
   const url = new URL("https://nominatim.openstreetmap.org/search");
   url.searchParams.set("format", "jsonv2");
-  url.searchParams.set("limit", "8");
+  url.searchParams.set("limit", "10");
   url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("accept-language", "en");
   url.searchParams.set("q", query);
+
+  // Restrict to India when query is clearly Indian to avoid wrong-country results
+  if (looksLikeIndiaQuery(normalizeMapSearchText(query))) {
+    url.searchParams.set("countrycodes", "in");
+  }
 
   try {
     const response = await fetch(url.toString(), {
-      headers: { Accept: "application/json" },
+      headers: {
+        "Accept": "application/json",
+        // Nominatim ToS requires a valid User-Agent identifying the application
+        "User-Agent": "FloDataIndoorNav/1.0 (flodata-analytics-building-map)",
+      },
     });
     if (!response.ok) return null;
 
@@ -282,26 +291,33 @@ async function geocodeWithNominatim(query: string): Promise<MapCoordinate | null
       .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate));
     return bestMapCandidate(query, candidates);
   } catch (error) {
-    console.warn("Map geocoder failed:", query, error);
+    console.warn("Nominatim geocoder failed:", query, error);
     return null;
   }
 }
 
 async function geocodeWithPhoton(query: string): Promise<MapCoordinate | null> {
   const url = new URL("https://photon.komoot.io/api/");
-  url.searchParams.set("limit", "8");
+  url.searchParams.set("limit", "10");
   url.searchParams.set("q", query);
+  url.searchParams.set("lang", "en");
+
+  // Bias Photon results to India (Delhi NCR centre) when applicable
+  if (looksLikeIndiaQuery(normalizeMapSearchText(query))) {
+    url.searchParams.set("lat", "28.6448");
+    url.searchParams.set("lon", "77.2167");
+  }
 
   try {
     const response = await fetch(url.toString(), {
-      headers: { Accept: "application/json" },
+      headers: { "Accept": "application/json" },
     });
     if (!response.ok) return null;
 
     const data = await response.json() as {
       features?: Array<{
         geometry?: { coordinates?: [number, number] };
-        properties?: { name?: string; city?: string; country?: string; osm_value?: string; type?: string };
+        properties?: { name?: string; city?: string; state?: string; country?: string; osm_value?: string; type?: string };
       }>;
     };
     const candidates: MapSearchCandidate[] = (data.features ?? [])
@@ -310,31 +326,281 @@ async function geocodeWithPhoton(query: string): Promise<MapCoordinate | null> {
         if (!coordinates) return null;
         const [lon, lat] = coordinates;
         if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-        const properties = feature.properties;
+        const p = feature.properties;
         return {
           lat,
           lon,
-          label: [properties?.name, properties?.city, properties?.country].filter(Boolean).join(", "),
-          kind: `${properties?.osm_value ?? ""} ${properties?.type ?? ""}`,
+          label: [p?.name, p?.city, p?.state, p?.country].filter(Boolean).join(", "),
+          kind: `${p?.osm_value ?? ""} ${p?.type ?? ""}`,
         };
       })
       .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate));
     return bestMapCandidate(query, candidates);
   } catch (error) {
-    console.warn("Backup map geocoder failed:", query, error);
+    console.warn("Photon geocoder failed:", query, error);
     return null;
   }
 }
 
 const LABEL_STYLE = Cesium.LabelStyle.FILL_AND_OUTLINE;
+const OUTDOOR_ROUTE_PIXEL_WIDTH = 7;
+const OUTDOOR_ROUTE_HEIGHT_METERS = 0;
+const OUTDOOR_NAV_LINK_MAX_METERS = 8;
+const OUTDOOR_NAV_JOIN_MAX_METERS = 5;
+const OUTDOOR_ROUTE_OVERLAY_DOT_SPACING_METERS = 1.4;
+const OUTDOOR_ROUTE_OVERLAY_MAX_DOTS = 360;
+const OUTDOOR_CAMERA_STEP_METERS = 4.5;
+const OUTDOOR_CAMERA_EYE_HEIGHT_METERS = 14;
+const OUTDOOR_CAMERA_LOOK_HEIGHT_METERS = 2.2;
+const OUTDOOR_CAMERA_BACK_OFFSET_METERS = 9;
+const OUTDOOR_CAMERA_MAX_STEPS = 90;
+
+let outdoorNavigationGraph: OutdoorNavigationNode[] | null = null;
+let outdoorRouteOverlayEntityIds: string[] = [];
+let pendingWorldRouteNavigation: {
+  route: OutdoorRouteResult;
+  roomPOI: RoomPOI;
+  destinationLabel: string;
+} | null = null;
+
+function groundPosition(point: MapCoordinate): Cesium.Cartesian3 {
+  return Cesium.Cartesian3.fromDegrees(point.lon, point.lat, OUTDOOR_ROUTE_HEIGHT_METERS);
+}
+
+function cartesianAtHeight(point: MapCoordinate, heightMeters: number): Cesium.Cartesian3 {
+  return Cesium.Cartesian3.fromDegrees(point.lon, point.lat, heightMeters);
+}
+
+function offsetAlongLocalUp(position: Cesium.Cartesian3, meters: number): Cesium.Cartesian3 {
+  const up = Cesium.Cartesian3.normalize(position, new Cesium.Cartesian3());
+  return Cesium.Cartesian3.add(
+    position,
+    Cesium.Cartesian3.multiplyByScalar(up, meters, new Cesium.Cartesian3()),
+    new Cesium.Cartesian3()
+  );
+}
+
+function haversineDistanceMeters(a: MapCoordinate, b: MapCoordinate): number {
+  const radius = 6371008.8;
+  const lat1 = Cesium.Math.toRadians(a.lat);
+  const lat2 = Cesium.Math.toRadians(b.lat);
+  const dLat = lat2 - lat1;
+  const dLon = Cesium.Math.toRadians(b.lon - a.lon);
+  const sinLat = Math.sin(dLat / 2);
+  const sinLon = Math.sin(dLon / 2);
+  const h = sinLat * sinLat + Math.cos(lat1) * Math.cos(lat2) * sinLon * sinLon;
+  return 2 * radius * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function pathDistanceMeters(path: MapCoordinate[]): number {
+  let total = 0;
+  for (let index = 1; index < path.length; index += 1) {
+    total += haversineDistanceMeters(path[index - 1], path[index]);
+  }
+  return total;
+}
+
+function interpolateMapCoordinate(a: MapCoordinate, b: MapCoordinate, t: number): MapCoordinate {
+  return {
+    lon: a.lon + (b.lon - a.lon) * t,
+    lat: a.lat + (b.lat - a.lat) * t,
+  };
+}
+
+function sampleMapPathByDistance(path: MapCoordinate[], spacingMeters: number): MapCoordinate[] {
+  if (path.length < 2) return path;
+
+  const samples: MapCoordinate[] = [path[0]];
+  let carry = 0;
+
+  for (let index = 1; index < path.length; index += 1) {
+    const start = path[index - 1];
+    const end = path[index];
+    const segmentLength = haversineDistanceMeters(start, end);
+    if (segmentLength < 0.001) continue;
+
+    let distance = spacingMeters - carry;
+    while (distance < segmentLength) {
+      samples.push(interpolateMapCoordinate(start, end, distance / segmentLength));
+      distance += spacingMeters;
+    }
+
+    carry = segmentLength - (distance - spacingMeters);
+  }
+
+  samples.push(path[path.length - 1]);
+  return samples;
+}
+
+function formatDistance(meters: number): string {
+  return meters >= 1000
+    ? `${(meters / 1000).toFixed(meters >= 10000 ? 1 : 2)} km`
+    : `${Math.round(meters)} m`;
+}
+
+function setMapRouteSummary(distanceMeters: number, destinationLabel: string, hasIndoorLeg: boolean): void {
+  const summary = optionalElement<HTMLElement>("mapRouteSummary");
+  if (!summary) return;
+
+  summary.hidden = false;
+  summary.textContent = hasIndoorLeg
+    ? `Total route: ${formatDistance(distanceMeters)} | Arrival: ${destinationLabel}`
+    : `Distance: ${formatDistance(distanceMeters)} | Destination: ${destinationLabel}`;
+}
+
+async function loadOutdoorNavigationGraph(): Promise<OutdoorNavigationNode[]> {
+  if (outdoorNavigationGraph) return outdoorNavigationGraph;
+
+  const response = await fetch(outdoorNavigationPointsUrl);
+  if (!response.ok) {
+    throw new Error(`Could not load outdoor navigation points: ${response.status}`);
+  }
+
+  const data = await response.json() as {
+    features?: Array<{
+      properties?: { id?: number | string };
+      geometry?: { type?: string; coordinates?: [number, number] };
+    }>;
+  };
+
+  const nodes: OutdoorNavigationNode[] = (data.features ?? [])
+    .filter((feature) => feature.geometry?.type === "Point")
+    .map((feature, index) => {
+      const coordinates = feature.geometry?.coordinates ?? [0, 0];
+      const id = Number(feature.properties?.id ?? index + 1);
+      return {
+        id: Number.isFinite(id) ? id : index + 1,
+        lon: coordinates[0],
+        lat: coordinates[1],
+        edges: [],
+      };
+    })
+    .filter((node) => Number.isFinite(node.lon) && Number.isFinite(node.lat))
+    .sort((a, b) => a.id - b.id);
+
+  const addEdge = (from: number, to: number, maxDistance: number): void => {
+    const distance = haversineDistanceMeters(nodes[from], nodes[to]);
+    if (distance > maxDistance) return;
+    nodes[from].edges.push({ index: to, distance });
+    nodes[to].edges.push({ index: from, distance });
+  };
+
+  for (let index = 0; index < nodes.length - 1; index += 1) {
+    addEdge(index, index + 1, OUTDOOR_NAV_LINK_MAX_METERS);
+  }
+
+  for (let i = 0; i < nodes.length; i += 1) {
+    for (let j = i + 2; j < nodes.length; j += 1) {
+      addEdge(i, j, OUTDOOR_NAV_JOIN_MAX_METERS);
+    }
+  }
+
+  outdoorNavigationGraph = nodes;
+  return nodes;
+}
+
+function nearestOutdoorNodeIndex(nodes: OutdoorNavigationNode[], point: MapCoordinate): number {
+  let nearestIndex = 0;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  nodes.forEach((node, index) => {
+    const distance = haversineDistanceMeters(node, point);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestIndex = index;
+    }
+  });
+
+  return nearestIndex;
+}
+
+function shortestOutdoorPath(
+  nodes: OutdoorNavigationNode[],
+  startIndex: number,
+  endIndex: number
+): MapCoordinate[] {
+  const distances = nodes.map(() => Number.POSITIVE_INFINITY);
+  const previous = nodes.map(() => -1);
+  const visited = nodes.map(() => false);
+  distances[startIndex] = 0;
+
+  for (let step = 0; step < nodes.length; step += 1) {
+    let current = -1;
+    let currentDistance = Number.POSITIVE_INFINITY;
+    for (let index = 0; index < nodes.length; index += 1) {
+      if (!visited[index] && distances[index] < currentDistance) {
+        current = index;
+        currentDistance = distances[index];
+      }
+    }
+
+    if (current === -1 || current === endIndex) break;
+    visited[current] = true;
+
+    for (const edge of nodes[current].edges) {
+      const nextDistance = distances[current] + edge.distance;
+      if (nextDistance < distances[edge.index]) {
+        distances[edge.index] = nextDistance;
+        previous[edge.index] = current;
+      }
+    }
+  }
+
+  if (!Number.isFinite(distances[endIndex])) return [];
+
+  const path: MapCoordinate[] = [];
+  for (let index = endIndex; index !== -1; index = previous[index]) {
+    path.unshift({ lon: nodes[index].lon, lat: nodes[index].lat });
+    if (index === startIndex) break;
+  }
+  return path;
+}
+
+async function appendOutdoorModelApproach(route: OutdoorRouteResult): Promise<OutdoorRouteResult> {
+  if (route.points.length < 2) return route;
+
+  const nodes = await loadOutdoorNavigationGraph();
+  if (nodes.length === 0) return route;
+
+  const entranceIndex = nearestOutdoorNodeIndex(nodes, BUILDING_ENTRANCE);
+  const landingReference = route.points[Math.max(0, route.points.length - 2)];
+  const landingIndex = nearestOutdoorNodeIndex(nodes, landingReference);
+  const approachPath = shortestOutdoorPath(nodes, landingIndex, entranceIndex);
+  if (approachPath.length < 2) return route;
+
+  let spliceIndex = route.points.length - 1;
+  let spliceDistance = Number.POSITIVE_INFINITY;
+  route.points.forEach((point, index) => {
+    const distance = haversineDistanceMeters(point, approachPath[0]);
+    if (distance < spliceDistance) {
+      spliceDistance = distance;
+      spliceIndex = index;
+    }
+  });
+
+  const roadLeg = route.points.slice(0, spliceIndex + 1);
+  const joinedPoints = [
+    ...roadLeg,
+    ...approachPath.slice(haversineDistanceMeters(roadLeg[roadLeg.length - 1], approachPath[0]) < 0.5 ? 1 : 0),
+  ];
+  const distanceMeters = pathDistanceMeters(joinedPoints);
+
+  return {
+    points: joinedPoints,
+    distanceMeters,
+    outdoorModelStartIndex: Math.max(0, roadLeg.length - 1),
+  };
+}
 
 function clearMapRoute(): void {
   [
     "outdoorMapRouteRoadBand", "outdoorMapRouteGroundLine", "outdoorMapRouteLine",
-    "outdoorMapRouteOverlayBand", "outdoorMapRouteStart", "outdoorMapRouteEnd",
+    "outdoorMapRouteElevatedLine", "outdoorMapRouteOverlayBand", "outdoorMapRouteStart", "outdoorMapRouteEnd",
     "outdoorMapRouteEntrance", "outdoorMapRouteIndoor", "outdoorMapRouteDestination",
     "outdoorMapRouteFloorSwitch",
   ].forEach((id) => viewer.entities.removeById(id));
+  outdoorRouteOverlayEntityIds.forEach((id) => viewer.entities.removeById(id));
+  outdoorRouteOverlayEntityIds = [];
 }
 
 function flyToBoundingSpherePromise(
@@ -351,11 +617,18 @@ function flyToBoundingSpherePromise(
 }
 
 async function orchestrateCameraForRoute(
-  routePositions: MapCoordinate[],
-  roomPOI: RoomPOI | null
+  route: OutdoorRouteResult,
+  roomPOI: RoomPOI | null,
+  destinationLabel: string
 ): Promise<void> {
-  const points = routePositions.map((p) => Cesium.Cartesian3.fromDegrees(p.lon, p.lat, 22));
+  const routePositions = route.points;
+  const points = routePositions.map(groundPosition);
   if (points.length === 0) return;
+
+  if (roomPOI && routePositions.length > 1) {
+    await playOutdoorRouteCamera(route, destinationLabel);
+    return;
+  }
 
   const sphere = Cesium.BoundingSphere.fromPoints(points);
   await flyToBoundingSpherePromise(sphere, {
@@ -367,21 +640,86 @@ async function orchestrateCameraForRoute(
     ),
   });
 
-  if (!roomPOI) return;
+}
 
-  await new Promise<void>((resolve) => setTimeout(resolve, 900));
+function outdoorCameraView(currentPoint: MapCoordinate, nextPoint: MapCoordinate): {
+  destination: Cesium.Cartesian3;
+  direction: Cesium.Cartesian3;
+  up: Cesium.Cartesian3;
+} | null {
+  const current = cartesianAtHeight(currentPoint, OUTDOOR_CAMERA_LOOK_HEIGHT_METERS);
+  const next = cartesianAtHeight(nextPoint, OUTDOOR_CAMERA_LOOK_HEIGHT_METERS);
+  const forward = Cesium.Cartesian3.subtract(next, current, new Cesium.Cartesian3());
+  if (Cesium.Cartesian3.magnitudeSquared(forward) < 0.000001) return null;
 
-  await flyToPromise({
-    destination: Cesium.Cartesian3.fromDegrees(
-      BUILDING_ENTRANCE.lon, BUILDING_ENTRANCE.lat, 62
-    ),
-    orientation: {
-      heading: Cesium.Math.toRadians(342),
-      pitch: Cesium.Math.toRadians(-72),
-      roll: 0,
-    },
-    duration: 1.5,
-    easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT,
+  Cesium.Cartesian3.normalize(forward, forward);
+  const localUp = Cesium.Cartesian3.normalize(current, new Cesium.Cartesian3());
+  const eyeBase = offsetAlongLocalUp(
+    cartesianAtHeight(currentPoint, OUTDOOR_CAMERA_EYE_HEIGHT_METERS),
+    0
+  );
+  const destination = Cesium.Cartesian3.subtract(
+    eyeBase,
+    Cesium.Cartesian3.multiplyByScalar(forward, OUTDOOR_CAMERA_BACK_OFFSET_METERS, new Cesium.Cartesian3()),
+    new Cesium.Cartesian3()
+  );
+  const target = offsetAlongLocalUp(next, OUTDOOR_CAMERA_LOOK_HEIGHT_METERS);
+  const direction = Cesium.Cartesian3.normalize(
+    Cesium.Cartesian3.subtract(target, destination, new Cesium.Cartesian3()),
+    new Cesium.Cartesian3()
+  );
+  const right = Cesium.Cartesian3.cross(direction, localUp, new Cesium.Cartesian3());
+  if (Cesium.Cartesian3.magnitudeSquared(right) < 0.000001) return null;
+
+  Cesium.Cartesian3.normalize(right, right);
+  const up = Cesium.Cartesian3.normalize(
+    Cesium.Cartesian3.cross(right, direction, new Cesium.Cartesian3()),
+    new Cesium.Cartesian3()
+  );
+  return { destination, direction, up };
+}
+
+async function playOutdoorRouteCamera(route: OutdoorRouteResult, destinationLabel: string): Promise<void> {
+  const startIndex = route.outdoorModelStartIndex ?? Math.max(0, route.points.length - 10);
+  const outdoorPath = route.points.slice(startIndex);
+  if (outdoorPath.length < 2) return;
+
+  const sampled = sampleMapPathByDistance(outdoorPath, OUTDOOR_CAMERA_STEP_METERS);
+  const stride = Math.max(1, Math.ceil(sampled.length / OUTDOOR_CAMERA_MAX_STEPS));
+  const cameraPath = sampled.filter((_, index) => index % stride === 0);
+  if (cameraPath[cameraPath.length - 1] !== sampled[sampled.length - 1]) {
+    cameraPath.push(sampled[sampled.length - 1]);
+  }
+
+  disableCameraControls();
+  if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
+    viewer.camera.frustum.fov = Cesium.Math.toRadians(62);
+  }
+
+  for (let index = 0; index < cameraPath.length - 1; index += 1) {
+    const view = outdoorCameraView(cameraPath[index], cameraPath[index + 1]);
+    if (!view) continue;
+
+    updateNavigationHud({
+      icon: "forward",
+      instruction: "Forward",
+      context: `Outdoor route to ${destinationLabel}`,
+      distanceMeters: pathDistanceMeters(cameraPath.slice(index)),
+    });
+
+    await flyToPromise({
+      destination: view.destination,
+      orientation: { direction: view.direction, up: view.up },
+      duration: index === 0 ? 0.35 : 0.28,
+      easingFunction: Cesium.EasingFunction.LINEAR_NONE,
+    });
+  }
+
+  updateNavigationHud({
+    icon: "arrive",
+    instruction: "Arrived outside",
+    context: `Entering building for ${destinationLabel}`,
+    distanceMeters: 0,
   });
 }
 
@@ -390,38 +728,66 @@ function drawFullRoute(
   start: MapCoordinate,
   entranceOrEnd: MapCoordinate,
   roomPOI: RoomPOI | null,
-  destinationLabel: string
+  destinationLabel: string,
+  outdoorDistanceMeters: number
 ): void {
   clearMapRoute();
+  hideNavigationHud();
 
   const positions = route.length > 1 ? route : [start, entranceOrEnd];
-  const outdoorPositions = positions.map((p) => Cesium.Cartesian3.fromDegrees(p.lon, p.lat, 26.0));
+  const routePositions = positions.map(groundPosition);
+  const indoorDistanceMeters = roomPOI
+    ? haversineDistanceMeters(BUILDING_ENTRANCE, { lon: roomPOI.doorLon, lat: roomPOI.doorLat })
+    : 0;
+  setMapRouteSummary(outdoorDistanceMeters + indoorDistanceMeters, destinationLabel, Boolean(roomPOI));
 
   // ── Outdoor polyline ──────────────────────────────────────────────────────
   viewer.entities.add({
     id: "outdoorMapRouteLine",
     polyline: {
-      positions: outdoorPositions,
-      width: 24,
-      material: new Cesium.PolylineGlowMaterialProperty({
-        glowPower: 0.22,
-        taperPower: 0.5,
-        color: Cesium.Color.fromCssColorString("#0B66FF").withAlpha(0.82),
+      positions: routePositions,
+      width: OUTDOOR_ROUTE_PIXEL_WIDTH,
+      material: new Cesium.PolylineOutlineMaterialProperty({
+        color: Cesium.Color.fromCssColorString("#0B66FF").withAlpha(0.86),
+        outlineColor: Cesium.Color.WHITE.withAlpha(0.92),
+        outlineWidth: 2,
       }),
-      depthFailMaterial: new Cesium.PolylineGlowMaterialProperty({
-        glowPower: 0.30,
-        taperPower: 0.5,
-        color: Cesium.Color.fromCssColorString("#0B66FF").withAlpha(0.82),
+      depthFailMaterial: new Cesium.PolylineOutlineMaterialProperty({
+        color: Cesium.Color.fromCssColorString("#0B66FF").withAlpha(0.92),
+        outlineColor: Cesium.Color.WHITE.withAlpha(0.96),
+        outlineWidth: 2,
       }),
-      clampToGround: false,
+      clampToGround: true,
     },
+  });
+
+  const overlayDots = sampleMapPathByDistance(positions, OUTDOOR_ROUTE_OVERLAY_DOT_SPACING_METERS);
+  const overlayStride = Math.max(1, Math.ceil(overlayDots.length / OUTDOOR_ROUTE_OVERLAY_MAX_DOTS));
+  overlayDots.forEach((point, index) => {
+    if (index % overlayStride !== 0 && index !== overlayDots.length - 1) return;
+
+    const id = `outdoorMapRouteOverlayDot-${index}`;
+    outdoorRouteOverlayEntityIds.push(id);
+    viewer.entities.add({
+      id,
+      position: groundPosition(point),
+      point: {
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        pixelSize: 7,
+        color: Cesium.Color.fromCssColorString("#0B66FF").withAlpha(0.96),
+        outlineColor: Cesium.Color.WHITE.withAlpha(0.96),
+        outlineWidth: 2,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    });
   });
 
   // ── Start marker ──────────────────────────────────────────────────────────
   viewer.entities.add({
     id: "outdoorMapRouteStart",
-    position: Cesium.Cartesian3.fromDegrees(start.lon, start.lat, 6),
+    position: groundPosition(start),
     point: {
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
       pixelSize: 16,
       color: Cesium.Color.fromCssColorString("#22c55e"),
       outlineColor: Cesium.Color.WHITE,
@@ -429,6 +795,7 @@ function drawFullRoute(
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
     },
     label: {
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
       text: "Start",
       font: "bold 13px sans-serif",
       fillColor: Cesium.Color.WHITE,
@@ -449,8 +816,9 @@ function drawFullRoute(
     // ── Building Entrance marker ────────────────────────────────────────────
     viewer.entities.add({
       id: "outdoorMapRouteEntrance",
-      position: Cesium.Cartesian3.fromDegrees(BUILDING_ENTRANCE.lon, BUILDING_ENTRANCE.lat, 10),
+      position: groundPosition(BUILDING_ENTRANCE),
       point: {
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
         pixelSize: 20,
         color: Cesium.Color.fromCssColorString("#F59E0B"),
         outlineColor: Cesium.Color.WHITE,
@@ -458,7 +826,8 @@ function drawFullRoute(
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
       label: {
-        text: "Building Entrance",
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        text: "ARRIVE OUTSIDE\nBuilding Entrance",
         font: "bold 13px sans-serif",
         fillColor: Cesium.Color.WHITE,
         outlineColor: Cesium.Color.fromCssColorString("#92400E"),
@@ -468,46 +837,6 @@ function drawFullRoute(
         pixelOffset: new Cesium.Cartesian2(0, -14),
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
         scale: 0.9,
-      },
-    });
-
-    // ── Floor switch label for 3rd floor destinations ───────────────────────
-    if (roomPOI.floor === 4) {
-      viewer.entities.add({
-        id: "outdoorMapRouteFloorSwitch",
-        position: Cesium.Cartesian3.fromDegrees(BUILDING_ENTRANCE.lon, BUILDING_ENTRANCE.lat, ALT_2ND + 3),
-        label: {
-          text: "⬆ Floor Switch: 2nd → 3rd",
-          font: "12px sans-serif",
-          fillColor: Cesium.Color.fromCssColorString("#FCD34D"),
-          outlineColor: Cesium.Color.fromCssColorString("#78350F"),
-          outlineWidth: 2,
-          style: LABEL_STYLE,
-          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-          pixelOffset: new Cesium.Cartesian2(22, -14),
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          scale: 0.82,
-        },
-      });
-    }
-
-    // ── Indoor path indicator (entrance → room door) ────────────────────────
-    viewer.entities.add({
-      id: "outdoorMapRouteIndoor",
-      polyline: {
-        positions: [
-          Cesium.Cartesian3.fromDegrees(BUILDING_ENTRANCE.lon, BUILDING_ENTRANCE.lat, indoorAlt),
-          Cesium.Cartesian3.fromDegrees(roomPOI.doorLon, roomPOI.doorLat, indoorAlt),
-        ],
-        width: 12,
-        material: new Cesium.PolylineGlowMaterialProperty({
-          glowPower: 0.5,
-          color: Cesium.Color.fromCssColorString("#00CCFF").withAlpha(0.95),
-        }),
-        depthFailMaterial: new Cesium.PolylineGlowMaterialProperty({
-          glowPower: 0.5,
-          color: Cesium.Color.fromCssColorString("#00CCFF").withAlpha(0.95),
-        }),
       },
     });
 
@@ -524,7 +853,7 @@ function drawFullRoute(
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
       label: {
-        text: `${destinationLabel}${approxNote}`,
+        text: `DESTINATION\n${destinationLabel}${approxNote}`,
         font: "bold 13px sans-serif",
         fillColor: Cesium.Color.WHITE,
         outlineColor: Cesium.Color.fromCssColorString("#991B1B"),
@@ -540,13 +869,27 @@ function drawFullRoute(
     // Pure outdoor destination — no room POI
     viewer.entities.add({
       id: "outdoorMapRouteEnd",
-      position: Cesium.Cartesian3.fromDegrees(entranceOrEnd.lon, entranceOrEnd.lat, 6),
+      position: groundPosition(entranceOrEnd),
       point: {
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
         pixelSize: 18,
         color: Cesium.Color.fromCssColorString("#ef4444"),
         outlineColor: Cesium.Color.WHITE,
         outlineWidth: 4,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        text: `ARRIVAL\n${destinationLabel}`,
+        font: "bold 14px sans-serif",
+        fillColor: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.fromCssColorString("#991B1B"),
+        outlineWidth: 3,
+        style: LABEL_STYLE,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        pixelOffset: new Cesium.Cartesian2(0, -16),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        scale: 0.95,
       },
     });
   }
@@ -554,7 +897,7 @@ function drawFullRoute(
   viewer.scene.requestRender();
 }
 
-async function fetchOutdoorRoute(start: MapCoordinate, end: MapCoordinate): Promise<MapCoordinate[]> {
+async function fetchOutdoorRoute(start: MapCoordinate, end: MapCoordinate): Promise<OutdoorRouteResult> {
   const routeProfiles = ["driving", "walking"];
 
   for (const profile of routeProfiles) {
@@ -567,18 +910,25 @@ async function fetchOutdoorRoute(start: MapCoordinate, end: MapCoordinate): Prom
       if (!response.ok) continue;
 
       const data = await response.json() as {
-        routes?: Array<{ geometry?: { coordinates?: Array<[number, number]> } }>;
+        routes?: Array<{ distance?: number; geometry?: { coordinates?: Array<[number, number]> } }>;
       };
-      const coordinates = data.routes?.[0]?.geometry?.coordinates ?? [];
+      const selectedRoute = data.routes?.[0];
+      const coordinates = selectedRoute?.geometry?.coordinates ?? [];
       if (coordinates.length > 1) {
-        return coordinates.map(([lon, lat]) => ({ lon, lat }));
+        const points = coordinates.map(([lon, lat]) => ({ lon, lat }));
+        return {
+          points,
+          distanceMeters: Number.isFinite(selectedRoute?.distance)
+            ? Number(selectedRoute?.distance)
+            : pathDistanceMeters(points),
+        };
       }
     } catch (error) {
       console.warn("Outdoor route service failed:", profile, error);
     }
   }
 
-  return [];
+  return { points: [], distanceMeters: haversineDistanceMeters(start, end) };
 }
 
 function createMapToolbarButton(): HTMLButtonElement {
@@ -610,6 +960,19 @@ export function setEnterBuildingFloorSwitchCallback(
   enterBuildingFloorSwitchCallback = cb;
 }
 
+async function enterBuildingAndStartIndoorNavigation(_targetFloor: number): Promise<void> {
+  optionalElement<HTMLElement>("enterBuildingPrompt")?.setAttribute("hidden", "");
+  optionalElement<HTMLElement>("mapDirectionsPanel")?.setAttribute("hidden", "");
+
+  const fromSel = optionalElement<HTMLSelectElement>("fromRoom");
+  const toSel = optionalElement<HTMLSelectElement>("toRoom");
+  if (fromSel?.value && toSel?.value) {
+    optionalElement<HTMLButtonElement>("startNavBtn")?.click();
+  } else {
+    setNavigationMessage("Inside the building. Select your room and start navigation.", false);
+  }
+}
+
 function bindEnterBuildingPrompt(): void {
   const prompt = optionalElement<HTMLElement>("enterBuildingPrompt");
   const enterBtn = optionalElement<HTMLButtonElement>("enterBuildingBtn");
@@ -622,6 +985,8 @@ function bindEnterBuildingPrompt(): void {
 
   enterBtn.addEventListener("click", () => {
     prompt.hidden = true;
+    void enterBuildingAndStartIndoorNavigation(enterBuildingTargetFloor);
+    return;
     optionalElement<HTMLElement>("mapDirectionsPanel")?.setAttribute("hidden", "");
 
     const targetFloor = enterBuildingTargetFloor;
@@ -742,58 +1107,23 @@ export function installMapDirectionsControl(): void {
   });
 
   const indoorNavBtn = optionalElement<HTMLButtonElement>("worldRouteIndoorNavBtn");
-  const debugPOIBtn = optionalElement<HTMLButtonElement>("worldRouteDebugBtn");
-
-  // ── Debug: toggle all room POI markers ───────────────────────────────────
-  let debugPOIEntityIds: string[] = [];
-  debugPOIBtn?.addEventListener("click", () => {
-    if (debugPOIEntityIds.length > 0) {
-      debugPOIEntityIds.forEach((id) => viewer.entities.removeById(id));
-      debugPOIEntityIds = [];
-      if (debugPOIBtn) debugPOIBtn.textContent = "Debug: Show Room POIs";
-      viewer.scene.requestRender();
-      return;
-    }
-
-    for (const poi of ROOM_POIS) {
-      const floorAlt = poi.floor === 3 ? ALT_2ND : ALT_3RD;
-      const id = `debugPOI_${poi.name}_${poi.floor}`;
-      viewer.entities.add({
-        id,
-        position: Cesium.Cartesian3.fromDegrees(poi.doorLon, poi.doorLat, floorAlt + 1.2),
-        point: {
-          pixelSize: 11,
-          color: poi.positionApproximate
-            ? Cesium.Color.fromCssColorString("#FCD34D")
-            : Cesium.Color.fromCssColorString("#00CCFF"),
-          outlineColor: Cesium.Color.WHITE,
-          outlineWidth: 2,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        },
-        label: {
-          text: `${poi.name}\n${poi.floorLabel}${poi.positionApproximate ? "\n(~approx)" : ""}`,
-          font: "11px sans-serif",
-          fillColor: Cesium.Color.WHITE,
-          outlineColor: Cesium.Color.BLACK,
-          outlineWidth: 2,
-          style: LABEL_STYLE,
-          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-          pixelOffset: new Cesium.Cartesian2(0, -10),
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          scale: 0.82,
-        },
-      });
-      debugPOIEntityIds.push(id);
-    }
-
-    if (debugPOIBtn) debugPOIBtn.textContent = "Debug: Hide Room POIs";
-    viewer.scene.requestRender();
-  });
 
   // ── Start Indoor Navigation ───────────────────────────────────────────────
   indoorNavBtn?.addEventListener("click", () => {
-    panel.hidden = true;
-    optionalElement<HTMLButtonElement>("startNavBtn")?.click();
+    void (async () => {
+      panel.hidden = true;
+      const pending = pendingWorldRouteNavigation;
+      pendingWorldRouteNavigation = null;
+
+      if (pending) {
+        await orchestrateCameraForRoute(pending.route, pending.roomPOI, pending.destinationLabel);
+        setNavigationMessage("Arrived outside. Starting indoor navigation from Entrance.", false);
+        await enterBuildingAndStartIndoorNavigation(pending.roomPOI.floor);
+        return;
+      }
+
+      optionalElement<HTMLButtonElement>("startNavBtn")?.click();
+    })();
   });
 
   // ── Show Route ────────────────────────────────────────────────────────────
@@ -834,26 +1164,24 @@ export function installMapDirectionsControl(): void {
           outdoorEnd = resolved;
         }
 
-        const route = await fetchOutdoorRoute(start, outdoorEnd as MapCoordinate);
-        drawFullRoute(route, start, outdoorEnd as MapCoordinate, roomPOI, destination);
+        const route = roomPOI
+          ? await appendOutdoorModelApproach(await fetchOutdoorRoute(start, outdoorEnd as MapCoordinate))
+          : await fetchOutdoorRoute(start, outdoorEnd as MapCoordinate);
+        drawFullRoute(route.points, start, outdoorEnd as MapCoordinate, roomPOI, destination, route.distanceMeters);
 
         if (indoorNavBtn) indoorNavBtn.hidden = !roomPOI;
+        pendingWorldRouteNavigation = roomPOI
+          ? { route, roomPOI, destinationLabel: destination }
+          : null;
 
         if (roomPOI?.positionApproximate) {
           showToast(`Note: ${roomPOI.name} door position is approximate — verify on site.`, "error");
         }
 
-        // Show "Enter Building" prompt after route is drawn
-        if (roomPOI) {
-          showEnterBuildingPrompt(destination, roomPOI.floor);
-        }
-
-        const routePositions = route.length > 1 ? route : [start, outdoorEnd as MapCoordinate];
-        void orchestrateCameraForRoute(routePositions, roomPOI);
-
+        await orchestrateCameraForRoute(route, null, destination);
         setNavigationMessage(
           roomPOI
-            ? `Outdoor route shown. Walk to Building Entrance, then tap Enter Building.`
+            ? "Full outdoor route shown. Press Start Indoor Navigation to begin camera navigation."
             : "Outdoor route shown on map.",
           false
         );
