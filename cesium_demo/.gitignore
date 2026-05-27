@@ -6,5 +6,4 @@ dist/
 !.env.example
 npm-debug.log*
 .vite-dev.*
-*.geojson
 *.zip
