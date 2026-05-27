@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: cesium-demo
+    runtime: static
+    buildCommand: cd cesium_demo && npm ci && npm run build
+    staticPublishPath: cesium_demo/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
