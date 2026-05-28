@@ -148,12 +148,12 @@ const DESTINATION_CAMERA_PRESETS: Record<string, {
     fov: 58
   },
   "3|dojo": {
-    lon: 77.13364838,
-    lat: 28.67094840,
-    height: 7.69,
-    heading: 126.91,
-    pitch: -21.68,
-    roll: 360,
+    lon: 77.13365024541,
+    lat: 28.67095863016,
+    height: 8.1784,
+    heading: 149.2359,
+    pitch: -32.1258,
+    roll: 0,
     fov: 58
   },
   "3|eureka": {
