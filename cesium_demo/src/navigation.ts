@@ -67,10 +67,6 @@ let liveNavPendingFloor: number | null = null;
 let liveNavDestinationName = "";
 let liveNavDestinationRoomName = "";
 let liveNavDestinationFloor: number | null = null;
-let arrivalDebugTarget: Cesium.Cartesian3 | null = null;
-let arrivalDebugRemoveCameraListener: (() => void) | null = null;
-let arrivalDebugRemovePostRenderListener: (() => void) | null = null;
-let arrivalDebugUpdateQueued = false;
 let navigationFloorSwitchHandler: ((floor: number) => void | Promise<void>) | null = null;
 let routeAnimRemove: (() => void) | null = null;
 let routeAnimStart = 0;
@@ -289,7 +285,6 @@ function stopLiveNavigationMarker(): void {
   liveNavDestinationName = "";
   liveNavDestinationRoomName = "";
   liveNavDestinationFloor = null;
-  arrivalDebugTarget = null;
   viewer.entities.removeById("liveNavigationMarker");
   hideNavigationHud();
 }
@@ -492,92 +487,6 @@ function roomBoundingSphere(entity: Cesium.Entity, floor: number): Cesium.Boundi
   return position ? new Cesium.BoundingSphere(position, 4) : null;
 }
 
-function degrees(value: number): number {
-  return Cesium.Math.toDegrees(value);
-}
-
-function fixed(value: number, fractionDigits = 6): string {
-  return Number.isFinite(value) ? value.toFixed(fractionDigits) : "n/a";
-}
-
-function cameraDebugValues(target: Cesium.Cartesian3): Record<string, string> {
-  const cartographic = Cesium.Cartographic.fromCartesian(viewer.camera.positionWC);
-  const rangeMeters = Cesium.Cartesian3.distance(viewer.camera.positionWC, target);
-  const fov = viewer.camera.frustum instanceof Cesium.PerspectiveFrustum
-    ? degrees(viewer.camera.frustum.fov ?? NaN)
-    : NaN;
-
-  return {
-    room: liveNavDestinationName || liveNavDestinationRoomName,
-    floor: liveNavDestinationFloor ? floorLabel(liveNavDestinationFloor) : "n/a",
-    lon: fixed(degrees(cartographic.longitude), 11),
-    lat: fixed(degrees(cartographic.latitude), 11),
-    height: fixed(cartographic.height, 4),
-    zoomRange: fixed(rangeMeters, 4),
-    heading: fixed(degrees(viewer.camera.heading), 4),
-    pitch: fixed(degrees(viewer.camera.pitch), 4),
-    roll: fixed(degrees(viewer.camera.roll), 4),
-    fov: fixed(fov, 4),
-  };
-}
-
-function renderArrivalCameraDebugCard(): void {
-  if (!arrivalDebugTarget) return;
-
-  const values = cameraDebugValues(arrivalDebugTarget);
-
-  let card = document.getElementById("arrivalCameraDebugCard");
-  if (!card) {
-    card = document.createElement("section");
-    card.id = "arrivalCameraDebugCard";
-    card.className = "arrival-camera-debug-card";
-    document.body.appendChild(card);
-  }
-
-  card.innerHTML = `
-    <div class="arrival-camera-debug-title">
-      <span>Arrival Camera Debug</span>
-      <button type="button" aria-label="Close camera debug">x</button>
-    </div>
-    <div class="arrival-camera-debug-grid">
-      <span>Room</span><b>${values.room}</b>
-      <span>Floor</span><b>${values.floor}</b>
-      <span>Lon</span><b>${values.lon}</b>
-      <span>Lat</span><b>${values.lat}</b>
-      <span>Height</span><b>${values.height} m</b>
-      <span>Zoom</span><b>${values.zoomRange} m</b>
-      <span>Heading</span><b>${values.heading} deg</b>
-      <span>Pitch</span><b>${values.pitch} deg</b>
-      <span>Roll</span><b>${values.roll} deg</b>
-      <span>FOV</span><b>${values.fov} deg</b>
-    </div>
-  `;
-  card.querySelector("button")?.addEventListener("click", () => {
-    card.hidden = true;
-  });
-  card.hidden = false;
-}
-
-function queueArrivalDebugUpdate(): void {
-  if (arrivalDebugUpdateQueued) return;
-  arrivalDebugUpdateQueued = true;
-  requestAnimationFrame(() => {
-    arrivalDebugUpdateQueued = false;
-    renderArrivalCameraDebugCard();
-  });
-}
-
-function showArrivalCameraDebugCard(target: Cesium.Cartesian3): void {
-  arrivalDebugTarget = Cesium.Cartesian3.clone(target);
-  if (!arrivalDebugRemoveCameraListener) {
-    arrivalDebugRemoveCameraListener = viewer.camera.changed.addEventListener(queueArrivalDebugUpdate);
-  }
-  if (!arrivalDebugRemovePostRenderListener) {
-    arrivalDebugRemovePostRenderListener = viewer.scene.postRender.addEventListener(queueArrivalDebugUpdate);
-  }
-  renderArrivalCameraDebugCard();
-  console.table(cameraDebugValues(arrivalDebugTarget));
-}
 
 async function focusDestinationRoomView(): Promise<void> {
   if (!liveNavDestinationRoomName || !liveNavDestinationFloor) return;
@@ -609,12 +518,10 @@ async function focusDestinationRoomView(): Promise<void> {
         duration: 1.2,
         easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT,
         complete: () => {
-          showArrivalCameraDebugCard(sphere.center);
           viewer.scene.requestRender();
           resolve();
         },
         cancel: () => {
-          showArrivalCameraDebugCard(sphere.center);
           viewer.scene.requestRender();
           resolve();
         }
@@ -632,12 +539,10 @@ async function focusDestinationRoomView(): Promise<void> {
         Math.max(sphere.radius * 2.8, 11)
       ),
       complete: () => {
-        showArrivalCameraDebugCard(sphere.center);
         viewer.scene.requestRender();
         resolve();
       },
       cancel: () => {
-        showArrivalCameraDebugCard(sphere.center);
         viewer.scene.requestRender();
         resolve();
       }

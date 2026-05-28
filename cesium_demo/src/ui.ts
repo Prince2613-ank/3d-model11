@@ -1061,6 +1061,8 @@ function isKnownDropdownRoom(value: string): boolean {
 
 export function installMapDirectionsControl(): void {
   bindEnterBuildingPrompt();
+  bindMapAutocomplete("mapOriginInput", "mapOriginDropdown");
+  bindMapAutocomplete("mapDestinationInput", "mapDestinationDropdown");
 
   const toolbar = document.querySelector<HTMLElement>(".cesium-viewer-toolbar");
   const panel = optionalElement<HTMLElement>("mapDirectionsPanel");
@@ -1135,11 +1137,20 @@ export function installMapDirectionsControl(): void {
       const origin = originInput.value.trim() || "Punjabi Bagh West Metro Station";
       const destination = destinationInput.value.trim() || "Manthan";
 
+      const originIsRoom = isKnownDropdownRoom(origin);
+      const destIsRoom = isKnownDropdownRoom(destination);
+
+      // Both fields are indoor rooms — outdoor routing doesn't apply
+      if (originIsRoom && destIsRoom) {
+        showToast("Both locations are indoor rooms. Use the navigation panel below to route between rooms.", "error");
+        return;
+      }
+
       const roomPOI = lookupRoomPOI(destination);
       syncIndoorRouteFromMap(destination);
 
       // Validation: known dropdown room but no POI coordinate configured
-      if (!roomPOI && isKnownDropdownRoom(destination)) {
+      if (!roomPOI && destIsRoom) {
         showToast("Room location not configured. Contact admin to add door coordinates.", "error");
         return;
       }
@@ -1150,7 +1161,13 @@ export function installMapDirectionsControl(): void {
       try {
         await Promise.resolve(enterBuildingFloorSwitchCallback?.(0));
 
-        const start = await resolveMapPlace(origin);
+        // If From is an indoor room, start from the building entrance
+        let start: MapCoordinate | null;
+        if (originIsRoom) {
+          start = BUILDING_ENTRANCE;
+        } else {
+          start = await resolveMapPlace(origin);
+        }
         if (!start) {
           showToast("Start location not found. Try a full address or lat,lng.", "error");
           return;
@@ -1707,10 +1724,122 @@ export function bindUiControls(callbacks: UiCallbacks): void {
   optionalElement<HTMLButtonElement>("panelCloseBtn")?.addEventListener("click", closeBookingPanel);
 }
 
+let cachedRoomNames: string[] = [];
+
 export function populateRoomDropdowns(names: string[]): void {
+  cachedRoomNames = names;
   const options = names.map((name) => `<option>${name}</option>`).join("");
   element<HTMLSelectElement>("fromRoom").innerHTML = options;
   element<HTMLSelectElement>("toRoom").innerHTML = options;
+}
+
+function bindMapAutocomplete(
+  inputId: string,
+  dropdownId: string
+): void {
+  const inputEl = optionalElement<HTMLInputElement>(inputId);
+  const dropdownEl = optionalElement<HTMLUListElement>(dropdownId);
+  if (!inputEl || !dropdownEl) return;
+  const input = inputEl;
+  const dropdown = dropdownEl;
+
+  function getRoomNames(): string[] {
+    return cachedRoomNames.length > 0
+      ? cachedRoomNames
+      : Array.from(
+          (optionalElement<HTMLSelectElement>("fromRoom") ?? { options: [] as unknown as HTMLOptionsCollection }).options
+        ).map((o) => o.value).filter(Boolean);
+  }
+
+  function buildItems(filter: string): string[] {
+    const q = filter.toLowerCase().trim();
+    const rooms = getRoomNames();
+    if (!q) return rooms;
+    return rooms.filter((r) => r.toLowerCase().includes(q));
+  }
+
+  function renderDropdown(filter: string): void {
+    const items = buildItems(filter);
+    if (items.length === 0) {
+      dropdown.hidden = true;
+      return;
+    }
+    dropdown.innerHTML = items
+      .map((name) => `<li role="option" tabindex="-1">${name}</li>`)
+      .join("");
+    dropdown.hidden = false;
+  }
+
+  function closeDropdown(): void {
+    dropdown.hidden = true;
+  }
+
+  function selectItem(value: string): void {
+    input.value = value;
+    closeDropdown();
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  input.addEventListener("input", () => {
+    renderDropdown(input.value);
+  });
+
+  input.addEventListener("focus", () => {
+    if (!input.value.trim()) renderDropdown("");
+  });
+
+  // Arrow button: always show full room list so user can pick a different room
+  const arrow = input.parentElement?.querySelector<HTMLButtonElement>(".map-autocomplete-arrow");
+  arrow?.addEventListener("click", () => {
+    if (dropdown.hidden) {
+      renderDropdown("");
+      input.focus();
+    } else {
+      closeDropdown();
+    }
+  });
+
+  dropdown.addEventListener("mousedown", (e) => {
+    const li = (e.target as HTMLElement).closest("li");
+    if (!li || li.classList.contains("map-ac-section")) return;
+    e.preventDefault();
+    selectItem(li.textContent ?? "");
+  });
+
+  // Keyboard navigation
+  input.addEventListener("keydown", (e) => {
+    if (dropdown.hidden) return;
+    const items = Array.from(dropdown.querySelectorAll<HTMLLIElement>("li:not(.map-ac-section)"));
+    const current = dropdown.querySelector<HTMLLIElement>("[aria-selected='true']");
+    const currentIndex = current ? items.indexOf(current) : -1;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = items[currentIndex + 1] ?? items[0];
+      current?.removeAttribute("aria-selected");
+      next?.setAttribute("aria-selected", "true");
+      next?.scrollIntoView({ block: "nearest" });
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const prev = items[currentIndex - 1] ?? items[items.length - 1];
+      current?.removeAttribute("aria-selected");
+      prev?.setAttribute("aria-selected", "true");
+      prev?.scrollIntoView({ block: "nearest" });
+    } else if (e.key === "Enter") {
+      if (current) {
+        e.preventDefault();
+        selectItem(current.textContent ?? "");
+      }
+    } else if (e.key === "Escape") {
+      closeDropdown();
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!input.parentElement?.contains(e.target as Node)) {
+      closeDropdown();
+    }
+  });
 }
 
 export function updateNavigationUI(summary: NavigationSummary): void {

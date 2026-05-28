@@ -3555,7 +3555,93 @@ body {
   gap: 8px;
 }
 
-.map-input-row button,
+.map-autocomplete-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.map-autocomplete-arrow {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  padding: 0;
+  cursor: pointer;
+  color: #9ca3af;
+  line-height: 1;
+  margin: 0;
+  min-width: unset;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+
+.map-autocomplete-arrow:hover {
+  color: #1a73e8;
+  background: #eff6ff;
+}
+
+.map-autocomplete-wrapper input {
+  padding-right: 36px;
+}
+
+.map-autocomplete-dropdown {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 99999;
+  background: #fff;
+  border: 1px solid #d5dbe5;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.14);
+  max-height: 220px;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.map-autocomplete-dropdown li {
+  padding: 9px 12px;
+  font-size: 13px;
+  color: #111827;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.map-autocomplete-dropdown li:hover,
+.map-autocomplete-dropdown li[aria-selected="true"] {
+  background: #eff6ff;
+  color: #1a73e8;
+}
+
+.map-autocomplete-dropdown li.map-ac-section {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b7280;
+  padding: 6px 12px 2px;
+  cursor: default;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+.map-autocomplete-dropdown li.map-ac-section:hover {
+  background: none;
+  color: #6b7280;
+}
+
+.map-input-row > button,
 .map-route-btn {
   height: 38px;
   margin: 0;
@@ -3585,61 +3671,6 @@ body {
   line-height: 1.35;
 }
 
-.arrival-camera-debug-card {
-  position: fixed;
-  left: 16px;
-  bottom: 16px;
-  z-index: 10500;
-  width: min(320px, calc(100vw - 32px));
-  padding: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.55);
-  border-radius: 8px;
-  background: rgba(15, 23, 42, 0.94);
-  color: #f8fafc;
-  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.28);
-  font-size: 12px;
-  box-sizing: border-box;
-}
-
-.arrival-camera-debug-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.arrival-camera-debug-title button {
-  width: 26px;
-  height: 26px;
-  min-width: 26px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.12);
-  color: #f8fafc;
-  font-weight: 900;
-}
-
-.arrival-camera-debug-grid {
-  display: grid;
-  grid-template-columns: 76px minmax(0, 1fr);
-  gap: 6px 10px;
-  line-height: 1.25;
-}
-
-.arrival-camera-debug-grid span {
-  color: #cbd5e1;
-}
-
-.arrival-camera-debug-grid b {
-  color: #ffffff;
-  font-family: Consolas, "Courier New", monospace;
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
 
 /* ── Enter Building prompt ─────────────────────────────────────────── */
 .enter-building-prompt {
