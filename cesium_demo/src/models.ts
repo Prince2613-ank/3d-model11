@@ -28,11 +28,11 @@ import nd2dCam5Url from "../2nd_cc5.glb?url";
 import nd2dCam6Url from "../2nd_cc6.glb?url";
 
 import firstFloorUrl from "../1st_floor_up_final.glb?url";
-import secondFloorUrl from "../final_2nd_floor_without_chair.glb?url";
+import secondFloorUrl from "../final_2nd_floor_without_chair_fast.glb?url";
 import fullBuildingUrl from "../full_building.glb?url";
 import groundFloorUrl from "../ground_floor_final.glb?url";
 import outdoorModelUrl from "../outdoor_model.glb?url";
-import thirdFloorUrl from "../3rd_floor_without_chairs.glb?url";
+import thirdFloorUrl from "../3rd_floor_without_chairs_fast.glb?url";
 import secondFloorLoadingBaseUrl from "../2nd_floor_base.glb?url";
 import secondFloorLoadingBaseWallUrl from "../2nd_floor_base_wall.glb?url";
 import thirdFloorLoadingBaseUrl from "../3rd_floor_base.glb?url";

@@ -45,6 +45,40 @@ async function playOnboardingSplash(): Promise<void> {
   splash.remove();
 }
 
+function requestIdleWork(callback: () => void, timeout = 2000): void {
+  const requestIdle = (window as Window & {
+    requestIdleCallback?: (handler: () => void, options?: { timeout?: number }) => number;
+  }).requestIdleCallback;
+
+  if (requestIdle) {
+    requestIdle(callback, { timeout });
+    return;
+  }
+
+  window.setTimeout(callback, timeout);
+}
+
+function preloadHeavyFloorsInBackground(): void {
+  const floors = [3, 4];
+
+  const preloadNext = async (): Promise<void> => {
+    const floor = floors.shift();
+    if (!floor) return;
+
+    try {
+      await preloadFloor(floor);
+    } catch (error) {
+      console.warn(`Background preload failed for floor ${floor}:`, error);
+    }
+
+    if (floors.length > 0) {
+      requestIdleWork(() => { void preloadNext(); }, 2500);
+    }
+  };
+
+  requestIdleWork(() => { void preloadNext(); }, 1500);
+}
+
 async function bootstrap(): Promise<void> {
   installContextLossGuard();
   setNavigationFloorSwitchHandler(openFloorProfessional);
@@ -89,6 +123,7 @@ async function bootstrap(): Promise<void> {
   populateRoomDropdowns(getNavigableRoomNames());
   applySelectedFloor();
   initSmartFloorCamera();
+  preloadHeavyFloorsInBackground();
 
   installSceneInteractions(getSelectedFloor, {
     onRoomClick: (roomName) => {
