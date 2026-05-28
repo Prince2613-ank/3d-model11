@@ -5,7 +5,7 @@ import {
   viewer
 } from "./viewer";
 import { geo2, geo3, geoJsonUrl, normalizeRoomName } from "./rooms";
-import { setNavigationAllowedFloors, setNavigationMessage, updateNavigationUI, disableCameraControls, enableCameraControls, showFloorSpinner, hideFloorSpinner, updateNavigationHud, hideNavigationHud, type NavigationHudState } from "./ui";
+import { setNavigationAllowedFloors, setNavigationMessage, updateNavigationUI, disableCameraControls, enableCameraControls, showFloorSpinner, hideFloorSpinner, updateNavigationHud, hideNavigationHud, clearMapRoute, hideTooltip, type NavigationHudState } from "./ui";
 import { ensureFloorModelLoaded } from "./models";
 
 type DoorFeature = {
@@ -75,6 +75,7 @@ let routeDotTValuesB: number[] = [];
 let routeBubbleBillboardsA: Cesium.Billboard[] = [];
 let routeBubbleBillboardsB: Cesium.Billboard[] = [];
 let routeBubbleDensityStride = 1;
+let arrivalHudHideTimer: number | null = null;
 
 const MAX_CORRIDOR_EDGE_METERS = 8.0;
 const JUNCTION_LINK_METERS = 0.5;
@@ -452,6 +453,25 @@ function updateLiveNavigationHud(index: number): void {
   updateNavigationHud(liveNavigationHudState(index));
 }
 
+function showArrivalWelcomeHud(): void {
+  if (arrivalHudHideTimer !== null) {
+    window.clearTimeout(arrivalHudHideTimer);
+    arrivalHudHideTimer = null;
+  }
+
+  updateNavigationHud({
+    icon: "arrive",
+    instruction: `Welcome to ${liveNavDestinationRoomName || liveNavDestinationName || "destination"} 🎉`,
+    context: "You have arrived",
+    distanceMeters: 0
+  });
+
+  arrivalHudHideTimer = window.setTimeout(() => {
+    hideNavigationHud();
+    arrivalHudHideTimer = null;
+  }, 3000);
+}
+
 function isRouteBubbleAhead(segment: "A" | "B", index: number): boolean {
   if (liveNavPath.length === 0) return true;
   if (segment === "A") return index > liveNavIndex;
@@ -557,8 +577,13 @@ async function finishLiveNavigation(): Promise<void> {
   }
 
   clearRouteEntities();
-  updateLiveNavigationHud(liveNavIndex);
-  setNavigationMessage("You have reached your destination.", false);
+  clearMapRoute();
+  hideTooltip();
+  showArrivalWelcomeHud();
+  activeNavFromFloor = null;
+  activeNavToFloor = null;
+  setNavigationAllowedFloors(null);
+  enableCameraControls();
   await focusDestinationRoomView();
   viewer.scene.requestRender();
 }
@@ -631,6 +656,10 @@ export let activeNavFromFloor: number | null = null;
 export let activeNavToFloor: number | null = null;
 
 export function exitNavigation(): void {
+  if (arrivalHudHideTimer !== null) {
+    window.clearTimeout(arrivalHudHideTimer);
+    arrivalHudHideTimer = null;
+  }
   stopLiveNavigationMarker();
   clearRouteEntities();
   activeNavFromFloor = null;

@@ -595,7 +595,7 @@ async function appendOutdoorModelApproach(route: OutdoorRouteResult): Promise<Ou
   };
 }
 
-function clearMapRoute(): void {
+export function clearMapRoute(): void {
   [
     "outdoorMapRouteRoadBand", "outdoorMapRouteGroundLine", "outdoorMapRouteLine",
     "outdoorMapRouteElevatedLine", "outdoorMapRouteOverlayBand", "outdoorMapRouteStart", "outdoorMapRouteEnd",
@@ -1903,7 +1903,7 @@ function showTooltip(html: string, x: number, y: number): void {
   tooltip.style.display = "block";
 }
 
-function hideTooltip(): void {
+export function hideTooltip(): void {
   const tooltip = optionalElement<HTMLElement>("tooltip");
   if (tooltip) tooltip.style.display = "none";
 }
