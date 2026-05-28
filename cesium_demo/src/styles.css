@@ -3585,6 +3585,62 @@ body {
   line-height: 1.35;
 }
 
+.arrival-camera-debug-card {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 10500;
+  width: min(320px, calc(100vw - 32px));
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.94);
+  color: #f8fafc;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.28);
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+.arrival-camera-debug-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.arrival-camera-debug-title button {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #f8fafc;
+  font-weight: 900;
+}
+
+.arrival-camera-debug-grid {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 6px 10px;
+  line-height: 1.25;
+}
+
+.arrival-camera-debug-grid span {
+  color: #cbd5e1;
+}
+
+.arrival-camera-debug-grid b {
+  color: #ffffff;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 /* ── Enter Building prompt ─────────────────────────────────────────── */
 .enter-building-prompt {
   position: fixed;

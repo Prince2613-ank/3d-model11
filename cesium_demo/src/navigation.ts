@@ -65,6 +65,12 @@ let liveNavStairEndIndex = -1;
 let liveNavActiveFloor: number | null = null;
 let liveNavPendingFloor: number | null = null;
 let liveNavDestinationName = "";
+let liveNavDestinationRoomName = "";
+let liveNavDestinationFloor: number | null = null;
+let arrivalDebugTarget: Cesium.Cartesian3 | null = null;
+let arrivalDebugRemoveCameraListener: (() => void) | null = null;
+let arrivalDebugRemovePostRenderListener: (() => void) | null = null;
+let arrivalDebugUpdateQueued = false;
 let navigationFloorSwitchHandler: ((floor: number) => void | Promise<void>) | null = null;
 let routeAnimRemove: (() => void) | null = null;
 let routeAnimStart = 0;
@@ -113,6 +119,116 @@ const ROUTE_GLOW_SVG = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
   <circle cx="70" cy="70" r="65" fill="url(#g)"/>
 </svg>
 `)}`;
+
+const DESTINATION_CAMERA_PRESETS: Record<string, {
+  lon: number;
+  lat: number;
+  height: number;
+  heading: number;
+  pitch: number;
+  roll: number;
+  fov: number;
+}> = {
+  "3|manthan": {
+    lon: 77.13375476,
+    lat: 28.67090875,
+    height: 11.16,
+    heading: 329.38,
+    pitch: -47.94,
+    roll: 0,
+    fov: 58
+  },
+  "4|conference room": {
+    lon: 77.13363249,
+    lat: 28.67093738,
+    height: 16.19,
+    heading: 326.63,
+    pitch: -60.56,
+    roll: 0,
+    fov: 58
+  },
+  "3|dojo": {
+    lon: 77.13364838,
+    lat: 28.67094840,
+    height: 7.69,
+    heading: 126.91,
+    pitch: -21.68,
+    roll: 360,
+    fov: 58
+  },
+  "3|eureka": {
+    lon: 77.13369630647,
+    lat: 28.67097179017,
+    height: 11.8672,
+    heading: 63.91,
+    pitch: -74.1073,
+    roll: 0.0001,
+    fov: 58
+  },
+  "4|library": {
+    lon: 77.13367953877,
+    lat: 28.67086780995,
+    height: 12.2209,
+    heading: 332.3004,
+    pitch: -34.9491,
+    roll: 0,
+    fov: 58
+  },
+  "4|meeting room": {
+    lon: 77.13367129265,
+    lat: 28.67101945937,
+    height: 13.5826,
+    heading: 322.9066,
+    pitch: -77.6764,
+    roll: 0,
+    fov: 58
+  },
+  "3|pantry": {
+    lon: 77.13359931811,
+    lat: 28.67099906596,
+    height: 10.4152,
+    heading: 151.8243,
+    pitch: -77.5895,
+    roll: 0.0001,
+    fov: 58
+  },
+  "4|pantry": {
+    lon: 77.13372773723,
+    lat: 28.67093722174,
+    height: 15.9639,
+    heading: 55.0383,
+    pitch: -81.3355,
+    roll: 0.0001,
+    fov: 58
+  },
+  "3|admin": {
+    lon: 77.13367876163,
+    lat: 28.67090258073,
+    height: 9.9028,
+    heading: 226.3380,
+    pitch: -61.5925,
+    roll: 0,
+    fov: 58
+  },
+  "3|ug's cabin": {
+    lon: 77.13366237738,
+    lat: 28.67100804682,
+    height: 11.0537,
+    heading: 59.4988,
+    pitch: -58.4382,
+    roll: 0,
+    fov: 58
+  },
+  "3|vg's cabin": {
+    lon: 77.13360662650,
+    lat: 28.67096091377,
+    height: 10.6954,
+    heading: 63.7303,
+    pitch: -77.9384,
+    roll: 0.0002,
+    fov: 58
+  }
+};
 
 const CUSTOM_STAIR_PATH = [
   { lon: 77.13369487589452, lat: 28.67089514560174 },
@@ -171,6 +287,9 @@ function stopLiveNavigationMarker(): void {
   liveNavActiveFloor = null;
   liveNavPendingFloor = null;
   liveNavDestinationName = "";
+  liveNavDestinationRoomName = "";
+  liveNavDestinationFloor = null;
+  arrivalDebugTarget = null;
   viewer.entities.removeById("liveNavigationMarker");
   hideNavigationHud();
 }
@@ -353,10 +472,198 @@ function updateCompletedRouteDots(): void {
   });
 }
 
+function getRoomViewEntity(roomName: string, floor: number): Cesium.Entity | undefined {
+  const dataSource = floor === 3 ? geo2 : geo3;
+  const target = normalizeRoomName(roomName);
+  return dataSource?.entities.values.find((entity) => normalizeRoomName(getEntityRoomName(entity)) === target);
+}
+
+function roomBoundingSphere(entity: Cesium.Entity, floor: number): Cesium.BoundingSphere | null {
+  const hierarchy = entity.polygon?.hierarchy?.getValue(Cesium.JulianDate.now());
+  const positions = hierarchy?.positions ?? [];
+  if (positions.length > 0) {
+    return Cesium.BoundingSphere.fromPoints(positions);
+  }
+
+  const position = entity.position?.getValue(Cesium.JulianDate.now()) ?? getRoomFallbackPosition(
+    liveNavDestinationRoomName,
+    floor
+  );
+  return position ? new Cesium.BoundingSphere(position, 4) : null;
+}
+
+function degrees(value: number): number {
+  return Cesium.Math.toDegrees(value);
+}
+
+function fixed(value: number, fractionDigits = 6): string {
+  return Number.isFinite(value) ? value.toFixed(fractionDigits) : "n/a";
+}
+
+function cameraDebugValues(target: Cesium.Cartesian3): Record<string, string> {
+  const cartographic = Cesium.Cartographic.fromCartesian(viewer.camera.positionWC);
+  const rangeMeters = Cesium.Cartesian3.distance(viewer.camera.positionWC, target);
+  const fov = viewer.camera.frustum instanceof Cesium.PerspectiveFrustum
+    ? degrees(viewer.camera.frustum.fov ?? NaN)
+    : NaN;
+
+  return {
+    room: liveNavDestinationName || liveNavDestinationRoomName,
+    floor: liveNavDestinationFloor ? floorLabel(liveNavDestinationFloor) : "n/a",
+    lon: fixed(degrees(cartographic.longitude), 11),
+    lat: fixed(degrees(cartographic.latitude), 11),
+    height: fixed(cartographic.height, 4),
+    zoomRange: fixed(rangeMeters, 4),
+    heading: fixed(degrees(viewer.camera.heading), 4),
+    pitch: fixed(degrees(viewer.camera.pitch), 4),
+    roll: fixed(degrees(viewer.camera.roll), 4),
+    fov: fixed(fov, 4),
+  };
+}
+
+function renderArrivalCameraDebugCard(): void {
+  if (!arrivalDebugTarget) return;
+
+  const values = cameraDebugValues(arrivalDebugTarget);
+
+  let card = document.getElementById("arrivalCameraDebugCard");
+  if (!card) {
+    card = document.createElement("section");
+    card.id = "arrivalCameraDebugCard";
+    card.className = "arrival-camera-debug-card";
+    document.body.appendChild(card);
+  }
+
+  card.innerHTML = `
+    <div class="arrival-camera-debug-title">
+      <span>Arrival Camera Debug</span>
+      <button type="button" aria-label="Close camera debug">x</button>
+    </div>
+    <div class="arrival-camera-debug-grid">
+      <span>Room</span><b>${values.room}</b>
+      <span>Floor</span><b>${values.floor}</b>
+      <span>Lon</span><b>${values.lon}</b>
+      <span>Lat</span><b>${values.lat}</b>
+      <span>Height</span><b>${values.height} m</b>
+      <span>Zoom</span><b>${values.zoomRange} m</b>
+      <span>Heading</span><b>${values.heading} deg</b>
+      <span>Pitch</span><b>${values.pitch} deg</b>
+      <span>Roll</span><b>${values.roll} deg</b>
+      <span>FOV</span><b>${values.fov} deg</b>
+    </div>
+  `;
+  card.querySelector("button")?.addEventListener("click", () => {
+    card.hidden = true;
+  });
+  card.hidden = false;
+}
+
+function queueArrivalDebugUpdate(): void {
+  if (arrivalDebugUpdateQueued) return;
+  arrivalDebugUpdateQueued = true;
+  requestAnimationFrame(() => {
+    arrivalDebugUpdateQueued = false;
+    renderArrivalCameraDebugCard();
+  });
+}
+
+function showArrivalCameraDebugCard(target: Cesium.Cartesian3): void {
+  arrivalDebugTarget = Cesium.Cartesian3.clone(target);
+  if (!arrivalDebugRemoveCameraListener) {
+    arrivalDebugRemoveCameraListener = viewer.camera.changed.addEventListener(queueArrivalDebugUpdate);
+  }
+  if (!arrivalDebugRemovePostRenderListener) {
+    arrivalDebugRemovePostRenderListener = viewer.scene.postRender.addEventListener(queueArrivalDebugUpdate);
+  }
+  renderArrivalCameraDebugCard();
+  console.table(cameraDebugValues(arrivalDebugTarget));
+}
+
+async function focusDestinationRoomView(): Promise<void> {
+  if (!liveNavDestinationRoomName || !liveNavDestinationFloor) return;
+
+  await Promise.resolve(navigationFloorSwitchHandler?.(liveNavDestinationFloor));
+
+  const entity = getRoomViewEntity(liveNavDestinationRoomName, liveNavDestinationFloor);
+  const sphere = entity ? roomBoundingSphere(entity, liveNavDestinationFloor) : null;
+  if (!sphere) return;
+
+  if (typeof (viewer.camera as any).cancelFlight === "function") {
+    (viewer.camera as any).cancelFlight();
+  }
+
+  const preset = DESTINATION_CAMERA_PRESETS[`${liveNavDestinationFloor}|${normalizeRoomName(liveNavDestinationRoomName)}`];
+  if (preset) {
+    if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
+      viewer.camera.frustum.fov = Cesium.Math.toRadians(preset.fov);
+    }
+
+    await new Promise<void>((resolve) => {
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(preset.lon, preset.lat, preset.height),
+        orientation: {
+          heading: Cesium.Math.toRadians(preset.heading),
+          pitch: Cesium.Math.toRadians(preset.pitch),
+          roll: Cesium.Math.toRadians(preset.roll)
+        },
+        duration: 1.2,
+        easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT,
+        complete: () => {
+          showArrivalCameraDebugCard(sphere.center);
+          viewer.scene.requestRender();
+          resolve();
+        },
+        cancel: () => {
+          showArrivalCameraDebugCard(sphere.center);
+          viewer.scene.requestRender();
+          resolve();
+        }
+      });
+    });
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    viewer.camera.flyToBoundingSphere(sphere, {
+      duration: 1.2,
+      offset: new Cesium.HeadingPitchRange(
+        Cesium.Math.toRadians(18),
+        Cesium.Math.toRadians(-67),
+        Math.max(sphere.radius * 2.8, 11)
+      ),
+      complete: () => {
+        showArrivalCameraDebugCard(sphere.center);
+        viewer.scene.requestRender();
+        resolve();
+      },
+      cancel: () => {
+        showArrivalCameraDebugCard(sphere.center);
+        viewer.scene.requestRender();
+        resolve();
+      }
+    });
+  });
+}
+
+async function finishLiveNavigation(): Promise<void> {
+  if (liveNavTimer !== null) {
+    window.clearInterval(liveNavTimer);
+    liveNavTimer = null;
+  }
+
+  clearRouteEntities();
+  updateLiveNavigationHud(liveNavIndex);
+  setNavigationMessage("You have reached your destination.", false);
+  await focusDestinationRoomView();
+  viewer.scene.requestRender();
+}
+
 function startLiveNavigationMarker(
   path: Cesium.Cartesian3[],
   floorByIndex: number[],
   destinationName: string,
+  destinationRoomName: string,
+  destinationFloor: number,
   firstSegmentLength: number,
   stairRange?: { startIndex: number; endIndex: number }
 ): void {
@@ -367,6 +674,8 @@ function startLiveNavigationMarker(
   liveNavPath = path;
   liveNavFloorByIndex = floorByIndex;
   liveNavDestinationName = destinationName;
+  liveNavDestinationRoomName = destinationRoomName;
+  liveNavDestinationFloor = destinationFloor;
   liveNavFirstSegmentLength = firstSegmentLength;
   liveNavStairStartIndex = stairRange?.startIndex ?? -1;
   liveNavStairEndIndex = stairRange?.endIndex ?? -1;
@@ -392,14 +701,7 @@ function startLiveNavigationMarker(
     if (!marker || liveNavPath.length === 0) return;
 
     if (liveNavIndex >= liveNavPath.length - 1) {
-      if (liveNavTimer !== null) {
-        window.clearInterval(liveNavTimer);
-        liveNavTimer = null;
-      }
-      clearRouteEntities();
-      updateLiveNavigationHud(liveNavIndex);
-      setNavigationMessage("You have reached your destination.", false);
-      viewer.scene.requestRender();
+      void finishLiveNavigation();
       return;
     }
 
@@ -1024,14 +1326,9 @@ function getDoorPosition(roomName: string, floor: number): Cesium.Cartesian3 | u
 }
 
 function shouldUseFirstThirdFloorPantryDoor(otherSelection: ResolvedRoomSelection): boolean {
-  // Any 2nd-floor room always uses the 1st door
-  if (otherSelection.floor === 3) return true;
-  // On the 3rd floor, only entrance and library use the 1st door
-  if (otherSelection.floor === 4) {
-    const otherRoom = normalizeRoomName(otherSelection.roomName);
-    return otherRoom === "entrance" || otherRoom === "library";
-  }
-  return false;
+  // Cross-floor routes enter/exit Pantry through the first door.
+  // Same-floor 3rd-floor routes use Pantry's second door.
+  return otherSelection.floor !== 4;
 }
 
 function getRouteDoorPosition(
@@ -1207,7 +1504,15 @@ export async function startNavigation(): Promise<void> {
     list: allSteps
   });
 
-  startLiveNavigationMarker(fullPath, fullPathFloors, toSelection.displayName, pointsA.length, stairRange);
+  startLiveNavigationMarker(
+    fullPath,
+    fullPathFloors,
+    toSelection.displayName,
+    toSelection.roomName,
+    toSelection.floor,
+    pointsA.length,
+    stairRange
+  );
   setNavigationMessage(
     fromFloor === toFloor
       ? "Live navigation started. Follow the blue route."

@@ -94,8 +94,12 @@ export const ROOM_POI_TODOS: string[] = [
 export function lookupRoomPOI(rawName: string): RoomPOI | null {
   if (!rawName) return null;
 
-  const floorTag = rawName.match(/\((\d+(?:nd|rd|th|st))\s+Floor\)/i)?.[1]?.toLowerCase();
-  const baseName = rawName.replace(/\s*\([^)]*Floor[^)]*\)/gi, "").trim().toLowerCase();
+  const floorTag = rawName.match(/(?:\(|\b)(\d+(?:nd|rd|th|st))\s+Floor(?:\)|\b)/i)?.[1]?.toLowerCase();
+  const baseName = rawName
+    .replace(/\s*\([^)]*Floor[^)]*\)/gi, "")
+    .replace(/\b\d+(?:nd|rd|th|st)\s+Floor\b/gi, "")
+    .trim()
+    .toLowerCase();
 
   for (const poi of ROOM_POIS) {
     if (poi.name.toLowerCase() !== baseName) continue;

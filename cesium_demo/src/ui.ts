@@ -114,10 +114,12 @@ function selectIndoorRoom(selectId: string, preferredRoom: string, preferredFloo
   if (!select) return false;
 
   const normalized = normalizeLabel(preferredRoom);
+  const floorFromRoomLabel = preferredRoom.match(/\((2nd|3rd) Floor\)/i)?.[1];
+  const floorLabel = preferredFloorLabel ?? (floorFromRoomLabel ? `${floorFromRoomLabel} Floor` : undefined);
   const options = Array.from(select.options);
   const exact = options.find((option) => {
     const label = option.value.toLowerCase();
-    return normalizeLabel(option.value) === normalized && (!preferredFloorLabel || label.includes(preferredFloorLabel.toLowerCase()));
+    return normalizeLabel(option.value) === normalized && (!floorLabel || label.includes(floorLabel.toLowerCase()));
   }) ?? options.find((option) => normalizeLabel(option.value) === normalized);
 
   if (!exact) return false;
@@ -127,7 +129,8 @@ function selectIndoorRoom(selectId: string, preferredRoom: string, preferredFloo
 
 function syncIndoorRouteFromMap(destination: string): void {
   const destinationName = destination.trim() || "Manthan";
-  const matchedDestination = selectIndoorRoom("toRoom", destinationName);
+  const matchedPoi = lookupRoomPOI(destinationName);
+  const matchedDestination = selectIndoorRoom("toRoom", destinationName, matchedPoi?.floorLabel);
   const matchedEntrance = selectIndoorRoom("fromRoom", "Entrance", "2nd");
 
   if (matchedDestination && matchedEntrance) {
@@ -1145,6 +1148,8 @@ export function installMapDirectionsControl(): void {
       routeButton.textContent = "Finding Route…";
 
       try {
+        await Promise.resolve(enterBuildingFloorSwitchCallback?.(0));
+
         const start = await resolveMapPlace(origin);
         if (!start) {
           showToast("Start location not found. Try a full address or lat,lng.", "error");
