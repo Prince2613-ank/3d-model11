@@ -11,7 +11,7 @@ import { ALLOWED_DOMAIN } from "./config";
 declare const google: any;
 declare const gapi: any;
 
-const DEFAULT_GOOGLE_CLIENT_ID = "714313018125-cki9pshrn36v873rarp3ol32kcrlbukn.apps.googleusercontent.com";
+const DEFAULT_GOOGLE_CLIENT_ID = "953961693663-56gksfsa1l459umnln85uf8l5vet8fev.apps.googleusercontent.com";
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? DEFAULT_GOOGLE_CLIENT_ID;
 const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY ?? "";
 const REDIRECT_PATH = import.meta.env.VITE_GOOGLE_REDIRECT_PATH ?? "/auth/google/callback";
