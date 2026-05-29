@@ -1098,9 +1098,6 @@ export function installMapDirectionsControl(): void {
 
   const button = createMapToolbarButton();
   toolbar.prepend(button);
-  if (!document.getElementById("cameraControlsToolbarBtn")) {
-    toolbar.insertBefore(createCameraToolbarButton(), button.nextSibling);
-  }
 
   const originInput = element<HTMLInputElement>("mapOriginInput");
   const destinationInput = element<HTMLInputElement>("mapDestinationInput");
@@ -1433,9 +1430,23 @@ const HOVER_PICK_INTERVAL_MS = 80;
 
 function syncCameraPanelVisibility(): void {
   const panel = optionalElement<HTMLElement>("cameraPanel");
-  const button = getCameraToolbarButton();
   const isAvailable = Boolean(activeCameraControlFloor) && !cameraControlsLocked;
+  const shouldBeInDom = Boolean(activeCameraControlFloor);
   const showPanel = isAvailable && cameraPanelUserOpen;
+
+  let button = getCameraToolbarButton();
+
+  if (shouldBeInDom && !button) {
+    const toolbar = document.querySelector<HTMLElement>(".cesium-viewer-toolbar");
+    const googleBtn = document.getElementById("googleMapRouteBtn");
+    if (toolbar && googleBtn) {
+      button = createCameraToolbarButton();
+      toolbar.insertBefore(button, googleBtn.nextSibling);
+    }
+  } else if (!shouldBeInDom && button) {
+    button.remove();
+    button = null;
+  }
 
   if (button) {
     button.hidden = !isAvailable;

@@ -5059,7 +5059,7 @@ body.floor-loading-active #toastContainer {
 .user-profile-header {
   position: fixed;
   top: 24px;
-  right: 241px;
+  right: 204px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5091,6 +5091,12 @@ body.floor-loading-active #toastContainer {
 body:has(.cesium-viewer-geocoderContainer:hover) .user-profile-header,
 body:has(.cesium-geocoder-input:focus) .user-profile-header {
   right: 491px;
+}
+
+/* On 2nd/3rd floor the camera button is in the toolbar (+38px wider), push further left. */
+body.floor-3-active .user-profile-header,
+body.floor-4-active .user-profile-header {
+  right: 242px;
 }
 
 .user-avatar {
@@ -5505,7 +5511,7 @@ body.camera-view-active .hamburger-btn {
   .user-profile-header {
     display: flex;
     top: 24px;
-    right: 241px;
+    right: 204px;
     left: auto;
     width: 34px;
     height: 34px;

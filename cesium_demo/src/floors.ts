@@ -251,6 +251,8 @@ export function showFloor(floor: number): void {
   applyVisibility(floor);
   renderCameraControls(floor);
   viewer.scene.requestRender();
+  // Update body classes so layout (eg. sign-in position) can respond to active floor.
+  updateBodyFloorClass(floor);
 }
 
 // Returns a Promise so the UI can tie spinner lifetime to actual load completion.
@@ -296,6 +298,9 @@ export function openFloorProfessional(floorNumber: number): Promise<void> {
   renderCameraControls(floorNumber);
   viewer.scene.requestRender();
 
+  // Update body classes so layout (eg. sign-in position) can respond to active floor.
+  updateBodyFloorClass(floorNumber);
+
   return (async () => {
     if (floorNumber === 3) {
       await runStagedFloorLoad(3, token, {
@@ -325,6 +330,16 @@ export function openFloorProfessional(floorNumber: number): Promise<void> {
     applyVisibility(floorNumber);
     viewer.scene.requestRender();
   })();
+}
+
+function updateBodyFloorClass(floor: number): void {
+  try {
+    const body = document.body;
+    body.classList.toggle("floor-3-active", floor === 3);
+    body.classList.toggle("floor-4-active", floor === 4);
+  } catch (e) {
+    // ignore in non-DOM environments
+  }
 }
 
 function detectFloorFromScreenCenter(): number | null {
