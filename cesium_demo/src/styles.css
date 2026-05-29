@@ -3533,7 +3533,7 @@ body {
 }
 
 .google-map-route-btn {
-  order: -2;
+  order: -1;
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
@@ -3547,6 +3547,7 @@ body {
 }
 
 .camera-controls-toolbar-btn {
+  order: -2;
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
