@@ -11,8 +11,10 @@ import { ALLOWED_DOMAIN } from "./config";
 declare const google: any;
 declare const gapi: any;
 
-const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "";
+const DEFAULT_GOOGLE_CLIENT_ID = "714313018125-cki9pshrn36v873rarp3ol32kcrlbukn.apps.googleusercontent.com";
+const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? DEFAULT_GOOGLE_CLIENT_ID;
 const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY ?? "";
+const REDIRECT_PATH = import.meta.env.VITE_GOOGLE_REDIRECT_PATH ?? "/auth/google/callback";
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/userinfo.email",
@@ -224,7 +226,7 @@ function waitForGoogleApis(): Promise<void> {
 }
 
 function getOAuthRedirectUri(): string {
-  return `${window.location.origin}${window.location.pathname}`;
+  return new URL(REDIRECT_PATH, window.location.origin).toString();
 }
 
 function startRedirectSignIn(): void {
@@ -311,10 +313,11 @@ function loadGapi(): Promise<void> {
   return new Promise((resolve, reject) => {
     gapi.load("client", async () => {
       try {
-        await gapi.client.init({
-          apiKey: API_KEY,
+        const initOptions: { apiKey?: string; discoveryDocs: string[] } = {
           discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest"],
-        });
+        };
+        if (API_KEY) initOptions.apiKey = API_KEY;
+        await gapi.client.init(initOptions);
         resolve();
       } catch (error) {
         reject(error);
@@ -398,10 +401,10 @@ export async function initializeCalendar(): Promise<void> {
   defaultAvatarHtml = getAvatar()?.innerHTML ?? "";
   bindCalendarControls(button);
 
-  if (!CLIENT_ID || !API_KEY) {
+  if (!CLIENT_ID) {
     button.style.pointerEvents = "auto";
     button.style.opacity = "0.5";
-    button.title = "Set VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY to enable Calendar";
+    button.title = "Set VITE_GOOGLE_CLIENT_ID to enable Calendar";
     return;
   }
 
