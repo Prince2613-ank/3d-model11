@@ -953,6 +953,34 @@ function createMapToolbarButton(): HTMLButtonElement {
   return button;
 }
 
+function createCameraToolbarButton(): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.id = "cameraControlsToolbarBtn";
+  button.className = "cesium-toolbar-button camera-controls-toolbar-btn";
+  button.type = "button";
+  button.title = "Camera controls";
+  button.hidden = true;
+  button.setAttribute("aria-label", "Camera controls");
+  button.setAttribute("aria-expanded", "false");
+  button.innerHTML = `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M8.4 6.5 9.7 4.6h4.6l1.3 1.9H19a2 2 0 0 1 2 2v8.8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8.5a2 2 0 0 1 2-2h3.4Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+      <circle cx="12" cy="12.8" r="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
+      <path d="M17.8 9.1h.1" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+    </svg>
+  `;
+  button.addEventListener("click", () => {
+    if (!activeCameraControlFloor || cameraControlsLocked) return;
+    cameraPanelUserOpen = !cameraPanelUserOpen;
+    syncCameraPanelVisibility();
+  });
+  return button;
+}
+
+function getCameraToolbarButton(): HTMLButtonElement | null {
+  return document.getElementById("cameraControlsToolbarBtn") as HTMLButtonElement | null;
+}
+
 // ── Enter-Building prompt ─────────────────────────────────────────────────────
 let enterBuildingFloorSwitchCallback: ((floor: number) => void | Promise<void>) | null = null;
 let enterBuildingTargetFloor = 3;  // default: 2nd floor
@@ -1070,6 +1098,9 @@ export function installMapDirectionsControl(): void {
 
   const button = createMapToolbarButton();
   toolbar.prepend(button);
+  if (!document.getElementById("cameraControlsToolbarBtn")) {
+    toolbar.insertBefore(createCameraToolbarButton(), button.nextSibling);
+  }
 
   const originInput = element<HTMLInputElement>("mapOriginInput");
   const destinationInput = element<HTMLInputElement>("mapDestinationInput");
@@ -1396,8 +1427,30 @@ let activeCctvCamera: CameraModel | null = null;
 let activeCctvViewshedMode: CctvViewshedMode = "camera";
 let cctvViewshedUiToken = 0;
 let activeCameraControlFloor: number | null = null;
+let cameraPanelUserOpen = false;
 let lastHoverPickAt = 0;
 const HOVER_PICK_INTERVAL_MS = 80;
+
+function syncCameraPanelVisibility(): void {
+  const panel = optionalElement<HTMLElement>("cameraPanel");
+  const button = getCameraToolbarButton();
+  const isAvailable = Boolean(activeCameraControlFloor) && !cameraControlsLocked;
+  const showPanel = isAvailable && cameraPanelUserOpen;
+
+  if (button) {
+    button.hidden = !isAvailable;
+    button.classList.toggle("camera-controls-toolbar-active", showPanel);
+    button.setAttribute("aria-expanded", String(showPanel));
+  }
+
+  if (panel) {
+    panel.style.display = showPanel ? "flex" : "none";
+    panel.style.pointerEvents = isAvailable ? "auto" : "none";
+    panel.style.opacity = isAvailable ? "1" : "0.5";
+  }
+
+  if (showPanel) requestAnimationFrame(syncCameraListSlider);
+}
 
 function showExitCameraViewToast(): void {
   const now = Date.now();
@@ -1430,11 +1483,9 @@ export function setNavigationAllowedFloors(floors: number[] | null): void {
 
 export function disableCameraControls(): void {
   cameraControlsLocked = true;
-  const panel = optionalElement<HTMLElement>("cameraPanel");
   const buttons = document.querySelectorAll("#cameraButtons button");
-  if (panel) panel.style.display = "none";
-  if (panel) panel.style.pointerEvents = "none";
-  if (panel) panel.style.opacity = "0.5";
+  cameraPanelUserOpen = false;
+  syncCameraPanelVisibility();
   buttons.forEach((btn) => {
     const button = btn as HTMLButtonElement;
     button.disabled = true;
@@ -1443,10 +1494,8 @@ export function disableCameraControls(): void {
 
 export function enableCameraControls(): void {
   cameraControlsLocked = false;
-  const panel = optionalElement<HTMLElement>("cameraPanel");
   const buttons = document.querySelectorAll("#cameraButtons button");
-  if (panel) panel.style.pointerEvents = "auto";
-  if (panel) panel.style.opacity = "1";
+  syncCameraPanelVisibility();
   buttons.forEach((btn) => {
     const button = btn as HTMLButtonElement;
     button.disabled = false;
@@ -2200,11 +2249,17 @@ export function renderCameraControls(floor: number): void {
 
   bindCameraPanelToggle();
   bindCameraListSlider();
-  activeCameraControlFloor = floor === 3 || floor === 4 ? floor : null;
+  const nextCameraControlFloor = floor === 3 || floor === 4 ? floor : null;
+  if (activeCameraControlFloor !== nextCameraControlFloor) {
+    cameraPanelUserOpen = false;
+  }
+  activeCameraControlFloor = nextCameraControlFloor;
   const cameras = (FLOOR_CAMERAS[floor] || []).filter((camera) => camera.showInControls !== false);
 
   if (cameras.length === 0) {
-    panel.style.display = "none";
+    activeCameraControlFloor = null;
+    cameraPanelUserOpen = false;
+    syncCameraPanelVisibility();
     syncCameraListSlider();
     return;
   }
@@ -2266,10 +2321,7 @@ export function renderCameraControls(floor: number): void {
     container.appendChild(row);
   });
 
-  panel.style.display = cameraControlsLocked ? "none" : "flex";
-  panel.style.pointerEvents = cameraControlsLocked ? "none" : "auto";
-  panel.style.opacity = cameraControlsLocked ? "0.5" : "1";
-  requestAnimationFrame(syncCameraListSlider);
+  syncCameraPanelVisibility();
 }
 
 

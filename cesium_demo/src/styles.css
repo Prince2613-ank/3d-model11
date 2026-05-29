@@ -3546,6 +3546,29 @@ body {
   display: block;
 }
 
+.camera-controls-toolbar-btn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: #172033 !important;
+}
+
+.camera-controls-toolbar-btn[hidden] {
+  display: none !important;
+}
+
+.camera-controls-toolbar-btn svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+.camera-controls-toolbar-btn.camera-controls-toolbar-active {
+  background: #e8f0fe !important;
+  color: #1a73e8 !important;
+}
+
 .map-directions-panel {
   position: fixed;
   top: 66px;
@@ -5035,29 +5058,30 @@ body.floor-loading-active #toastContainer {
 /* ── User Profile Header ────────────────────────────────────────── */
 .user-profile-header {
   position: fixed;
-  top: 22px;
-  right: 204px;
+  top: 24px;
+  right: 241px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  width: 38px;
-  height: 38px;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  width: 34px;
+  height: 34px;
   padding: 0;
-  border-radius: 10px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  z-index: 799;
+  border-radius: 7px;
+  box-shadow: none;
+  border: 0;
+  z-index: 10004;
   transition: right 0.25s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s, box-shadow 0.3s, transform 0.3s;
   cursor: pointer;
 }
 
 .user-profile-header:hover {
-  background: #ffffff;
-  transform: translateY(-1px) scale(1.04);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+  background: transparent;
+  transform: none;
+  box-shadow: none;
 }
 
 .user-profile-header.menu-open {
@@ -5066,12 +5090,12 @@ body.floor-loading-active #toastContainer {
 
 body:has(.cesium-viewer-geocoderContainer:hover) .user-profile-header,
 body:has(.cesium-geocoder-input:focus) .user-profile-header {
-  right: 454px;
+  right: 491px;
 }
 
 .user-avatar {
-  width: 26px;
-  height: 26px;
+  width: 34px;
+  height: 34px;
   border-radius: 6px;
   background: linear-gradient(135deg, #4285f4, #34a853);
   color: #fff;
@@ -5087,7 +5111,11 @@ body:has(.cesium-geocoder-input:focus) .user-profile-header {
 
 .user-avatar.google-avatar {
   background: #ffffff;
-  padding: 4px;
+  padding: 6px;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  border-radius: 7px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.16);
+  box-sizing: border-box;
 }
 
 .user-avatar.google-avatar svg {
@@ -5476,17 +5504,17 @@ body.camera-view-active .hamburger-btn {
 @media (max-width: 768px) {
   .user-profile-header {
     display: flex;
-    top: 18px;
-    right: 208px;
+    top: 24px;
+    right: 241px;
     left: auto;
-    width: 40px;
-    height: 40px;
-    z-index: 801;
+    width: 34px;
+    height: 34px;
+    z-index: 10004;
   }
 
   .user-avatar {
-    width: 28px;
-    height: 28px;
+    width: 34px;
+    height: 34px;
   }
 
   .left-sidebar {
