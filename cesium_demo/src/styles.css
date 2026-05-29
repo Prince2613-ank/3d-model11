@@ -4445,7 +4445,7 @@ body.floor-loading-active #toastContainer {
 
 /* ── Booking panel enhancements ──────────────────────────────────── */
 #bookingPanel {
-  top: 40px;
+  top: 70px;
   z-index: 10020;
 }
 
@@ -4611,7 +4611,7 @@ body.floor-loading-active #toastContainer {
 }
 
 #bookingPanel {
-  top: 10px;
+  top: 70px;
   z-index: 10020;
 }
 
