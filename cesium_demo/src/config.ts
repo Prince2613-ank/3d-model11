@@ -5,7 +5,11 @@ export const ALLOWED_DOMAIN = "flodataanalytics.com";
 export const POLL_INTERVAL_MS = 8000;
 export const CACHE_TTL_MS = 5000;
 
-export const ATTENDANCE_API_BASE_URL = import.meta.env.VITE_ATTENDANCE_API_BASE_URL ?? "http://localhost:5000";
+const DEFAULT_ATTENDANCE_API_BASE_URL = window.location.hostname.endsWith("onrender.com")
+  ? window.location.origin
+  : "http://localhost:5000";
+
+export const ATTENDANCE_API_BASE_URL = import.meta.env.VITE_ATTENDANCE_API_BASE_URL ?? DEFAULT_ATTENDANCE_API_BASE_URL;
 export const ATTENDANCE_BUILDING_CENTER = {
   lat: Number(import.meta.env.VITE_ATTENDANCE_BUILDING_LAT ?? "28.670903"),
   lon: Number(import.meta.env.VITE_ATTENDANCE_BUILDING_LON ?? "77.133783"),
