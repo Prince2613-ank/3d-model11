@@ -7,6 +7,13 @@ import {
 } from "./booking";
 import type { GlobalEvent, UpdateContext } from "./booking";
 import { ALLOWED_DOMAIN } from "./config";
+import {
+  bindAttendanceControls,
+  clearAttendanceUser,
+  onAttendanceAutoSignOut,
+  signOutAttendanceOnLogout,
+  startAttendanceTracking,
+} from "./attendance";
 
 declare const google: any;
 declare const gapi: any;
@@ -122,8 +129,16 @@ function setButtonState(state: "ready" | "loading" | "signed-in", label?: string
   }
 }
 
-function handleSignOut(): void {
+async function handleSignOut(): Promise<void> {
+  try {
+    await signOutAttendanceOnLogout();
+  } catch {
+    return;
+  }
+
   stopPolling();
+  clearAttendanceUser();
+  setCurrentUser(null);
   if (currentAccessToken) {
     google.accounts.oauth2.revoke(currentAccessToken, () => {});
     gapi.client.setToken(null);
@@ -301,7 +316,10 @@ function bindCalendarControls(button: HTMLElement): void {
 
   document.getElementById("logoutBtn")?.addEventListener("click", (event) => {
     event.stopPropagation();
-    handleSignOut();
+    void handleSignOut();
+  });
+  onAttendanceAutoSignOut(() => {
+    void handleSignOut();
   });
 
   document.addEventListener("click", (event) => {
@@ -354,6 +372,7 @@ async function verifyDomainAndLoad(accessToken: string): Promise<void> {
     isSignedIn = true;
     currentAccessToken = accessToken;
     setCurrentUser(email);
+    startAttendanceTracking(email, info.name ?? "");
     showSignedInAvatar(info);
     setButtonState("signed-in", `✓ ${email.split("@")[0]}`);
 
@@ -400,6 +419,7 @@ export async function initializeCalendar(): Promise<void> {
   if (!button) return;
   defaultAvatarHtml = getAvatar()?.innerHTML ?? "";
   bindCalendarControls(button);
+  bindAttendanceControls();
 
   if (!CLIENT_ID) {
     button.style.pointerEvents = "auto";

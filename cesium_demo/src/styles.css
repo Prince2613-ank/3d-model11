@@ -5089,6 +5089,68 @@ body.floor-loading-active #toastContainer {
   z-index: 10002;
 }
 
+.attendance-panel {
+  position: fixed;
+  top: 68px;
+  right: 14px;
+  width: 260px !important;
+  z-index: 1000;
+}
+
+.attendance-panel h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.attendance-panel p {
+  margin: 0 0 10px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.attendance-panel p[data-active="true"][data-inside="true"] {
+  color: #15803d;
+  font-weight: 700;
+}
+
+.attendance-panel p[data-active="true"][data-inside="false"] {
+  color: #b45309;
+}
+
+.attendance-metrics {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.attendance-metrics div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.attendance-metrics strong {
+  color: #0f172a;
+  font-weight: 800;
+  text-align: right;
+}
+
+.attendance-panel .btn {
+  width: 100%;
+}
+
+.attendance-panel .btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 body:has(.cesium-viewer-geocoderContainer:hover) .user-profile-header,
 body:has(.cesium-geocoder-input:focus) .user-profile-header {
   right: 491px;

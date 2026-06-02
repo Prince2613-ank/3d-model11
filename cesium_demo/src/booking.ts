@@ -18,7 +18,7 @@ export type ToastType = "info" | "success" | "error";
 // ── Current user ──────────────────────────────────────────────────
 export let currentUserEmail: string | null = null;
 
-export function setCurrentUser(email: string): void {
+export function setCurrentUser(email: string | null): void {
   currentUserEmail = email;
 }
 

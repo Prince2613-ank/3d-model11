@@ -287,6 +287,19 @@
     </div>
   </div>
 
+  <section id="attendancePanel" class="attendance-panel common-panel" aria-label="Attendance">
+    <h3>Attendance</h3>
+    <p id="attendanceStatus" data-active="false" data-inside="false">Sign in with Google to start attendance.</p>
+    <div class="attendance-metrics" aria-label="Attendance verification details">
+      <div><span>GPS Accuracy</span><strong id="attendanceAccuracy">--</strong></div>
+      <div><span>Distance</span><strong id="attendanceDistance">--</strong></div>
+      <div><span>Verification</span><strong id="attendanceProgress">0/5 samples</strong></div>
+      <div><span>Status</span><strong id="attendanceCurrentStatus">Waiting</strong></div>
+      <div><span>Last Sign-In</span><strong id="attendanceLastSignIn">--</strong></div>
+    </div>
+    <button id="attendanceStartBtn" class="btn" type="button" disabled>Start Attendance</button>
+  </section>
+
   <section id="cameraPanel" class="panel common-panel" aria-label="Camera controls"
     style="display: none; top: 360px; right: 10px; left: auto;">
     <div class="camera-panel-header">
