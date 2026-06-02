@@ -41,6 +41,12 @@ type AttendanceSample = {
   speedKmh: number | null;
 };
 
+type AttendanceServerStatus = {
+  ok: boolean;
+  signedIn: boolean;
+  signInTime?: string | null;
+};
+
 const STORAGE_KEY = "attendance_geofence_state";
 const AUTO_SIGN_OUT_EVENT = "attendance:auto-signout";
 const ATTENDANCE_TIME_ZONE = "Asia/Kolkata";
@@ -56,6 +62,7 @@ let lastPosition: GeolocationPosition | null = null;
 let officeEndTimer: ReturnType<typeof setTimeout> | null = null;
 let verificationSamples: AttendanceSample[] = [];
 let previousSample: AttendanceSample | null = null;
+let stateSyncInFlight = false;
 
 function readAttendanceState(): StoredAttendanceState {
   try {
@@ -238,6 +245,48 @@ async function postAttendance(path: "/api/attendance/signin" | "/api/attendance/
   if (!response.ok) {
     const data = await response.json().catch(() => null) as { error?: string } | null;
     throw new Error(data?.error ?? `Attendance API failed with ${response.status}`);
+  }
+}
+
+async function fetchAttendanceStatus(email: string): Promise<AttendanceServerStatus> {
+  const response = await fetch(attendanceApiUrl(`/api/attendance/status?email=${encodeURIComponent(email)}`));
+  const data = await response.json().catch(() => null) as AttendanceServerStatus | { error?: string } | null;
+
+  if (!response.ok || !data || !("signedIn" in data)) {
+    throw new Error(data && "error" in data ? data.error : `Attendance status API failed with ${response.status}`);
+  }
+
+  return data;
+}
+
+async function syncAttendanceStateWithServer(email: string): Promise<void> {
+  if (stateSyncInFlight) return;
+  stateSyncInFlight = true;
+
+  try {
+    const status = await fetchAttendanceStatus(email);
+
+    if (status.signedIn) {
+      if (!attendanceState.signedIn || attendanceState.email !== email) {
+        saveAttendanceState({ signedIn: true, signedInAt: new Date().toISOString(), email });
+      }
+      scheduleOfficeEndSignOut();
+      setMetrics({ status: "SIGNED_IN" });
+      console.log("[Attendance] confirmed open sign-in row in Google Sheet");
+      return;
+    }
+
+    if (attendanceState.signedIn && attendanceState.email === email) {
+      console.warn("[Attendance] cleared stale local sign-in state; no open Google Sheet row found");
+      clearAttendanceState();
+      clearOfficeEndTimer();
+      resetVerification();
+      setMetrics({ progress: `0/${ATTENDANCE_CONFIG.REQUIRED_SAMPLES} samples`, status: "WAITING", lastSignIn: "--" });
+    }
+  } catch (error) {
+    console.warn("[Attendance] could not verify Google Sheet sign-in state:", error);
+  } finally {
+    stateSyncInFlight = false;
   }
 }
 
@@ -453,6 +502,7 @@ export function startAttendanceTracking(email: string, name = ""): void {
 
   console.log("[Attendance] tracking started for", email);
   if (attendanceState.signedIn) scheduleOfficeEndSignOut();
+  void syncAttendanceStateWithServer(email);
   setMetrics({
     progress: `0/${ATTENDANCE_CONFIG.REQUIRED_SAMPLES} samples`,
     status: attendanceState.signedIn ? "SIGNED_IN" : "WAITING",

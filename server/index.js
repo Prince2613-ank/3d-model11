@@ -275,6 +275,25 @@ async function ensureAttendanceHeader(sheets) {
   console.log("[Attendance] header row synced");
 }
 
+async function findLatestOpenSignInRow(sheets, email) {
+  const readResult = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${SHEET_NAME}!A:J`,
+  });
+
+  const rows = readResult.data.values || [];
+  for (let index = rows.length - 1; index >= 1; index -= 1) {
+    const row = rows[index];
+    const rowEmail = String(row[0] || "").trim().toLowerCase();
+    const signOut = String(row[3] || "").trim();
+    if (rowEmail === email && signOut === "") {
+      return { row, rowNumber: index + 1 };
+    }
+  }
+
+  return null;
+}
+
 function asyncRoute(handler) {
   return async (req, res, next) => {
     try {
@@ -288,6 +307,20 @@ function asyncRoute(handler) {
 app.get("/health", (req, res) => {
   res.json({ ok: true });
 });
+
+app.get("/api/attendance/status", asyncRoute(async (req, res) => {
+  const email = requiredString(req.query.email, "email").toLowerCase();
+  const sheets = await getSheetsClient();
+  await ensureAttendanceHeader(sheets);
+  const openSignIn = await findLatestOpenSignInRow(sheets, email);
+
+  res.json({
+    ok: true,
+    signedIn: Boolean(openSignIn),
+    rowNumber: openSignIn?.rowNumber,
+    signInTime: openSignIn?.row?.[2] || null,
+  });
+}));
 
 app.post("/api/attendance/signin", asyncRoute(async (req, res) => {
   const email = requiredString(req.body.email, "email").toLowerCase();
@@ -362,33 +395,16 @@ app.post("/api/attendance/signout", asyncRoute(async (req, res) => {
 
   const sheets = await getSheetsClient();
   await ensureAttendanceHeader(sheets);
-  const readResult = await sheets.spreadsheets.values.get({
-    spreadsheetId: SPREADSHEET_ID,
-    range: `${SHEET_NAME}!A:J`,
-  });
-
-  const rows = readResult.data.values || [];
-  let targetIndex = -1;
-
-  for (let index = rows.length - 1; index >= 1; index -= 1) {
-    const row = rows[index];
-    const rowEmail = String(row[0] || "").trim().toLowerCase();
-    const signOut = String(row[3] || "").trim();
-    if (rowEmail === email && signOut === "") {
-      targetIndex = index;
-      break;
-    }
-  }
-
-  if (targetIndex === -1) {
+  const openSignIn = await findLatestOpenSignInRow(sheets, email);
+  if (!openSignIn) {
     res.status(404).json({ ok: false, error: "No open sign-in row found for this email" });
     return;
   }
 
-  const row = rows[targetIndex];
+  const row = openSignIn.row;
   const signInTime = row[2];
   const totalMinutes = minutesBetween(signInTime, now);
-  const rowNumber = targetIndex + 1;
+  const rowNumber = openSignIn.rowNumber;
   const dateValue = row[8] || todayDateString(now);
 
   await sheets.spreadsheets.values.update({
