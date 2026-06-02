@@ -11,7 +11,12 @@ const PORT = Number(process.env.PORT || 5000);
 const STATIC_DIST_DIR = path.resolve(__dirname, "..", ".cesium_demo", "dist");
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
 const SHEET_NAME = process.env.SHEET_NAME || "Attendance";
-const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
+const DEFAULT_CORS_ORIGINS = [
+  "http://localhost:5173",
+  "http://localhost:5500",
+  "https://threed-model11.onrender.com",
+];
+const CORS_ORIGIN = process.env.CORS_ORIGIN || DEFAULT_CORS_ORIGINS.join(",");
 const ALLOWED_ORIGINS = CORS_ORIGIN === "*"
   ? ["*"]
   : CORS_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean);
