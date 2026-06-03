@@ -372,6 +372,8 @@ let pendingWorldRouteNavigation: {
   roomPOI: RoomPOI;
   destinationLabel: string;
 } | null = null;
+let indoorNavReadyToStart = false;
+let autoStartIndoorNav = false;
 
 function groundPosition(point: MapCoordinate): Cesium.Cartesian3 {
   return Cesium.Cartesian3.fromDegrees(point.lon, point.lat, OUTDOOR_ROUTE_HEIGHT_METERS);
@@ -1033,6 +1035,7 @@ async function enterBuildingAndStartIndoorNavigation(_targetFloor: number): Prom
 
   const fromSel = optionalElement<HTMLSelectElement>("fromRoom");
   const toSel = optionalElement<HTMLSelectElement>("toRoom");
+  indoorNavReadyToStart = true;
   if (fromSel?.value && toSel?.value) {
     optionalElement<HTMLButtonElement>("startNavBtn")?.click();
   } else {
@@ -1184,11 +1187,41 @@ export function installMapDirectionsControl(): void {
     panel.hidden = true;
   });
 
+  const navBtn = optionalElement<HTMLButtonElement>("startNavBtn");
+  const routeBtn = optionalElement<HTMLButtonElement>("showGoogleRouteBtn");
+
+  function updateActionButtons(): void {
+    const from = originInput.value.trim();
+    const to = destinationInput.value.trim();
+    const fromIsRoom = isKnownDropdownRoom(from);
+    const toIsRoom = isKnownDropdownRoom(to);
+
+    if (fromIsRoom && toIsRoom) {
+      // Room → Room: only Navigate
+      if (navBtn) { navBtn.textContent = "Navigate"; navBtn.hidden = false; }
+      if (routeBtn) routeBtn.hidden = true;
+    } else if (!fromIsRoom && toIsRoom) {
+      // Outdoor → Room: Start Indoor Navigation
+      if (navBtn) { navBtn.textContent = "Start Indoor Navigation"; navBtn.hidden = false; }
+      if (routeBtn) routeBtn.hidden = false;
+    } else {
+      // Outdoor → Outdoor or empty: Show Route only
+      if (navBtn) navBtn.hidden = to.length > 0 ? false : true;
+      if (navBtn) navBtn.textContent = "Navigate";
+      if (routeBtn) routeBtn.hidden = false;
+    }
+  }
+
+  originInput.addEventListener("input", updateActionButtons);
+  destinationInput.addEventListener("input", updateActionButtons);
+  updateActionButtons();
+
   element<HTMLButtonElement>("swapRouteBtn").addEventListener("click", () => {
     const fromVal = originInput.value;
     const toVal = destinationInput.value;
     originInput.value = toVal;
     destinationInput.value = fromVal;
+    updateActionButtons();
   });
 
   currentLocationButton.addEventListener("click", () => {
@@ -1296,10 +1329,15 @@ export function installMapDirectionsControl(): void {
           : await fetchOutdoorRoute(start, outdoorEnd as MapCoordinate);
         drawFullRoute(route.points, start, outdoorEnd as MapCoordinate, roomPOI, destination, route.distanceMeters);
 
-        if (indoorNavBtn) indoorNavBtn.hidden = !roomPOI;
+        if (indoorNavBtn) indoorNavBtn.hidden = true;
         pendingWorldRouteNavigation = roomPOI
           ? { route, roomPOI, destinationLabel: destination }
           : null;
+
+        if (roomPOI && autoStartIndoorNav) {
+          autoStartIndoorNav = false;
+          indoorNavBtn?.click();
+        }
 
         if (roomPOI?.positionApproximate) {
           showToast(`Note: ${roomPOI.name} door position is approximate — verify on site.`, "error");
@@ -1846,12 +1884,27 @@ export function bindUiControls(callbacks: UiCallbacks): void {
       return;
     }
 
-    const originInput = optionalElement<HTMLInputElement>("mapOriginInput");
-    const destInput = optionalElement<HTMLInputElement>("mapDestinationInput");
-    if (originInput && destInput) {
-      syncRoomSelectsFromInputs(originInput.value, destInput.value);
+    const originVal = optionalElement<HTMLInputElement>("mapOriginInput")?.value.trim() ?? "";
+    const destVal = optionalElement<HTMLInputElement>("mapDestinationInput")?.value.trim() ?? "";
+
+    // If indoor nav is already configured (e.g. from enterBuildingAndStartIndoorNavigation), go directly
+    if (indoorNavReadyToStart) {
+      indoorNavReadyToStart = false;
+      void callbacks.startNavigation();
+      return;
     }
 
+    const originIsRoom = isKnownDropdownRoom(originVal);
+    const destIsRoom = isKnownDropdownRoom(destVal);
+
+    // Outdoor → Indoor: show outdoor route then auto-start indoor nav
+    if (!originIsRoom && destIsRoom) {
+      autoStartIndoorNav = true;
+      optionalElement<HTMLButtonElement>("showGoogleRouteBtn")?.click();
+      return;
+    }
+
+    syncRoomSelectsFromInputs(originVal, destVal);
     void callbacks.startNavigation();
   });
 
