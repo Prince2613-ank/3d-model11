@@ -3486,6 +3486,11 @@ body {
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
 }
 
+
+.cesium-baseLayerPicker-dropDown {
+  margin-top: 40px !important;
+}
+
 .cesium-viewer-toolbar {
   top: 24px !important;
   right: 14px !important;
@@ -3533,7 +3538,7 @@ body {
 }
 
 .google-map-route-btn {
-  order: -1;
+  order: -2;
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
@@ -3544,6 +3549,25 @@ body {
   width: 24px;
   height: 24px;
   display: block;
+}
+
+.attendance-toolbar-btn {
+  order: -1;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.96) !important;
+}
+
+.attendance-toolbar-btn svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+.attendance-toolbar-btn.active {
+  background: rgba(34, 197, 94, 0.15) !important;
+  box-shadow: inset 0 0 0 2px rgba(34, 197, 94, 0.5);
 }
 
 .camera-controls-toolbar-btn {
@@ -5060,7 +5084,7 @@ body.floor-loading-active #toastContainer {
 .user-profile-header {
   position: fixed;
   top: 24px;
-  right: 204px;
+  right: 128px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5097,56 +5121,74 @@ body.floor-loading-active #toastContainer {
   z-index: 1000;
 }
 
-.attendance-panel h3 {
-  margin: 0 0 8px;
+.attendance-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 6px;
+  color: #0f172a;
+}
+
+.attendance-header h3 {
+  margin: 0;
   font-size: 15px;
-}
-
-.attendance-panel p {
-  margin: 0 0 10px;
-  color: #475569;
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.attendance-panel p[data-active="true"][data-inside="true"] {
-  color: #15803d;
   font-weight: 700;
 }
 
-.attendance-panel p[data-active="true"][data-inside="false"] {
+.attendance-status-msg {
+  margin: 0 0 10px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.attendance-status-msg[data-active="true"][data-inside="true"] {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.attendance-status-msg[data-active="true"][data-inside="false"] {
   color: #b45309;
 }
 
-.attendance-metrics {
-  display: grid;
+.attendance-info {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
   margin: 0 0 12px;
-  padding: 10px;
-  border-radius: 12px;
-  background: rgba(15, 23, 42, 0.06);
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.05);
 }
 
-.attendance-metrics div {
+.attendance-info-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  color: #64748b;
   font-size: 12px;
+  color: #64748b;
 }
 
-.attendance-metrics strong {
+.attendance-info-row strong {
   color: #0f172a;
-  font-weight: 800;
+  font-weight: 700;
   text-align: right;
 }
 
-.attendance-panel .btn {
+.attendance-badge {
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.attendance-action-btn {
   width: 100%;
 }
 
-.attendance-panel .btn:disabled {
+.attendance-action-btn:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -5155,6 +5197,7 @@ body:has(.cesium-viewer-geocoderContainer:hover) .user-profile-header,
 body:has(.cesium-geocoder-input:focus) .user-profile-header {
   right: 491px;
 }
+
 
 /* On 2nd/3rd floor the camera button is in the toolbar (+38px wider), push further left. */
 body.floor-3-active .user-profile-header,
@@ -5574,7 +5617,7 @@ body.camera-view-active .hamburger-btn {
   .user-profile-header {
     display: flex;
     top: 24px;
-    right: 204px;
+    right: 128px;
     left: auto;
     width: 34px;
     height: 34px;

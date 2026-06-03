@@ -12,6 +12,9 @@ export const viewer = new Cesium.Viewer("cesiumContainer", {
   terrainProvider: undefined,
   baseLayerPicker: true,
   geocoder: false,
+  homeButton: false,
+  sceneModePicker: false,
+  navigationHelpButton: false,
   shadows: false,
   shouldAnimate: true,
   infoBox: false,
@@ -91,7 +94,7 @@ if (viewer.baseLayerPicker) {
   viewer.baseLayerPicker.viewModel.imageryProviderViewModels = [
     new Cesium.ProviderViewModel({
       name: "OpenStreetMap",
-      iconUrl: "https://upload.wikimedia.org/wikipedia/commons/0/0a/OpenStreetMap_logo.svg",
+      iconUrl: "https://a.tile.openstreetmap.org/2/2/1.png",
       tooltip: "OpenStreetMap",
       creationFunction: () =>
         new Cesium.UrlTemplateImageryProvider({
@@ -101,14 +104,37 @@ if (viewer.baseLayerPicker) {
     }),
     new Cesium.ProviderViewModel({
       name: "Satellite",
-      iconUrl: "https://upload.wikimedia.org/wikipedia/commons/e/e3/Google_Maps_icon.svg",
+      iconUrl: "https://mt1.google.com/vt/lyrs=s&x=2&y=1&z=2",
       tooltip: "Satellite Imagery",
       creationFunction: () =>
         new Cesium.UrlTemplateImageryProvider({
           url: "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
         })
+    }),
+    new Cesium.ProviderViewModel({
+      name: "Google Maps",
+      iconUrl: "https://mt1.google.com/vt/lyrs=m&x=2&y=1&z=2",
+      tooltip: "Google Maps Road",
+      creationFunction: () =>
+        new Cesium.UrlTemplateImageryProvider({
+          url: "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
+        })
+    }),
+    new Cesium.ProviderViewModel({
+      name: "Hybrid",
+      iconUrl: "https://mt1.google.com/vt/lyrs=y&x=2&y=1&z=2",
+      tooltip: "Satellite + Roads",
+      creationFunction: () =>
+        new Cesium.UrlTemplateImageryProvider({
+          url: "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"
+        })
     })
   ];
+
+  viewer.baseLayerPicker.viewModel.terrainProviderViewModels = [];
+
+  const sectionTitle = viewer.baseLayerPicker.container.querySelector(".cesium-baseLayerPicker-sectionTitle");
+  if (sectionTitle) sectionTitle.textContent = "Layers";
 }
 
 export const routeArrowCollection = viewer.scene.primitives.add(new Cesium.BillboardCollection());

@@ -115,7 +115,26 @@ function setMetrics(values: {
   if (typeof values.accuracy === "number") setText("attendanceAccuracy", `${Math.round(values.accuracy)}m`);
   if (typeof values.distance === "number") setText("attendanceDistance", `${Math.round(values.distance)}m`);
   if (values.progress) setText("attendanceProgress", values.progress);
-  if (values.status) setText("attendanceCurrentStatus", values.status);
+  if (values.status) {
+    const badge = document.getElementById("attendanceCurrentStatus");
+    const labelMap: Record<string, { text: string; bg: string; color: string }> = {
+      WAITING:               { text: "Inactive",   bg: "#f1f5f9", color: "#475569" },
+      VERIFYING:             { text: "Verifying…", bg: "#fef9c3", color: "#854d0e" },
+      SIGNED_IN:             { text: "Signed In",  bg: "#dcfce7", color: "#15803d" },
+      VERIFIED:              { text: "Signed In",  bg: "#dcfce7", color: "#15803d" },
+      SIGNED_OUT:            { text: "Signed Out", bg: "#fee2e2", color: "#b91c1c" },
+      AUTO_SIGNOUT:          { text: "Auto Sign-Out", bg: "#fee2e2", color: "#b91c1c" },
+      LOW_ACCURACY:          { text: "Poor GPS",   bg: "#fef3c7", color: "#92400e" },
+      SUSPICIOUS_SPEED:      { text: "Suspicious", bg: "#fef3c7", color: "#92400e" },
+      LOCATION_INCONSISTENT: { text: "Bad Location", bg: "#fef3c7", color: "#92400e" },
+    };
+    const style = labelMap[values.status] ?? { text: values.status, bg: "#f1f5f9", color: "#475569" };
+    if (badge) {
+      badge.textContent = style.text;
+      (badge as HTMLElement).style.background = style.bg;
+      (badge as HTMLElement).style.color = style.color;
+    }
+  }
   if (values.lastSignIn) setText("attendanceLastSignIn", values.lastSignIn);
 }
 

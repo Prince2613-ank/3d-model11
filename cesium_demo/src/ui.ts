@@ -934,6 +934,32 @@ async function fetchOutdoorRoute(start: MapCoordinate, end: MapCoordinate): Prom
   return { points: [], distanceMeters: haversineDistanceMeters(start, end) };
 }
 
+function createAttendanceToolbarButton(): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.id = "attendanceToolbarBtn";
+  button.className = "cesium-toolbar-button attendance-toolbar-btn";
+  button.type = "button";
+  button.title = "Attendance";
+  button.setAttribute("aria-label", "Attendance");
+  button.innerHTML = `
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="12" cy="7" r="3.5" stroke="currentColor" stroke-width="1.8"/>
+      <path d="M4.5 20c0-4 3.4-7 7.5-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      <circle cx="18" cy="17" r="4" fill="#22c55e"/>
+      <path d="M15.8 17l1.4 1.5 2.5-2.8" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  `;
+  button.addEventListener("click", () => {
+    const panel = document.getElementById("attendancePanel");
+    if (!panel) return;
+    const opening = panel.hidden;
+    panel.hidden = !opening;
+    button.classList.toggle("active", opening);
+    button.setAttribute("aria-pressed", String(opening));
+  });
+  return button;
+}
+
 function createMapToolbarButton(): HTMLButtonElement {
   const button = document.createElement("button");
   button.id = "googleMapRouteBtn";
@@ -1087,6 +1113,15 @@ function isKnownDropdownRoom(value: string): boolean {
   );
 }
 
+function syncUserProfileToToolbar(toolbar: HTMLElement): void {
+  const userProfile = document.getElementById("userProfile") as HTMLElement | null;
+  if (!userProfile) return;
+  const activeFloor = Number(document.body.dataset.activeFloor ?? "0");
+  const gap = (activeFloor === 3 || activeFloor === 4) ? 5 : 8;
+  const toolbarLeft = toolbar.getBoundingClientRect().left;
+  userProfile.style.right = `${window.innerWidth - toolbarLeft + gap}px`;
+}
+
 export function installMapDirectionsControl(): void {
   bindEnterBuildingPrompt();
   bindMapAutocomplete("mapOriginInput", "mapOriginDropdown");
@@ -1098,6 +1133,14 @@ export function installMapDirectionsControl(): void {
 
   const button = createMapToolbarButton();
   toolbar.prepend(button);
+
+  if (!document.getElementById("attendanceToolbarBtn")) {
+    button.insertAdjacentElement("afterend", createAttendanceToolbarButton());
+  }
+
+  syncUserProfileToToolbar(toolbar);
+  new ResizeObserver(() => syncUserProfileToToolbar(toolbar)).observe(toolbar);
+  window.addEventListener("resize", () => syncUserProfileToToolbar(toolbar));
 
   const originInput = element<HTMLInputElement>("mapOriginInput");
   const destinationInput = element<HTMLInputElement>("mapDestinationInput");
@@ -1700,6 +1743,10 @@ export function bindUiControls(callbacks: UiCallbacks): void {
 
       const floor = Number(button.dataset.floor ?? "0");
       if (button.disabled) return;
+
+      document.body.dataset.activeFloor = String(floor);
+      const tb = document.querySelector<HTMLElement>(".cesium-viewer-toolbar");
+      if (tb) syncUserProfileToToolbar(tb);
 
       const floorName = button.textContent?.replace("Show ", "") ?? "floor";
       const label = floor === 0

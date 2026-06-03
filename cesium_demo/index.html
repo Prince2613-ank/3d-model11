@@ -287,17 +287,26 @@
     </div>
   </div>
 
-  <section id="attendancePanel" class="attendance-panel common-panel" aria-label="Attendance">
-    <h3>Attendance</h3>
-    <p id="attendanceStatus" data-active="false" data-inside="false">Sign in with Google to start attendance.</p>
-    <div class="attendance-metrics" aria-label="Attendance verification details">
-      <div><span>GPS Accuracy</span><strong id="attendanceAccuracy">--</strong></div>
-      <div><span>Distance</span><strong id="attendanceDistance">--</strong></div>
-      <div><span>Verification</span><strong id="attendanceProgress">0/5 samples</strong></div>
-      <div><span>Status</span><strong id="attendanceCurrentStatus">Waiting</strong></div>
-      <div><span>Last Sign-In</span><strong id="attendanceLastSignIn">--</strong></div>
+  <section id="attendancePanel" class="attendance-panel common-panel" aria-label="Attendance" hidden>
+    <div class="attendance-header">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
+        <path d="M5 20c0-4 3.1-7 7-7s7 3 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <h3>Attendance</h3>
     </div>
-    <button id="attendanceStartBtn" class="btn" type="button" disabled>Start Attendance</button>
+    <p id="attendanceStatus" class="attendance-status-msg" data-active="false" data-inside="false">Sign in with Google to start attendance.</p>
+    <div class="attendance-info">
+      <div class="attendance-info-row">
+        <span>Status</span>
+        <strong id="attendanceCurrentStatus" class="attendance-badge">Inactive</strong>
+      </div>
+      <div class="attendance-info-row">
+        <span>Check-In</span>
+        <strong id="attendanceLastSignIn">--</strong>
+      </div>
+    </div>
+    <button id="attendanceStartBtn" class="btn attendance-action-btn" type="button" disabled>Start Attendance</button>
   </section>
 
   <section id="cameraPanel" class="panel common-panel" aria-label="Camera controls"
