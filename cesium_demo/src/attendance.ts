@@ -123,6 +123,10 @@ function updateButton(): void {
   const button = buttonElement();
   if (!button) return;
   button.disabled = !activeUser;
+  if (attendanceState.signedIn) {
+    button.textContent = "Sign Out Attendance";
+    return;
+  }
   button.textContent = watchId === null ? "Start Attendance" : "Stop Attendance";
 }
 
@@ -562,7 +566,20 @@ export function clearAttendanceUser(): void {
 
 export function bindAttendanceControls(): void {
   updateButton();
-  buttonElement()?.addEventListener("click", () => {
+  buttonElement()?.addEventListener("click", async () => {
+    if (activeUser && attendanceState.signedIn) {
+      try {
+        setAttendanceStatus({ active: true, inside: true, text: "Signing out attendance..." });
+        const position = lastPosition ?? await getCurrentPositionOnce();
+        await saveSignOut(position, "VERIFIED");
+      } catch (error) {
+        console.error("[Attendance] manual sign-out failed:", error);
+        showToast("Attendance sign-out failed. Check backend logs.", "error");
+      }
+      updateButton();
+      return;
+    }
+
     if (watchId === null) {
       if (activeUser) startAttendanceTracking(activeUser.email, activeUser.name);
     } else {
