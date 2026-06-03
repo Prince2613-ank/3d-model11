@@ -2,13 +2,11 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
-const path = require("path");
 const { google } = require("googleapis");
 
 const app = express();
 
 const PORT = Number(process.env.PORT || 5000);
-const STATIC_DIST_DIR = path.resolve(__dirname, "..", ".cesium_demo", "dist");
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
 const SHEET_NAME = process.env.SHEET_NAME || "Attendance";
 const DEFAULT_CORS_ORIGINS = [
@@ -318,6 +316,13 @@ function asyncRoute(handler) {
   };
 }
 
+app.get("/", (req, res) => {
+  res.json({
+    ok: true,
+    service: "attendance-backend",
+  });
+});
+
 app.get("/health", (req, res) => {
   res.json({ ok: true });
 });
@@ -465,15 +470,6 @@ app.post("/api/attendance/signout", asyncRoute(async (req, res) => {
     updatedRange: updateResult.data.updatedRange,
   });
 }));
-
-app.use(express.static(STATIC_DIST_DIR));
-app.get("*", (req, res, next) => {
-  if (req.path.startsWith("/api/")) {
-    next();
-    return;
-  }
-  res.sendFile(path.join(STATIC_DIST_DIR, "index.html"));
-});
 
 app.use((err, req, res, next) => {
   const status = err.message && (err.message.includes("required") || err.message.includes("valid number"))
