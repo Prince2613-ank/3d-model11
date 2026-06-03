@@ -260,8 +260,11 @@ async function getSheetsClient() {
     throw new Error("SPREADSHEET_ID is not configured");
   }
 
+  const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+  credentials.private_key = credentials.private_key.replace(/\\n/g, "\n");
+
   const auth = new google.auth.GoogleAuth({
-    keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS || "./service-account.json",
+    credentials,
     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
 
