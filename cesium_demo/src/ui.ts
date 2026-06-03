@@ -952,7 +952,7 @@ function createAttendanceToolbarButton(): HTMLButtonElement {
   button.addEventListener("click", () => {
     const panel = document.getElementById("attendancePanel");
     if (!panel) return;
-    const opening = panel.hidden;
+    const opening = panel.hidden === true;
     panel.hidden = !opening;
     button.classList.toggle("active", opening);
     button.setAttribute("aria-pressed", String(opening));
