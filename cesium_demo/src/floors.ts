@@ -81,6 +81,13 @@ function applyVisibility(floor: number): void {
     setShow(viewer.dataSources.get(index), false);
   }
 
+  // Hide globe (map tiles) for indoor floors — shows clean black background
+  const isIndoor = floor >= 2;
+  viewer.scene.globe.show = !isIndoor;
+  viewer.scene.backgroundColor = isIndoor
+    ? Cesium.Color.BLACK
+    : new Cesium.Color(0.1, 0.15, 0.25, 1.0);
+
   setShow(models.fullBuilding, floor === 0);
   setShow(models.outdoor, floor === 0);
   setShow(models.ground, floor === 1);
