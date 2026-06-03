@@ -2063,7 +2063,7 @@ export function updateNavigationUI(summary: NavigationSummary): void {
     toggleBtn.hidden = false;
     toggleBtn.classList.remove("open");
     toggleBtn.onclick = () => {
-      const open = stepsEl.hidden;
+      const open = stepsEl.hidden === true;
       stepsEl.hidden = !open;
       toggleBtn.classList.toggle("open", open);
     };
