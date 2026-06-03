@@ -590,11 +590,12 @@ export function bindAttendanceControls(): void {
         setAttendanceStatus({ active: true, inside: true, text: "Signing out attendance..." });
         const position = lastPosition ?? await getCurrentPositionOnce();
         await saveSignOut(position, "VERIFIED");
+        stopAttendanceTracking();
       } catch (error) {
         console.error("[Attendance] manual sign-out failed:", error);
         showToast("Attendance sign-out failed. Check backend logs.", "error");
+        updateButton();
       }
-      updateButton();
       return;
     }
 
