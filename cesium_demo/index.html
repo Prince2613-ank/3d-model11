@@ -234,32 +234,67 @@
     <div id="navigationHudDistance" class="navigation-hud-distance">0 m</div>
   </div>
 
-  <section id="mapDirectionsPanel" class="map-directions-panel" aria-label="Google Maps directions" hidden>
+  <section id="mapDirectionsPanel" class="map-directions-panel" aria-label="Map Route" hidden>
     <div class="map-directions-header">
       <strong>Map Route</strong>
       <button id="mapDirectionsCloseBtn" type="button" aria-label="Close map route">x</button>
     </div>
+
     <label for="mapOriginInput">From</label>
-    <div class="map-input-row">
-      <div class="map-autocomplete-wrapper">
-        <input id="mapOriginInput" type="text" placeholder="Current location or address" autocomplete="off" />
-        <button type="button" class="map-autocomplete-arrow" tabindex="-1" aria-label="Show room options" data-target="mapOriginInput"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="3" width="14" height="2" rx="1" fill="currentColor"/><rect x="1" y="7" width="14" height="2" rx="1" fill="currentColor"/><rect x="1" y="11" width="9" height="2" rx="1" fill="currentColor"/></svg></button>
-        <ul id="mapOriginDropdown" class="map-autocomplete-dropdown" role="listbox" hidden></ul>
-      </div>
-      <button id="useCurrentLocationBtn" type="button" title="Use current location">Locate</button>
-    </div>
-    <label for="mapDestinationInput">To (room or address)</label>
     <div class="map-autocomplete-wrapper">
-      <input id="mapDestinationInput" type="text" value="Manthan" placeholder="Room name or address" autocomplete="off" />
-      <button type="button" class="map-autocomplete-arrow" tabindex="-1" aria-label="Show room options" data-target="mapDestinationInput"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="3" width="14" height="2" rx="1" fill="currentColor"/><rect x="1" y="7" width="14" height="2" rx="1" fill="currentColor"/><rect x="1" y="11" width="9" height="2" rx="1" fill="currentColor"/></svg></button>
+      <input id="mapOriginInput" type="text" placeholder="Room or address" autocomplete="off" />
+      <button type="button" class="map-autocomplete-arrow" tabindex="-1" aria-label="Show options" data-target="mapOriginInput"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="3" width="14" height="2" rx="1" fill="currentColor"/><rect x="1" y="7" width="14" height="2" rx="1" fill="currentColor"/><rect x="1" y="11" width="9" height="2" rx="1" fill="currentColor"/></svg></button>
+      <button id="useCurrentLocationBtn" type="button" class="map-locate-icon-btn" title="Use current location" aria-label="Use current location">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <ul id="mapOriginDropdown" class="map-autocomplete-dropdown" role="listbox" hidden></ul>
+    </div>
+
+    <div class="map-swap-row">
+      <button id="swapRouteBtn" type="button" class="map-swap-btn" aria-label="Swap From and To">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M7 4v13M7 17l-3-3m3 3 3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M17 20V7m0-3 3 3m-3-3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+
+    <label for="mapDestinationInput">To</label>
+    <div class="map-autocomplete-wrapper">
+      <input id="mapDestinationInput" type="text" placeholder="Room or address" autocomplete="off" />
+      <button type="button" class="map-autocomplete-arrow" tabindex="-1" aria-label="Show options" data-target="mapDestinationInput"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="3" width="14" height="2" rx="1" fill="currentColor"/><rect x="1" y="7" width="14" height="2" rx="1" fill="currentColor"/><rect x="1" y="11" width="9" height="2" rx="1" fill="currentColor"/></svg></button>
       <ul id="mapDestinationDropdown" class="map-autocomplete-dropdown" role="listbox" hidden></ul>
     </div>
-    <button id="showGoogleRouteBtn" class="map-route-btn" type="button">Show Route</button>
+
+    <!-- Hidden selects kept for indoor nav JS compatibility -->
+    <select id="fromRoom" hidden></select>
+    <select id="toRoom" hidden></select>
+    <!-- Hidden display elements for nav JS compatibility -->
+    <span id="fromNameDisplay" hidden></span>
+    <span id="toNameDisplay" hidden></span>
+
+    <div class="map-action-row">
+      <button id="showGoogleRouteBtn" class="map-route-btn map-route-btn--outline" type="button">Show Route</button>
+      <button id="startNavBtn" class="map-route-btn" type="button">Navigate</button>
+    </div>
+    <button id="exitNavBtn" class="map-route-btn map-route-btn--danger" type="button" hidden>Exit Navigation</button>
+    <button id="worldRouteIndoorNavBtn" class="map-route-btn" type="button" hidden style="background:#0055cc; margin-top:4px;">&#8594; Start Indoor Navigation</button>
+
     <div id="mapRouteSummary" class="map-route-summary" hidden></div>
-    <button id="worldRouteIndoorNavBtn" class="map-route-btn" type="button" hidden
-      style="background:#0055cc; margin-top:4px;">
-      &#8594; Start Indoor Navigation
+    <div id="navSummary" class="nav-summary" hidden></div>
+    <button id="toggleDirectionsBtn" class="map-toggle-directions-btn" type="button" hidden>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 6h18M3 12h18M3 18h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      View Directions
+      <svg class="toggle-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
     </button>
+    <div id="navSteps" class="nav-steps" hidden></div>
   </section>
   
   <button id="hamburgerMenu" class="hamburger-btn" aria-label="Toggle Controls" title="Toggle Controls">
@@ -381,37 +416,6 @@
       <button class="btn" type="button" data-floor="0">Show All Floors</button>
     </section>
   
-    <section id="navPanel" class="nav-container common-panel" aria-label="Indoor navigation">
-      <div class="nav-top-card">
-        <div class="nav-location">
-          <div class="loc-icon red"></div>
-          <div class="nav-text">
-            <div class="loc-sub">From</div>
-            <div id="fromNameDisplay" class="loc-title">Select start</div>
-          </div>
-        </div>
-        <button id="swapRoomsBtn" class="nav-swap" title="Swap rooms">⇄</button>
-        <div class="nav-location">
-          <div class="loc-icon blue"></div>
-          <div class="nav-text">
-            <div class="loc-sub">To</div>
-            <div id="toNameDisplay" class="loc-title">Select end</div>
-          </div>
-        </div>
-      </div>
-  
-      <div class="nav-dropdowns">
-        <label for="fromRoom">From</label>
-        <select id="fromRoom"></select>
-        <label for="toRoom">To</label>
-        <select id="toRoom"></select>
-        <button id="startNavBtn" class="nav-btn">Start Navigation</button>
-        <button id="exitNavBtn" class="nav-btn nav-exit-btn" hidden>Exit Navigation</button>
-      </div>
-  
-      <div id="navSummary" class="nav-summary">Choose rooms to start navigation.</div>
-      <div id="navSteps" class="nav-steps"></div>
-    </section>
   </div>
 
   <div id="menuBackdrop" class="menu-backdrop"></div>

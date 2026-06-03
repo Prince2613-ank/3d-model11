@@ -140,6 +140,13 @@ function syncIndoorRouteFromMap(destination: string): void {
   }
 }
 
+function syncRoomSelectsFromInputs(fromVal: string, toVal: string): void {
+  const fromRoom = optionalElement<HTMLSelectElement>("fromRoom");
+  const toRoom = optionalElement<HTMLSelectElement>("toRoom");
+  if (fromRoom && fromVal.trim()) selectIndoorRoom("fromRoom", fromVal.trim());
+  if (toRoom && toVal.trim()) selectIndoorRoom("toRoom", toVal.trim());
+}
+
 function parseCoordinateInput(value: string): MapCoordinate | null {
   const match = value.trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
   if (!match) return null;
@@ -953,9 +960,12 @@ function createAttendanceToolbarButton(): HTMLButtonElement {
     const panel = document.getElementById("attendancePanel");
     if (!panel) return;
     const opening = panel.hidden === true;
-    panel.hidden = !opening;
-    button.classList.toggle("active", opening);
-    button.setAttribute("aria-pressed", String(opening));
+    closeAllToolbarPanels();
+    if (opening) {
+      panel.hidden = false;
+      button.classList.add("active");
+      button.setAttribute("aria-pressed", "true");
+    }
   });
   return button;
 }
@@ -1122,6 +1132,19 @@ function syncUserProfileToToolbar(toolbar: HTMLElement): void {
   userProfile.style.right = `${window.innerWidth - toolbarLeft + gap}px`;
 }
 
+function closeAllToolbarPanels(): void {
+  const attendancePanel = document.getElementById("attendancePanel");
+  if (attendancePanel) attendancePanel.hidden = true;
+  const attendanceBtn = document.getElementById("attendanceToolbarBtn");
+  if (attendanceBtn) {
+    attendanceBtn.classList.remove("active");
+    attendanceBtn.setAttribute("aria-pressed", "false");
+  }
+
+  const mapPanel = document.getElementById("mapDirectionsPanel");
+  if (mapPanel) mapPanel.hidden = true;
+}
+
 export function installMapDirectionsControl(): void {
   bindEnterBuildingPrompt();
   bindMapAutocomplete("mapOriginInput", "mapOriginDropdown");
@@ -1149,12 +1172,23 @@ export function installMapDirectionsControl(): void {
   const routeButton = element<HTMLButtonElement>("showGoogleRouteBtn");
 
   button.addEventListener("click", () => {
-    panel.hidden = !panel.hidden;
-    if (!panel.hidden) destinationInput.focus();
+    const opening = panel.hidden;
+    closeAllToolbarPanels();
+    if (opening) {
+      panel.hidden = false;
+      destinationInput.focus();
+    }
   });
 
   closeButton.addEventListener("click", () => {
     panel.hidden = true;
+  });
+
+  element<HTMLButtonElement>("swapRouteBtn").addEventListener("click", () => {
+    const fromVal = originInput.value;
+    const toVal = destinationInput.value;
+    originInput.value = toVal;
+    destinationInput.value = fromVal;
   });
 
   currentLocationButton.addEventListener("click", () => {
@@ -1812,6 +1846,12 @@ export function bindUiControls(callbacks: UiCallbacks): void {
       return;
     }
 
+    const originInput = optionalElement<HTMLInputElement>("mapOriginInput");
+    const destInput = optionalElement<HTMLInputElement>("mapDestinationInput");
+    if (originInput && destInput) {
+      syncRoomSelectsFromInputs(originInput.value, destInput.value);
+    }
+
     void callbacks.startNavigation();
   });
 
@@ -1840,6 +1880,28 @@ export function populateRoomDropdowns(names: string[]): void {
   element<HTMLSelectElement>("toRoom").innerHTML = options;
 }
 
+async function fetchAddressSuggestions(query: string): Promise<string[]> {
+  if (query.trim().length < 2) return [];
+  try {
+    const url = new URL("https://nominatim.openstreetmap.org/search");
+    url.searchParams.set("format", "jsonv2");
+    url.searchParams.set("limit", "5");
+    url.searchParams.set("accept-language", "en");
+    url.searchParams.set("q", query);
+    if (looksLikeIndiaQuery(normalizeMapSearchText(query))) {
+      url.searchParams.set("countrycodes", "in");
+    }
+    const res = await fetch(url.toString(), {
+      headers: { "User-Agent": "FloDataIndoorNav/1.0" },
+    });
+    if (!res.ok) return [];
+    const results = await res.json() as Array<{ display_name?: string }>;
+    return results.map((r) => r.display_name ?? "").filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 function bindMapAutocomplete(
   inputId: string,
   dropdownId: string
@@ -1849,6 +1911,8 @@ function bindMapAutocomplete(
   if (!inputEl || !dropdownEl) return;
   const input = inputEl;
   const dropdown = dropdownEl;
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let selecting = false;
 
   function getRoomNames(): string[] {
     return cachedRoomNames.length > 0
@@ -1858,22 +1922,28 @@ function bindMapAutocomplete(
         ).map((o) => o.value).filter(Boolean);
   }
 
-  function buildItems(filter: string): string[] {
+  function buildRoomItems(filter: string): string[] {
     const q = filter.toLowerCase().trim();
     const rooms = getRoomNames();
     if (!q) return rooms;
     return rooms.filter((r) => r.toLowerCase().includes(q));
   }
 
-  function renderDropdown(filter: string): void {
-    const items = buildItems(filter);
-    if (items.length === 0) {
+  function renderDropdown(rooms: string[], addresses: string[]): void {
+    if (rooms.length === 0 && addresses.length === 0) {
       dropdown.hidden = true;
       return;
     }
-    dropdown.innerHTML = items
-      .map((name) => `<li role="option" tabindex="-1">${name}</li>`)
-      .join("");
+    let html = "";
+    if (rooms.length > 0) {
+      html += `<li class="map-ac-section" role="presentation">Rooms</li>`;
+      html += rooms.map((name) => `<li role="option" tabindex="-1">${name}</li>`).join("");
+    }
+    if (addresses.length > 0) {
+      html += `<li class="map-ac-section" role="presentation">Addresses</li>`;
+      html += addresses.map((name) => `<li role="option" tabindex="-1">${name}</li>`).join("");
+    }
+    dropdown.innerHTML = html;
     dropdown.hidden = false;
   }
 
@@ -1882,24 +1952,40 @@ function bindMapAutocomplete(
   }
 
   function selectItem(value: string): void {
+    selecting = true;
     input.value = value;
     closeDropdown();
     input.dispatchEvent(new Event("input", { bubbles: true }));
+    selecting = false;
+  }
+
+  function triggerSearch(query: string): void {
+    const rooms = buildRoomItems(query);
+    renderDropdown(rooms, []);
+    if (debounceTimer) clearTimeout(debounceTimer);
+    if (query.trim().length >= 2) {
+      debounceTimer = setTimeout(() => {
+        void fetchAddressSuggestions(query).then((addresses) => {
+          if (input.value === query) renderDropdown(buildRoomItems(query), addresses);
+        });
+      }, 320);
+    }
   }
 
   input.addEventListener("input", () => {
-    renderDropdown(input.value);
+    if (selecting) return;
+    triggerSearch(input.value);
   });
 
   input.addEventListener("focus", () => {
-    if (!input.value.trim()) renderDropdown("");
+    if (!input.value.trim()) renderDropdown(buildRoomItems(""), []);
   });
 
   // Arrow button: always show full room list so user can pick a different room
   const arrow = input.parentElement?.querySelector<HTMLButtonElement>(".map-autocomplete-arrow");
   arrow?.addEventListener("click", () => {
     if (dropdown.hidden) {
-      renderDropdown("");
+      renderDropdown(buildRoomItems(""), []);
       input.focus();
     } else {
       closeDropdown();
@@ -1953,8 +2039,12 @@ export function updateNavigationUI(summary: NavigationSummary): void {
   setText("fromNameDisplay", summary.fromName);
   setText("toNameDisplay", summary.toName);
 
-  element<HTMLElement>("navSummary").innerHTML = `Walk ${summary.totalDistance} m &nbsp; ${summary.totalTime} min`;
-  element<HTMLElement>("navSteps").innerHTML = summary.list
+  const summaryEl = element<HTMLElement>("navSummary");
+  summaryEl.innerHTML = `Walk ${summary.totalDistance} m &nbsp; ${summary.totalTime} min`;
+  summaryEl.hidden = false;
+
+  const stepsEl = element<HTMLElement>("navSteps");
+  stepsEl.innerHTML = summary.list
     .map(
       (step) => `
         <div class="nav-step">
@@ -1966,12 +2056,28 @@ export function updateNavigationUI(summary: NavigationSummary): void {
         </div>`
     )
     .join("");
+  stepsEl.hidden = true;
+
+  const toggleBtn = optionalElement<HTMLButtonElement>("toggleDirectionsBtn");
+  if (toggleBtn) {
+    toggleBtn.hidden = false;
+    toggleBtn.classList.remove("open");
+    toggleBtn.onclick = () => {
+      const open = stepsEl.hidden;
+      stepsEl.hidden = !open;
+      toggleBtn.classList.toggle("open", open);
+    };
+  }
 }
 
 export function setNavigationMessage(message: string, clearSteps = true): void {
-  setText("navSummary", message);
+  const summaryEl = optionalElement<HTMLElement>("navSummary");
+  if (summaryEl) { summaryEl.textContent = message; summaryEl.hidden = !message; }
   if (clearSteps) {
-    element<HTMLElement>("navSteps").innerHTML = "";
+    const stepsEl = optionalElement<HTMLElement>("navSteps");
+    if (stepsEl) { stepsEl.innerHTML = ""; stepsEl.hidden = true; }
+    const toggleBtn = optionalElement<HTMLButtonElement>("toggleDirectionsBtn");
+    if (toggleBtn) toggleBtn.hidden = true;
   }
 }
 

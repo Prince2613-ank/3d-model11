@@ -26,8 +26,8 @@ export const viewer = new Cesium.Viewer("cesiumContainer", {
   msaaSamples: 1  // 4→1: cuts framebuffer GPU memory by 4× (prevents context loss under load)
 } as Cesium.Viewer.ConstructorOptions);
 
-viewer.scene.screenSpaceCameraController.minimumZoomDistance = 1.0;
-viewer.scene.screenSpaceCameraController.maximumZoomDistance = 300.0;
+viewer.scene.screenSpaceCameraController.minimumZoomDistance = 0.5;
+viewer.scene.screenSpaceCameraController.maximumZoomDistance = 20000.0;
 (viewer.scene.screenSpaceCameraController as any).minimumPitch = Cesium.Math.toRadians(-85);
 (viewer.scene.screenSpaceCameraController as any).maximumPitch = Cesium.Math.toRadians(-5);
 viewer.scene.postProcessStages.fxaa.enabled = true;
