@@ -2,13 +2,11 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
-const path = require("path");
 const { google } = require("googleapis");
 
 const app = express();
 
 const PORT = Number(process.env.PORT || 5000);
-const STATIC_DIST_DIR = path.resolve(__dirname, "..", ".cesium_demo", "dist");
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
 const SHEET_NAME = process.env.SHEET_NAME || "Attendance";
 const DEFAULT_CORS_ORIGINS = [
@@ -262,8 +260,11 @@ async function getSheetsClient() {
     throw new Error("SPREADSHEET_ID is not configured");
   }
 
+  const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+  credentials.private_key = credentials.private_key.replace(/\\n/g, "\n");
+
   const auth = new google.auth.GoogleAuth({
-    keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS || "./service-account.json",
+    credentials,
     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
 
@@ -318,161 +319,195 @@ function asyncRoute(handler) {
   };
 }
 
+app.get("/", (req, res) => {
+  res.json({
+    ok: true,
+    service: "attendance-backend",
+  });
+});
+
 app.get("/health", (req, res) => {
   res.json({ ok: true });
 });
 
-app.get("/api/attendance/status", asyncRoute(async (req, res) => {
-  const email = requiredString(req.query.email, "email").toLowerCase();
-  const sheets = await getSheetsClient();
-  await ensureAttendanceHeader(sheets);
-  const openSignIn = await findLatestOpenSignInRow(sheets, email);
-  console.log("[Attendance Status]", email, {
-    signedIn: Boolean(openSignIn),
-    rowNumber: openSignIn?.rowNumber || null,
-    signInTime: openSignIn?.row?.[2] || null,
-  });
-
-  res.json({
-    ok: true,
-    signedIn: Boolean(openSignIn),
-    rowNumber: openSignIn?.rowNumber,
-    signInTime: openSignIn?.row?.[2] || null,
-  });
-}));
-
-app.post("/api/attendance/signin", asyncRoute(async (req, res) => {
-  const email = requiredString(req.body.email, "email").toLowerCase();
-  const name = optionalString(req.body.name);
-  const lat = requiredNumber(req.body.lat, "lat");
-  const lng = requiredNumber(req.body.lng, "lng");
-  const accuracy = requiredNumber(req.body.accuracy, "accuracy");
-  const now = new Date();
-  const signInTime = attendanceDateTimeString(now);
-  const distance = distanceMeters({ lat, lng }, OFFICE_CENTER);
-
-  console.log("[Attendance SignIn] received", email, {
-    sheetName: SHEET_NAME,
-    spreadsheetIdSuffix: SPREADSHEET_ID ? SPREADSHEET_ID.slice(-6) : null,
-    signInTime,
-    accuracy: Math.round(accuracy),
-    distance: Math.round(distance),
-    sampleCount: Array.isArray(req.body.samples) ? req.body.samples.length : 0,
-  });
-
-  if (!isWithinOfficeHours(now)) {
-    res.status(403).json({
-      ok: false,
-      error: "Attendance sign-in is allowed only from 09:30 to 19:30 IST",
+app.get("/api/attendance/status", async (req, res) => {
+  try {
+    const email = requiredString(req.query.email, "email").toLowerCase();
+    const sheets = await getSheetsClient();
+    await ensureAttendanceHeader(sheets);
+    const openSignIn = await findLatestOpenSignInRow(sheets, email);
+    console.log("[Attendance Status]", email, {
+      signedIn: Boolean(openSignIn),
+      rowNumber: openSignIn?.rowNumber || null,
+      signInTime: openSignIn?.row?.[2] || null,
     });
-    return;
+
+    res.json({
+      ok: true,
+      signedIn: Boolean(openSignIn),
+      rowNumber: openSignIn?.rowNumber,
+      signInTime: openSignIn?.row?.[2] || null,
+    });
+  } catch (error) {
+    console.error("[Attendance Status Error]", error);
+
+    res.status(500).json({
+      ok: false,
+      route: "/api/attendance/status",
+      error: error.message,
+      code: error.code || null,
+      details: error.errors || null,
+    });
   }
+});
 
-  const validation = validateAttendanceSamples(req.body.samples);
-  console.log("[Attendance Validation] sign-in:", email, validation.status, validation.reason);
-  if (!validation.ok) {
-    res.status(403).json({ ok: false, error: validation.reason, status: validation.status });
-    return;
+app.post("/api/attendance/signin", async (req, res) => {
+  try {
+    const email = requiredString(req.body.email, "email").toLowerCase();
+    const name = optionalString(req.body.name);
+    const lat = requiredNumber(req.body.lat, "lat");
+    const lng = requiredNumber(req.body.lng, "lng");
+    const accuracy = requiredNumber(req.body.accuracy, "accuracy");
+    const now = new Date();
+    const signInTime = attendanceDateTimeString(now);
+    const distance = distanceMeters({ lat, lng }, OFFICE_CENTER);
+
+    console.log("[Attendance SignIn] received", email, {
+      sheetName: SHEET_NAME,
+      spreadsheetIdSuffix: SPREADSHEET_ID ? SPREADSHEET_ID.slice(-6) : null,
+      signInTime,
+      accuracy: Math.round(accuracy),
+      distance: Math.round(distance),
+      sampleCount: Array.isArray(req.body.samples) ? req.body.samples.length : 0,
+    });
+
+    if (!isWithinOfficeHours(now)) {
+      res.status(403).json({
+        ok: false,
+        error: "Attendance sign-in is allowed only from 09:30 to 19:30 IST",
+      });
+      return;
+    }
+
+    const validation = validateAttendanceSamples(req.body.samples);
+    console.log("[Attendance Validation] sign-in:", email, validation.status, validation.reason);
+    if (!validation.ok) {
+      res.status(403).json({ ok: false, error: validation.reason, status: validation.status });
+      return;
+    }
+
+    const sheets = await getSheetsClient();
+    await ensureAttendanceHeader(sheets);
+    const appendResult = await sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${SHEET_NAME}!A:J`,
+      valueInputOption: "USER_ENTERED",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: {
+        values: [[
+          email,
+          name,
+          signInTime,
+          "",
+          "",
+          lat,
+          lng,
+          accuracy,
+          todayDateString(now),
+          validation.status,
+        ]],
+      },
+    });
+
+    console.log("[Attendance] sign-in saved:", email, {
+      updatedRange: appendResult.data.updates?.updatedRange || null,
+      updatedRows: appendResult.data.updates?.updatedRows || null,
+    });
+    res.status(201).json({
+      ok: true,
+      message: "Sign-in saved",
+      updatedRange: appendResult.data.updates?.updatedRange,
+    });
+  } catch (error) {
+    console.error("[Attendance Signin Error]", error);
+
+    res.status(500).json({
+      ok: false,
+      route: "/api/attendance/signin",
+      error: error.message,
+      code: error.code || null,
+      details: error.errors || null,
+    });
   }
+});
 
-  const sheets = await getSheetsClient();
-  await ensureAttendanceHeader(sheets);
-  const appendResult = await sheets.spreadsheets.values.append({
-    spreadsheetId: SPREADSHEET_ID,
-    range: `${SHEET_NAME}!A:J`,
-    valueInputOption: "USER_ENTERED",
-    insertDataOption: "INSERT_ROWS",
-    requestBody: {
-      values: [[
-        email,
-        name,
-        signInTime,
-        "",
-        "",
-        lat,
-        lng,
-        accuracy,
-        todayDateString(now),
-        validation.status,
-      ]],
-    },
-  });
+app.post("/api/attendance/signout", async (req, res) => {
+  try {
+    const email = requiredString(req.body.email, "email").toLowerCase();
+    const lat = requiredNumber(req.body.lat, "lat");
+    const lng = requiredNumber(req.body.lng, "lng");
+    const accuracy = requiredNumber(req.body.accuracy, "accuracy");
+    const status = optionalStatus(req.body.status, "VERIFIED");
+    const now = new Date();
+    const signOutTime = attendanceDateTimeString(now);
+    const distance = distanceMeters({ lat, lng }, OFFICE_CENTER);
+    console.log(
+      "[Attendance Validation] sign-out:",
+      email,
+      "accuracy:",
+      Math.round(accuracy),
+      "distance:",
+      Math.round(distance),
+      "status:",
+      status
+    );
 
-  console.log("[Attendance] sign-in saved:", email, {
-    updatedRange: appendResult.data.updates?.updatedRange || null,
-    updatedRows: appendResult.data.updates?.updatedRows || null,
-  });
-  res.status(201).json({
-    ok: true,
-    message: "Sign-in saved",
-    updatedRange: appendResult.data.updates?.updatedRange,
-  });
-}));
+    const sheets = await getSheetsClient();
+    await ensureAttendanceHeader(sheets);
+    const openSignIn = await findLatestOpenSignInRow(sheets, email);
+    if (!openSignIn) {
+      res.status(404).json({ ok: false, error: "No open sign-in row found for this email" });
+      return;
+    }
 
-app.post("/api/attendance/signout", asyncRoute(async (req, res) => {
-  const email = requiredString(req.body.email, "email").toLowerCase();
-  const lat = requiredNumber(req.body.lat, "lat");
-  const lng = requiredNumber(req.body.lng, "lng");
-  const accuracy = requiredNumber(req.body.accuracy, "accuracy");
-  const status = optionalStatus(req.body.status, "VERIFIED");
-  const now = new Date();
-  const signOutTime = attendanceDateTimeString(now);
-  const distance = distanceMeters({ lat, lng }, OFFICE_CENTER);
-  console.log(
-    "[Attendance Validation] sign-out:",
-    email,
-    "accuracy:",
-    Math.round(accuracy),
-    "distance:",
-    Math.round(distance),
-    "status:",
-    status
-  );
+    const row = openSignIn.row;
+    const signInTime = row[2];
+    const totalMinutes = minutesBetween(signInTime, now);
+    const rowNumber = openSignIn.rowNumber;
+    const dateValue = row[8] || todayDateString(now);
 
-  const sheets = await getSheetsClient();
-  await ensureAttendanceHeader(sheets);
-  const openSignIn = await findLatestOpenSignInRow(sheets, email);
-  if (!openSignIn) {
-    res.status(404).json({ ok: false, error: "No open sign-in row found for this email" });
-    return;
+    const updateResult = await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${SHEET_NAME}!D${rowNumber}:J${rowNumber}`,
+      valueInputOption: "USER_ENTERED",
+      requestBody: {
+        values: [[signOutTime, totalMinutes, lat, lng, accuracy, dateValue, status]],
+      },
+    });
+
+    console.log("[Attendance] sign-out saved:", email, {
+      rowNumber,
+      totalMinutes,
+      updatedRange: updateResult.data.updatedRange || null,
+    });
+    res.json({
+      ok: true,
+      message: "Sign-out saved",
+      totalMinutes,
+      rowNumber,
+      updatedRange: updateResult.data.updatedRange,
+    });
+  } catch (error) {
+    console.error("[Attendance Signout Error]", error);
+
+    res.status(500).json({
+      ok: false,
+      route: "/api/attendance/signout",
+      error: error.message,
+      code: error.code || null,
+      details: error.errors || null,
+    });
   }
-
-  const row = openSignIn.row;
-  const signInTime = row[2];
-  const totalMinutes = minutesBetween(signInTime, now);
-  const rowNumber = openSignIn.rowNumber;
-  const dateValue = row[8] || todayDateString(now);
-
-  const updateResult = await sheets.spreadsheets.values.update({
-    spreadsheetId: SPREADSHEET_ID,
-    range: `${SHEET_NAME}!D${rowNumber}:J${rowNumber}`,
-    valueInputOption: "USER_ENTERED",
-    requestBody: {
-      values: [[signOutTime, totalMinutes, lat, lng, accuracy, dateValue, status]],
-    },
-  });
-
-  console.log("[Attendance] sign-out saved:", email, {
-    rowNumber,
-    totalMinutes,
-    updatedRange: updateResult.data.updatedRange || null,
-  });
-  res.json({
-    ok: true,
-    message: "Sign-out saved",
-    totalMinutes,
-    rowNumber,
-    updatedRange: updateResult.data.updatedRange,
-  });
-}));
-
-app.use(express.static(STATIC_DIST_DIR));
-app.get("*", (req, res, next) => {
-  if (req.path.startsWith("/api/")) {
-    next();
-    return;
-  }
-  res.sendFile(path.join(STATIC_DIST_DIR, "index.html"));
 });
 
 app.use((err, req, res, next) => {

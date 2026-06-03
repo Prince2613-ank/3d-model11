@@ -255,12 +255,15 @@ async function postAttendance(path: "/api/attendance/signin" | "/api/attendance/
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const data = await response.json().catch(() => null) as { error?: string; message?: string; rowNumber?: number; updatedRange?: string } | null;
+  const data = await response.json().catch(() => null) as { ok?: boolean; error?: string; message?: string; rowNumber?: number; updatedRange?: string } | null;
 
   console.log("[Attendance API] response", path, response.status, data);
 
   if (!response.ok) {
     throw new Error(data?.error ?? `Attendance API failed with ${response.status}`);
+  }
+  if (!data || data.ok !== true) {
+    throw new Error("Attendance API returned no JSON confirmation. Check Render backend deployment.");
   }
 }
 
