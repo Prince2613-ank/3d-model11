@@ -6,6 +6,9 @@ import { getNavigableRoomNames, loadRooms } from "./rooms";
 import { initializeCalendar } from "./calendar";
 import {
   exitNavigation,
+  installCorridorPointDebug,
+  installIntermediatePointDebug,
+  installStairPathDebug,
   startNavigation,
   setNavigationFloorSwitchHandler,
 } from "./navigation";
@@ -120,9 +123,12 @@ async function bootstrap(): Promise<void> {
   });
 
   await Promise.all([modelLoad, roomLoad]);
+  await installCorridorPointDebug();
   populateRoomDropdowns(getNavigableRoomNames());
   applySelectedFloor();
   initSmartFloorCamera();
+  installStairPathDebug();
+  await installIntermediatePointDebug();
   preloadHeavyFloorsInBackground();
 
   installSceneInteractions(getSelectedFloor, {

@@ -7,6 +7,7 @@ import {
 import { geo2, geo3, geoJsonUrl, normalizeRoomName } from "./rooms";
 import { setNavigationAllowedFloors, setNavigationMessage, updateNavigationUI, disableCameraControls, enableCameraControls, showFloorSpinner, hideFloorSpinner, updateNavigationHud, hideNavigationHud, clearMapRoute, hideTooltip, type NavigationHudState } from "./ui";
 import { ensureFloorModelLoaded } from "./models";
+import intermediatePointUrl from "./intermidiate_point.geojson?url";
 
 type DoorFeature = {
   properties: { room_name: string };
@@ -29,6 +30,49 @@ type GraphEdge = {
   w: number;
 };
 
+type CorridorDebugFeature = {
+  type: "Feature";
+  properties?: Record<string, unknown>;
+  geometry?: {
+    type: string;
+    coordinates: [number, number];
+  };
+};
+
+type CorridorDebugFileState = {
+  fileName: string;
+  graph: GraphNode[];
+  features: CorridorDebugFeature[];
+};
+
+type CorridorDebugPointState = {
+  entity: Cesium.Entity;
+  node: GraphNode;
+  floor: number;
+  index: number;
+};
+
+type IntermediatePointFeature = {
+  type: "Feature";
+  properties?: {
+    lat?: number;
+    long?: number;
+    id_no?: string;
+    [key: string]: unknown;
+  };
+  geometry?: {
+    type: string;
+    coordinates: [number, number];
+  };
+};
+
+type IntermediatePointState = {
+  entity: Cesium.Entity;
+  feature: IntermediatePointFeature;
+  index: number;
+  idNo: number;
+};
+
 type ResolvedRoomSelection = {
   displayName: string;
   roomName: string;
@@ -40,6 +84,21 @@ let centerlineGraph2: GraphNode[] | null = null;
 let centerlineGraph3: GraphNode[] | null = null;
 let navDataReady = false;
 let currentVisibleFloor = 0;
+let corridorDebugLoaded = false;
+const corridorDebugEntities: Array<{ entity: Cesium.Entity; floor: number; kind: "point" | "edge" }> = [];
+const corridorDebugFiles = new Map<number, CorridorDebugFileState>();
+const corridorDebugPoints = new Map<string, CorridorDebugPointState>();
+const stairDebugEntities: Cesium.Entity[] = [];
+const stairDebugPoints = new Map<string, { index: number; entity: Cesium.Entity }>();
+const intermediateDebugEntities: Cesium.Entity[] = [];
+const intermediateDebugPoints = new Map<string, IntermediatePointState>();
+let intermediateDebugFeatures: IntermediatePointFeature[] = [];
+let corridorDebugDragHandler: Cesium.ScreenSpaceEventHandler | null = null;
+let stairDebugDragHandler: Cesium.ScreenSpaceEventHandler | null = null;
+let intermediateDebugDragHandler: Cesium.ScreenSpaceEventHandler | null = null;
+let selectedCorridorDebugPoint: CorridorDebugPointState | null = null;
+let selectedStairDebugPoint: { index: number; entity: Cesium.Entity } | null = null;
+let selectedIntermediateDebugPoint: IntermediatePointState | null = null;
 
 const routeArrowCollectionA = viewer.scene.primitives.add(new Cesium.BillboardCollection());
 const routeArrowCollectionB = viewer.scene.primitives.add(new Cesium.BillboardCollection());
@@ -78,7 +137,14 @@ let routeBubbleDensityStride = 1;
 let arrivalHudHideTimer: number | null = null;
 
 const MAX_CORRIDOR_EDGE_METERS = 8.0;
-const JUNCTION_LINK_METERS = 0.5;
+const MAX_CORRIDOR_NEAREST_NEIGHBORS = 4;
+const CORRIDOR_DEBUG_PARAM = "corridorDebug";
+const STAIR_DEBUG_PARAM = "stairDebug";
+const INTERMEDIATE_DEBUG_PARAM = "intermediateDebug";
+const INTERMIDIATE_DEBUG_PARAM = "intermidiateDebug";
+const CORRIDOR_DEBUG_HEIGHT_OFFSET = 2.8;
+const STAIR_DEBUG_HEIGHT_OFFSET = 4.0;
+const INTERMEDIATE_DEBUG_HEIGHT_OFFSET = 4.4;
 const SECOND_FLOOR_PANTRY_EMPLOYEE_SIDE_DOOR = Cesium.Cartesian3.fromDegrees(
   77.13362535043548,
   28.670995911296629,
@@ -704,6 +770,15 @@ export function updateNavigationVisibility(activeFloor: number): void {
   routeBubbleCollectionB.show = showB;
   routeGlowCollectionA.show = showA;
   routeGlowCollectionB.show = showB;
+  corridorDebugEntities.forEach(({ entity, floor }) => {
+    entity.show = activeFloor === 0 || activeFloor === floor;
+  });
+  stairDebugEntities.forEach((entity) => {
+    entity.show = stairDebugEnabled();
+  });
+  intermediateDebugEntities.forEach((entity) => {
+    entity.show = intermediateDebugEnabled();
+  });
   applyRouteBubbleDensity(true);
 
   if (activeNavFromFloor && activeNavToFloor) {
@@ -713,6 +788,598 @@ export function updateNavigationVisibility(activeFloor: number): void {
     }
     setNavigationMessage(message, false);
   }
+}
+
+function corridorDebugEnabled(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  const value = params.get(CORRIDOR_DEBUG_PARAM);
+  return value === "1" || value === "true" || value === "points" || value === "edit";
+}
+
+function corridorDebugEditable(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  return params.get(CORRIDOR_DEBUG_PARAM) === "edit";
+}
+
+function corridorDebugAltitude(floor: number): number {
+  return (floor === 3 ? ALT_2ND : ALT_3RD) + CORRIDOR_DEBUG_HEIGHT_OFFSET;
+}
+
+function corridorDebugPosition(node: GraphNode, floor: number): Cesium.Cartesian3 {
+  return Cesium.Cartesian3.fromDegrees(node.lon, node.lat, corridorDebugAltitude(floor));
+}
+
+function setCorridorDebugNodePosition(point: CorridorDebugPointState, lon: number, lat: number): void {
+  const routeAltitude = point.floor === 3 ? ALT_2ND : ALT_3RD;
+  point.node.lon = lon;
+  point.node.lat = lat;
+  point.node.pos = Cesium.Cartesian3.fromDegrees(lon, lat, routeAltitude + 0.1);
+  point.entity.position = new Cesium.ConstantPositionProperty(corridorDebugPosition(point.node, point.floor));
+
+  const fileState = corridorDebugFiles.get(point.floor);
+  const feature = fileState?.features[point.index];
+  if (feature?.geometry?.type === "Point") {
+    feature.geometry.coordinates = [lon, lat];
+    if (feature.properties) {
+      feature.properties.Longitude = lon;
+      feature.properties.Latitude = lat;
+    }
+  }
+
+  if (fileState) {
+    rebuildCenterlineGraphEdges(fileState.graph);
+    redrawCorridorDebugEdges(point.floor);
+  }
+}
+
+function pickCorridorDebugLonLat(position: Cesium.Cartesian2): { lon: number; lat: number } | null {
+  const cartesian = viewer.camera.pickEllipsoid(position, viewer.scene.globe.ellipsoid);
+  if (!cartesian) return null;
+
+  const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+  return {
+    lon: Cesium.Math.toDegrees(cartographic.longitude),
+    lat: Cesium.Math.toDegrees(cartographic.latitude),
+  };
+}
+
+function exportCorridorDebugGeoJSON(): void {
+  corridorDebugFiles.forEach((fileState) => {
+    const geoJson = {
+      type: "FeatureCollection",
+      name: fileState.fileName.replace(".geojson", ""),
+      features: fileState.features,
+    };
+    console.info(`Updated ${fileState.fileName}`, JSON.stringify(geoJson, null, 2));
+  });
+}
+
+function installCorridorDebugEditor(): void {
+  if (!corridorDebugEditable() || corridorDebugDragHandler) return;
+
+  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  corridorDebugDragHandler = handler;
+
+  handler.setInputAction((event: { position: Cesium.Cartesian2 }) => {
+    const picked = viewer.scene.pick(event.position);
+    const entity = picked?.id instanceof Cesium.Entity ? picked.id : null;
+    const point = entity ? corridorDebugPoints.get(String(entity.id)) : null;
+    if (!point) return;
+
+    selectedCorridorDebugPoint = point;
+    viewer.scene.screenSpaceCameraController.enableInputs = false;
+  }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+
+  handler.setInputAction((event: { endPosition: Cesium.Cartesian2 }) => {
+    if (!selectedCorridorDebugPoint) return;
+
+    const picked = pickCorridorDebugLonLat(event.endPosition);
+    if (!picked) return;
+
+    setCorridorDebugNodePosition(selectedCorridorDebugPoint, picked.lon, picked.lat);
+    viewer.scene.requestRender();
+  }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+  handler.setInputAction(() => {
+    if (!selectedCorridorDebugPoint) return;
+
+    selectedCorridorDebugPoint = null;
+    viewer.scene.screenSpaceCameraController.enableInputs = true;
+    exportCorridorDebugGeoJSON();
+  }, Cesium.ScreenSpaceEventType.LEFT_UP);
+
+  window.addEventListener("keydown", (event) => {
+    if (event.key.toLowerCase() === "e") {
+      exportCorridorDebugGeoJSON();
+    }
+  });
+}
+
+function addCorridorDebugGraph(graph: GraphNode[], floor: number, fileName: string): void {
+  const color = floor === 3
+    ? Cesium.Color.fromCssColorString("#00D5FF")
+    : Cesium.Color.fromCssColorString("#FFB000");
+  const floorLabel = floor === 3 ? "2F" : "3F";
+
+  graph.forEach((node, index) => {
+    const pointEntity = viewer.entities.add({
+      id: `debugCorridorPoint-${floor}-${index}`,
+      position: corridorDebugPosition(node, floor),
+      point: {
+        pixelSize: corridorDebugEditable() ? 17 : 14,
+        color,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 3,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text: `${floorLabel}-${node.id}`,
+        font: "13px sans-serif",
+        fillColor: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 3,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        pixelOffset: new Cesium.Cartesian2(0, -20),
+        showBackground: true,
+        backgroundColor: Cesium.Color.BLACK.withAlpha(0.55),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    });
+
+    corridorDebugEntities.push({ entity: pointEntity, floor, kind: "point" });
+    corridorDebugPoints.set(String(pointEntity.id), { entity: pointEntity, node, floor, index });
+  });
+
+  addCorridorDebugEdges(graph, floor, color);
+
+  console.info(`${fileName}: debug points are ${CORRIDOR_DEBUG_HEIGHT_OFFSET}m above floor ${floor === 3 ? "2nd" : "3rd"}.`);
+}
+
+function addCorridorDebugEdges(graph: GraphNode[], floor: number, color: Cesium.Color): void {
+  graph.forEach((node, index) => {
+    node.edges.forEach((edge) => {
+      const edgeIndex = graph.indexOf(edge.node);
+      if (edgeIndex <= index) return;
+
+      const lineEntity = viewer.entities.add({
+        id: `debugCorridorEdge-${floor}-${index}-${edgeIndex}`,
+        polyline: {
+          positions: new Cesium.CallbackProperty(
+            () => [corridorDebugPosition(node, floor), corridorDebugPosition(edge.node, floor)],
+            false
+          ),
+          width: 3,
+          material: color.withAlpha(0.62),
+          clampToGround: false,
+        },
+      });
+
+      corridorDebugEntities.push({ entity: lineEntity, floor, kind: "edge" });
+    });
+  });
+}
+
+function redrawCorridorDebugEdges(floor: number): void {
+  for (let index = corridorDebugEntities.length - 1; index >= 0; index -= 1) {
+    const item = corridorDebugEntities[index];
+    if (item.floor !== floor || item.kind !== "edge") continue;
+
+    viewer.entities.remove(item.entity);
+    corridorDebugEntities.splice(index, 1);
+  }
+
+  const graph = corridorDebugFiles.get(floor)?.graph;
+  if (!graph) return;
+
+  const color = floor === 3
+    ? Cesium.Color.fromCssColorString("#00D5FF")
+    : Cesium.Color.fromCssColorString("#FFB000");
+  addCorridorDebugEdges(graph, floor, color);
+  updateNavigationVisibility(currentVisibleFloor);
+}
+
+export async function installCorridorPointDebug(): Promise<void> {
+  if (!corridorDebugEnabled() || corridorDebugLoaded) return;
+  corridorDebugLoaded = true;
+
+  const [graph2, graph3, geoJson2Response, geoJson3Response] = await Promise.all([
+    centerlineGraph2 ? Promise.resolve(centerlineGraph2) : loadCenterlineGeoJSON("2nd_floor_corridor.geojson", ALT_2ND),
+    centerlineGraph3 ? Promise.resolve(centerlineGraph3) : loadCenterlineGeoJSON("3rd_floor_corridor.geojson", ALT_3RD),
+    fetch(geoJsonUrl("2nd_floor_corridor.geojson")),
+    fetch(geoJsonUrl("3rd_floor_corridor.geojson")),
+  ]);
+  const [geoJson2, geoJson3] = await Promise.all([
+    geoJson2Response.json() as Promise<{ features: CorridorDebugFeature[] }>,
+    geoJson3Response.json() as Promise<{ features: CorridorDebugFeature[] }>,
+  ]);
+
+  centerlineGraph2 = graph2;
+  centerlineGraph3 = graph3;
+  corridorDebugFiles.set(3, {
+    fileName: "2nd_floor_corridor.geojson",
+    graph: graph2,
+    features: geoJson2.features.filter((feature) => feature.geometry?.type === "Point"),
+  });
+  corridorDebugFiles.set(4, {
+    fileName: "3rd_floor_corridor.geojson",
+    graph: graph3,
+    features: geoJson3.features.filter((feature) => feature.geometry?.type === "Point"),
+  });
+
+  addCorridorDebugGraph(graph2, 3, "2nd_floor_corridor.geojson");
+  addCorridorDebugGraph(graph3, 4, "3rd_floor_corridor.geojson");
+  installCorridorDebugEditor();
+  updateNavigationVisibility(currentVisibleFloor);
+  console.info(
+    corridorDebugEditable()
+      ? `Corridor edit debug: drag points to update. Release mouse or press E to print updated GeoJSON.`
+      : `Corridor debug: ${graph2.length} second-floor points, ${graph3.length} third-floor points.`
+  );
+  viewer.scene.requestRender();
+}
+
+function stairDebugEnabled(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  const value = params.get(STAIR_DEBUG_PARAM);
+  return value === "1" || value === "true" || value === "points" || value === "edit";
+}
+
+function stairDebugEditable(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  return params.get(STAIR_DEBUG_PARAM) === "edit";
+}
+
+function customStairDebugPositions(): Cesium.Cartesian3[] {
+  const zLift = 0.5 + STAIR_DEBUG_HEIGHT_OFFSET;
+  const landingAltitude = (ALT_2ND + ALT_3RD) / 2;
+
+  return CUSTOM_STAIR_PATH.map((point, index) => {
+    const height = index <= 2 ? ALT_2ND : index <= 4 ? landingAltitude : ALT_3RD;
+    return Cesium.Cartesian3.fromDegrees(point.lon, point.lat, height + zLift);
+  });
+}
+
+function stairDebugMarkerSvg(index: number): string {
+  const label = String(index + 1);
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <circle cx="48" cy="48" r="38" fill="#ff1f3d" stroke="#ffffff" stroke-width="8"/>
+  <circle cx="48" cy="48" r="44" fill="none" stroke="#111111" stroke-width="4"/>
+  <text x="48" y="58" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#ffffff">${label}</text>
+</svg>
+`)}`;
+}
+
+function exportCustomStairPath(): void {
+  const lines = CUSTOM_STAIR_PATH
+    .map((point) => `  { lon: ${point.lon}, lat: ${point.lat} }`)
+    .join(",\n");
+  console.info(`Updated CUSTOM_STAIR_PATH:\nconst CUSTOM_STAIR_PATH = [\n${lines}\n];`);
+}
+
+function updateStairDebugPoint(index: number, lon: number, lat: number): void {
+  CUSTOM_STAIR_PATH[index] = { lon, lat };
+  const positions = customStairDebugPositions();
+
+  stairDebugPoints.forEach((point) => {
+    point.entity.position = new Cesium.ConstantPositionProperty(positions[point.index]);
+  });
+
+  const line = viewer.entities.getById("debugCustomStairPathLine");
+  if (line?.polyline) {
+    line.polyline.positions = new Cesium.ConstantProperty(positions);
+  }
+}
+
+function flyToStairDebugPoints(): void {
+  const positions = customStairDebugPositions();
+  if (positions.length === 0) return;
+
+  const sphere = Cesium.BoundingSphere.fromPoints(positions);
+  viewer.camera.flyToBoundingSphere(sphere, {
+    duration: 0.9,
+    offset: new Cesium.HeadingPitchRange(
+      Cesium.Math.toRadians(330),
+      Cesium.Math.toRadians(-55),
+      22
+    ),
+  });
+}
+
+function installStairDebugEditor(): void {
+  if (!stairDebugEditable() || stairDebugDragHandler) return;
+
+  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  stairDebugDragHandler = handler;
+
+  handler.setInputAction((event: { position: Cesium.Cartesian2 }) => {
+    const picked = viewer.scene.pick(event.position);
+    const entity = picked?.id instanceof Cesium.Entity ? picked.id : null;
+    const point = entity ? stairDebugPoints.get(String(entity.id)) : null;
+    if (!point) return;
+
+    selectedStairDebugPoint = point;
+    viewer.scene.screenSpaceCameraController.enableInputs = false;
+  }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+
+  handler.setInputAction((event: { endPosition: Cesium.Cartesian2 }) => {
+    if (!selectedStairDebugPoint) return;
+
+    const picked = pickCorridorDebugLonLat(event.endPosition);
+    if (!picked) return;
+
+    updateStairDebugPoint(selectedStairDebugPoint.index, picked.lon, picked.lat);
+    viewer.scene.requestRender();
+  }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+  handler.setInputAction(() => {
+    if (!selectedStairDebugPoint) return;
+
+    selectedStairDebugPoint = null;
+    viewer.scene.screenSpaceCameraController.enableInputs = true;
+    exportCustomStairPath();
+  }, Cesium.ScreenSpaceEventType.LEFT_UP);
+
+  window.addEventListener("keydown", (event) => {
+    if (event.key.toLowerCase() === "s") {
+      exportCustomStairPath();
+    }
+  });
+}
+
+export function installStairPathDebug(): void {
+  if (!stairDebugEnabled() || stairDebugEntities.length > 0) return;
+
+  const positions = customStairDebugPositions();
+  const color = Cesium.Color.fromCssColorString("#FF3355");
+
+  const line = viewer.entities.add({
+    id: "debugCustomStairPathLine",
+    polyline: {
+      positions,
+      width: 5,
+      material: color.withAlpha(0.78),
+      clampToGround: false,
+    },
+  });
+  stairDebugEntities.push(line);
+
+  positions.forEach((position, index) => {
+    const pointEntity = viewer.entities.add({
+      id: `debugCustomStairPathPoint-${index + 1}`,
+      position,
+      billboard: {
+        image: stairDebugMarkerSvg(index),
+        width: stairDebugEditable() ? 58 : 48,
+        height: stairDebugEditable() ? 58 : 48,
+        verticalOrigin: Cesium.VerticalOrigin.CENTER,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      point: {
+        pixelSize: stairDebugEditable() ? 38 : 30,
+        color,
+        outlineColor: Cesium.Color.WHITE,
+        outlineWidth: 5,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text: `${index + 1}`,
+        font: "bold 20px sans-serif",
+        fillColor: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 5,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        pixelOffset: new Cesium.Cartesian2(0, -34),
+        showBackground: true,
+        backgroundColor: Cesium.Color.BLACK.withAlpha(0.58),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    });
+
+    stairDebugEntities.push(pointEntity);
+    stairDebugPoints.set(String(pointEntity.id), { index, entity: pointEntity });
+  });
+
+  installStairDebugEditor();
+  updateNavigationVisibility(currentVisibleFloor);
+  flyToStairDebugPoints();
+  window.setTimeout(flyToStairDebugPoints, 900);
+  console.info(
+    stairDebugEditable()
+      ? `Stair edit debug: drag points 1-${CUSTOM_STAIR_PATH.length}. Release mouse or press S to print updated CUSTOM_STAIR_PATH.`
+      : `Stair debug: showing ${CUSTOM_STAIR_PATH.length} CUSTOM_STAIR_PATH points.`
+  );
+  viewer.scene.requestRender();
+}
+
+function intermediateDebugEnabled(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  const value = params.get(INTERMEDIATE_DEBUG_PARAM) ?? params.get(INTERMIDIATE_DEBUG_PARAM);
+  return value === "1" || value === "true" || value === "points" || value === "edit";
+}
+
+function intermediateDebugEditable(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  return params.get(INTERMEDIATE_DEBUG_PARAM) === "edit" || params.get(INTERMIDIATE_DEBUG_PARAM) === "edit";
+}
+
+function intermediateDebugAltitude(idNo: number): number {
+  const landingAltitude = (ALT_2ND + ALT_3RD) / 2;
+  if (idNo <= 3) return ALT_2ND + INTERMEDIATE_DEBUG_HEIGHT_OFFSET;
+  if (idNo <= 5) return landingAltitude + INTERMEDIATE_DEBUG_HEIGHT_OFFSET;
+  return ALT_3RD + INTERMEDIATE_DEBUG_HEIGHT_OFFSET;
+}
+
+function intermediateDebugPosition(feature: IntermediatePointFeature): Cesium.Cartesian3 {
+  const coordinates = feature.geometry?.coordinates ?? [0, 0];
+  const idNo = Number(feature.properties?.id_no ?? 0);
+  return Cesium.Cartesian3.fromDegrees(coordinates[0], coordinates[1], intermediateDebugAltitude(idNo));
+}
+
+function intermediateDebugMarkerSvg(idNo: number): string {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" width="104" height="104" viewBox="0 0 104 104">
+  <circle cx="52" cy="52" r="40" fill="#6d38ff" stroke="#ffffff" stroke-width="8"/>
+  <circle cx="52" cy="52" r="47" fill="none" stroke="#101426" stroke-width="5"/>
+  <text x="52" y="64" text-anchor="middle" font-family="Arial, sans-serif" font-size="38" font-weight="700" fill="#ffffff">${idNo}</text>
+</svg>
+`)}`;
+}
+
+function exportIntermediatePointGeoJSON(): void {
+  const geoJson = {
+    type: "FeatureCollection",
+    name: "intermidiate_point",
+    crs: { type: "name", properties: { name: "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+    features: intermediateDebugFeatures,
+  };
+  console.info("Updated intermidiate_point.geojson", JSON.stringify(geoJson, null, 2));
+}
+
+function updateIntermediateDebugPoint(point: IntermediatePointState, lon: number, lat: number): void {
+  point.feature.geometry = { type: "Point", coordinates: [lon, lat] };
+  point.feature.properties = {
+    ...point.feature.properties,
+    long: lon,
+    lat,
+  };
+  point.entity.position = new Cesium.ConstantPositionProperty(intermediateDebugPosition(point.feature));
+
+  const line = viewer.entities.getById("debugIntermediatePointLine");
+  if (line?.polyline) {
+    const orderedPositions = intermediateDebugFeatures
+      .filter((feature) => feature.geometry?.type === "Point")
+      .sort((a, b) => Number(a.properties?.id_no ?? 0) - Number(b.properties?.id_no ?? 0))
+      .map(intermediateDebugPosition);
+    line.polyline.positions = new Cesium.ConstantProperty(orderedPositions);
+  }
+}
+
+function installIntermediateDebugEditor(): void {
+  if (!intermediateDebugEditable() || intermediateDebugDragHandler) return;
+
+  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  intermediateDebugDragHandler = handler;
+
+  handler.setInputAction((event: { position: Cesium.Cartesian2 }) => {
+    const picked = viewer.scene.pick(event.position);
+    const entity = picked?.id instanceof Cesium.Entity ? picked.id : null;
+    const point = entity ? intermediateDebugPoints.get(String(entity.id)) : null;
+    if (!point) return;
+
+    selectedIntermediateDebugPoint = point;
+    viewer.scene.screenSpaceCameraController.enableInputs = false;
+  }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+
+  handler.setInputAction((event: { endPosition: Cesium.Cartesian2 }) => {
+    if (!selectedIntermediateDebugPoint) return;
+
+    const picked = pickCorridorDebugLonLat(event.endPosition);
+    if (!picked) return;
+
+    updateIntermediateDebugPoint(selectedIntermediateDebugPoint, picked.lon, picked.lat);
+    viewer.scene.requestRender();
+  }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+  handler.setInputAction(() => {
+    if (!selectedIntermediateDebugPoint) return;
+
+    selectedIntermediateDebugPoint = null;
+    viewer.scene.screenSpaceCameraController.enableInputs = true;
+    exportIntermediatePointGeoJSON();
+  }, Cesium.ScreenSpaceEventType.LEFT_UP);
+
+  window.addEventListener("keydown", (event) => {
+    if (event.key.toLowerCase() === "i") {
+      exportIntermediatePointGeoJSON();
+    }
+  });
+}
+
+function flyToIntermediateDebugPoints(): void {
+  const positions = intermediateDebugFeatures.map(intermediateDebugPosition);
+  if (positions.length === 0) return;
+
+  viewer.camera.flyToBoundingSphere(Cesium.BoundingSphere.fromPoints(positions), {
+    duration: 0.9,
+    offset: new Cesium.HeadingPitchRange(
+      Cesium.Math.toRadians(330),
+      Cesium.Math.toRadians(-55),
+      22
+    ),
+  });
+}
+
+export async function installIntermediatePointDebug(): Promise<void> {
+  if (!intermediateDebugEnabled() || intermediateDebugEntities.length > 0) return;
+
+  const response = await fetch(intermediatePointUrl);
+  const geoJson = (await response.json()) as { features: IntermediatePointFeature[] };
+  intermediateDebugFeatures = geoJson.features.filter((feature) => feature.geometry?.type === "Point");
+
+  const orderedPositions = intermediateDebugFeatures
+    .slice()
+    .sort((a, b) => Number(a.properties?.id_no ?? 0) - Number(b.properties?.id_no ?? 0))
+    .map(intermediateDebugPosition);
+
+  const line = viewer.entities.add({
+    id: "debugIntermediatePointLine",
+    polyline: {
+      positions: orderedPositions,
+      width: 5,
+      material: Cesium.Color.fromCssColorString("#6d38ff").withAlpha(0.78),
+      clampToGround: false,
+    },
+  });
+  intermediateDebugEntities.push(line);
+
+  intermediateDebugFeatures.forEach((feature, index) => {
+    const idNo = Number(feature.properties?.id_no ?? index + 1);
+    const entity = viewer.entities.add({
+      id: `debugIntermediatePoint-${idNo}`,
+      position: intermediateDebugPosition(feature),
+      billboard: {
+        image: intermediateDebugMarkerSvg(idNo),
+        width: intermediateDebugEditable() ? 60 : 50,
+        height: intermediateDebugEditable() ? 60 : 50,
+        verticalOrigin: Cesium.VerticalOrigin.CENTER,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      point: {
+        pixelSize: intermediateDebugEditable() ? 38 : 30,
+        color: Cesium.Color.fromCssColorString("#6d38ff"),
+        outlineColor: Cesium.Color.WHITE,
+        outlineWidth: 5,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text: `I${idNo}`,
+        font: "bold 16px sans-serif",
+        fillColor: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 4,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        pixelOffset: new Cesium.Cartesian2(0, -38),
+        showBackground: true,
+        backgroundColor: Cesium.Color.BLACK.withAlpha(0.58),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    });
+
+    intermediateDebugEntities.push(entity);
+    intermediateDebugPoints.set(String(entity.id), { entity, feature, index, idNo });
+  });
+
+  installIntermediateDebugEditor();
+  updateNavigationVisibility(currentVisibleFloor);
+  flyToIntermediateDebugPoints();
+  window.setTimeout(flyToIntermediateDebugPoints, 900);
+  console.info(
+    intermediateDebugEditable()
+      ? `Intermediate point edit debug: drag points. Release mouse or press I to print updated intermidiate_point.geojson.`
+      : `Intermediate point debug: showing ${intermediateDebugFeatures.length} intermidiate_point.geojson points.`
+  );
+  viewer.scene.requestRender();
 }
 
 async function loadDoorGeoJSON(fileName: string, floorAltitude: number, floor: number): Promise<void> {
@@ -781,25 +1448,40 @@ function buildCenterlineGraph(points: Array<{ lon: number; lat: number; id: numb
     edges: []
   }));
 
-  for (let index = 0; index < graph.length - 1; index += 1) {
-    const distance = Cesium.Cartesian3.distance(graph[index].pos, graph[index + 1].pos);
-    if (distance <= MAX_CORRIDOR_EDGE_METERS) {
-      graph[index].edges.push({ node: graph[index + 1], w: distance });
-      graph[index + 1].edges.push({ node: graph[index], w: distance });
-    }
-  }
+  rebuildCenterlineGraphEdges(graph);
+  return graph;
+}
+
+function rebuildCenterlineGraphEdges(graph: GraphNode[]): void {
+  graph.forEach((node) => {
+    node.edges = [];
+  });
 
   for (let i = 0; i < graph.length; i += 1) {
-    for (let j = i + 1; j < graph.length; j += 1) {
-      const distance = Cesium.Cartesian3.distance(graph[i].pos, graph[j].pos);
-      if (distance < JUNCTION_LINK_METERS) {
-        graph[i].edges.push({ node: graph[j], w: distance });
-        graph[j].edges.push({ node: graph[i], w: distance });
-      }
-    }
+    const nearestNodes = graph
+      .map((node, index) => ({
+        node,
+        index,
+        distance: Cesium.Cartesian3.distance(graph[i].pos, node.pos)
+      }))
+      .filter((candidate) => candidate.index !== i && candidate.distance <= MAX_CORRIDOR_EDGE_METERS)
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, MAX_CORRIDOR_NEAREST_NEIGHBORS);
+
+    nearestNodes.forEach((candidate) => {
+      addGraphEdge(graph[i], candidate.node, candidate.distance);
+    });
+  }
+}
+
+function addGraphEdge(from: GraphNode, to: GraphNode, distance: number): void {
+  if (!from.edges.some((edge) => edge.node === to)) {
+    from.edges.push({ node: to, w: distance });
   }
 
-  return graph;
+  if (!to.edges.some((edge) => edge.node === from)) {
+    to.edges.push({ node: from, w: distance });
+  }
 }
 
 function findPath(graph: GraphNode[], start: GraphNode, goal: GraphNode): Cesium.Cartesian3[] | null {
