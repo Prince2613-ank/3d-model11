@@ -240,21 +240,36 @@ function scheduleOfficeEndSignOut(): void {
 }
 
 async function postAttendance(path: "/api/attendance/signin" | "/api/attendance/signout", body: Record<string, unknown>): Promise<void> {
-  const response = await fetch(attendanceApiUrl(path), {
+  const url = attendanceApiUrl(path);
+  console.log("[Attendance API] POST", url, {
+    email: body.email,
+    accuracy: body.accuracy,
+    lat: body.lat,
+    lng: body.lng,
+    status: body.status,
+    sampleCount: Array.isArray(body.samples) ? body.samples.length : undefined,
+  });
+
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+  const data = await response.json().catch(() => null) as { error?: string; message?: string; rowNumber?: number; updatedRange?: string } | null;
+
+  console.log("[Attendance API] response", path, response.status, data);
 
   if (!response.ok) {
-    const data = await response.json().catch(() => null) as { error?: string } | null;
     throw new Error(data?.error ?? `Attendance API failed with ${response.status}`);
   }
 }
 
 async function fetchAttendanceStatus(email: string): Promise<AttendanceServerStatus> {
-  const response = await fetch(attendanceApiUrl(`/api/attendance/status?email=${encodeURIComponent(email)}`));
+  const url = attendanceApiUrl(`/api/attendance/status?email=${encodeURIComponent(email)}`);
+  console.log("[Attendance API] GET", url);
+  const response = await fetch(url);
   const data = await response.json().catch(() => null) as AttendanceServerStatus | { error?: string } | null;
+  console.log("[Attendance API] status response", response.status, data);
 
   if (!response.ok || !data || !("signedIn" in data)) {
     throw new Error(data && "error" in data ? data.error : `Attendance status API failed with ${response.status}`);
