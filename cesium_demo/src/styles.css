@@ -5236,7 +5236,7 @@ body.floor-loading-active #toastContainer {
   position: fixed;
   top: 68px;
   right: 14px;
-  width: 260px !important;
+  width: 300px !important;
   z-index: 1000;
 }
 
@@ -5292,6 +5292,8 @@ body.floor-loading-active #toastContainer {
   color: #0f172a;
   font-weight: 700;
   text-align: right;
+  max-width: 155px;
+  overflow-wrap: anywhere;
 }
 
 .attendance-badge {

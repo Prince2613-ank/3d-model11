@@ -36,6 +36,9 @@ type AttendanceSample = {
   lat: number;
   lng: number;
   accuracy: number;
+  altitude: number | null;
+  altitudeAccuracy: number | null;
+  elevationDelta: number | null;
   timestamp: number;
   distanceFromOffice: number;
   speedKmh: number | null;
@@ -62,6 +65,7 @@ let lastPosition: GeolocationPosition | null = null;
 let officeEndTimer: ReturnType<typeof setTimeout> | null = null;
 let verificationSamples: AttendanceSample[] = [];
 let previousSample: AttendanceSample | null = null;
+let lastAltitudeMeters: number | null = null;
 let stateSyncInFlight = false;
 
 function readAttendanceState(): StoredAttendanceState {
@@ -108,12 +112,33 @@ function setAttendanceStatus(status: AttendanceStatus): void {
 function setMetrics(values: {
   accuracy?: number;
   distance?: number;
+  latitude?: number;
+  longitude?: number;
+  altitude?: number | null;
+  altitudeAccuracy?: number | null;
+  elevationDelta?: number | null;
+  speedKmh?: number | null;
+  updatedAt?: number;
   progress?: string;
   status?: AttendanceFlag | "WAITING" | "VERIFYING" | "SIGNED_IN" | "SIGNED_OUT";
   lastSignIn?: string;
 }): void {
   if (typeof values.accuracy === "number") setText("attendanceAccuracy", `${Math.round(values.accuracy)}m`);
   if (typeof values.distance === "number") setText("attendanceDistance", `${Math.round(values.distance)}m`);
+  if (typeof values.latitude === "number") setText("attendanceLatitude", values.latitude.toFixed(7));
+  if (typeof values.longitude === "number") setText("attendanceLongitude", values.longitude.toFixed(7));
+  if (values.altitude === null) setText("attendanceAltitude", "Not available");
+  if (typeof values.altitude === "number") setText("attendanceAltitude", `${values.altitude.toFixed(2)}m`);
+  if (values.altitudeAccuracy === null) setText("attendanceAltitudeAccuracy", "Not available");
+  if (typeof values.altitudeAccuracy === "number") setText("attendanceAltitudeAccuracy", `±${values.altitudeAccuracy.toFixed(1)}m`);
+  if (values.elevationDelta === null) setText("attendanceElevationDelta", "--");
+  if (typeof values.elevationDelta === "number") {
+    const sign = values.elevationDelta > 0 ? "+" : "";
+    setText("attendanceElevationDelta", `${sign}${values.elevationDelta.toFixed(2)}m`);
+  }
+  if (values.speedKmh === null) setText("attendanceSpeed", "--");
+  if (typeof values.speedKmh === "number") setText("attendanceSpeed", `${values.speedKmh.toFixed(1)} km/h`);
+  if (typeof values.updatedAt === "number") setText("attendanceLastGpsUpdate", new Date(values.updatedAt).toLocaleTimeString());
   if (values.progress) setText("attendanceProgress", values.progress);
   if (values.status) {
     const badge = document.getElementById("attendanceCurrentStatus");
@@ -185,8 +210,13 @@ function buildSample(position: GeolocationPosition): AttendanceSample {
   const timestamp = position.timestamp || Date.now();
   const lat = position.coords.latitude;
   const lng = position.coords.longitude;
+  const altitude = position.coords.altitude;
+  const altitudeAccuracy = position.coords.altitudeAccuracy;
   const distanceFromOffice = distanceMeters({ lat, lon: lng }, ATTENDANCE_BUILDING_CENTER);
   let speedKmh: number | null = null;
+  const elevationDelta = typeof altitude === "number" && lastAltitudeMeters !== null
+    ? altitude - lastAltitudeMeters
+    : null;
 
   if (previousSample) {
     // Speed and jump checks catch fake-location jumps and impossible movement.
@@ -202,7 +232,21 @@ function buildSample(position: GeolocationPosition): AttendanceSample {
     }
   }
 
-  const sample = { lat, lng, accuracy: position.coords.accuracy, timestamp, distanceFromOffice, speedKmh };
+  if (typeof altitude === "number") {
+    lastAltitudeMeters = altitude;
+  }
+
+  const sample = {
+    lat,
+    lng,
+    accuracy: position.coords.accuracy,
+    altitude,
+    altitudeAccuracy,
+    elevationDelta,
+    timestamp,
+    distanceFromOffice,
+    speedKmh
+  };
   previousSample = sample;
   return sample;
 }
@@ -343,6 +387,8 @@ async function saveSignIn(position: GeolocationPosition, verifiedSamples = verif
       lat: position.coords.latitude,
       lng: position.coords.longitude,
       accuracy: position.coords.accuracy,
+      altitude: position.coords.altitude,
+      altitudeAccuracy: position.coords.altitudeAccuracy,
       status: "VERIFIED",
       samples,
     });
@@ -369,6 +415,8 @@ async function saveSignOut(position: GeolocationPosition, status: AttendanceFlag
       lat: position.coords.latitude,
       lng: position.coords.longitude,
       accuracy: position.coords.accuracy,
+      altitude: position.coords.altitude,
+      altitudeAccuracy: position.coords.altitudeAccuracy,
       status,
     });
     clearAttendanceState();
@@ -405,8 +453,8 @@ function getCurrentPositionOnce(): Promise<GeolocationPosition> {
 
     navigator.geolocation.getCurrentPosition(resolve, reject, {
       enableHighAccuracy: true,
-      maximumAge: 30000,
-      timeout: 10000,
+      maximumAge: 0,
+      timeout: 15000,
     });
   });
 }
@@ -419,6 +467,10 @@ async function handlePosition(position: GeolocationPosition): Promise<void> {
   const hasGoodAccuracy = sample.accuracy <= ATTENDANCE_MAX_ACCURACY_METERS;
 
   console.log("[Attendance] GPS accuracy:", Math.round(sample.accuracy), "m");
+  console.log("[Attendance] GPS lat/lng:", sample.lat, sample.lng);
+  console.log("[Attendance] GPS altitude:", sample.altitude === null ? "n/a" : `${sample.altitude.toFixed(2)}m`);
+  console.log("[Attendance] GPS altitude accuracy:", sample.altitudeAccuracy === null ? "n/a" : `±${sample.altitudeAccuracy.toFixed(1)}m`);
+  console.log("[Attendance] elevation delta:", sample.elevationDelta === null ? "n/a" : `${sample.elevationDelta.toFixed(2)}m`);
   console.log("[Attendance] distance from office:", Math.round(sample.distanceFromOffice), "m");
   console.log("[Attendance] speed:", sample.speedKmh === null ? "n/a" : `${Math.round(sample.speedKmh)} km/h`);
   console.log("[Attendance] sample count:", verificationSamples.length);
@@ -426,6 +478,13 @@ async function handlePosition(position: GeolocationPosition): Promise<void> {
   setMetrics({
     accuracy: sample.accuracy,
     distance: sample.distanceFromOffice,
+    latitude: sample.lat,
+    longitude: sample.lng,
+    altitude: sample.altitude,
+    altitudeAccuracy: sample.altitudeAccuracy,
+    elevationDelta: sample.elevationDelta,
+    speedKmh: sample.speedKmh,
+    updatedAt: sample.timestamp,
     progress: `${verificationSamples.length}/${ATTENDANCE_CONFIG.REQUIRED_SAMPLES} samples`,
     status: attendanceState.signedIn ? "SIGNED_IN" : "WAITING",
   });

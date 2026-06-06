@@ -52,6 +52,10 @@ const ATTENDANCE_HEADERS = [
   "Accuracy",
   "Date",
   "Status",
+  "SignInAltitude",
+  "SignInAltitudeAccuracy",
+  "SignOutAltitude",
+  "SignOutAltitudeAccuracy",
 ];
 
 app.use(cors({
@@ -96,6 +100,12 @@ function requiredNumber(value, fieldName) {
     throw new Error(`${fieldName} must be a valid number`);
   }
   return number;
+}
+
+function optionalNumber(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const number = Number(value);
+  return Number.isFinite(number) ? number : "";
 }
 
 function optionalStatus(value, fallback = "VERIFIED") {
@@ -274,7 +284,7 @@ async function getSheetsClient() {
 async function ensureAttendanceHeader(sheets) {
   const result = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: `${SHEET_NAME}!A1:J1`,
+    range: `${SHEET_NAME}!A1:N1`,
   });
   const current = result.data.values?.[0] || [];
   const needsUpdate = ATTENDANCE_HEADERS.some((header, index) => current[index] !== header);
@@ -283,7 +293,7 @@ async function ensureAttendanceHeader(sheets) {
 
   await sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
-    range: `${SHEET_NAME}!A1:J1`,
+    range: `${SHEET_NAME}!A1:N1`,
     valueInputOption: "USER_ENTERED",
     requestBody: { values: [ATTENDANCE_HEADERS] },
   });
@@ -293,7 +303,7 @@ async function ensureAttendanceHeader(sheets) {
 async function findLatestOpenSignInRow(sheets, email) {
   const readResult = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: `${SHEET_NAME}!A:J`,
+    range: `${SHEET_NAME}!A:N`,
   });
 
   const rows = readResult.data.values || [];
@@ -368,6 +378,8 @@ app.post("/api/attendance/signin", async (req, res) => {
     const lat = requiredNumber(req.body.lat, "lat");
     const lng = requiredNumber(req.body.lng, "lng");
     const accuracy = requiredNumber(req.body.accuracy, "accuracy");
+    const altitude = optionalNumber(req.body.altitude);
+    const altitudeAccuracy = optionalNumber(req.body.altitudeAccuracy);
     const now = new Date();
     const signInTime = attendanceDateTimeString(now);
     const distance = distanceMeters({ lat, lng }, OFFICE_CENTER);
@@ -400,7 +412,7 @@ app.post("/api/attendance/signin", async (req, res) => {
     await ensureAttendanceHeader(sheets);
     const appendResult = await sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_NAME}!A:J`,
+      range: `${SHEET_NAME}!A:N`,
       valueInputOption: "USER_ENTERED",
       insertDataOption: "INSERT_ROWS",
       requestBody: {
@@ -415,6 +427,10 @@ app.post("/api/attendance/signin", async (req, res) => {
           accuracy,
           todayDateString(now),
           validation.status,
+          altitude,
+          altitudeAccuracy,
+          "",
+          "",
         ]],
       },
     });
@@ -447,6 +463,8 @@ app.post("/api/attendance/signout", async (req, res) => {
     const lat = requiredNumber(req.body.lat, "lat");
     const lng = requiredNumber(req.body.lng, "lng");
     const accuracy = requiredNumber(req.body.accuracy, "accuracy");
+    const altitude = optionalNumber(req.body.altitude);
+    const altitudeAccuracy = optionalNumber(req.body.altitudeAccuracy);
     const status = optionalStatus(req.body.status, "VERIFIED");
     const now = new Date();
     const signOutTime = attendanceDateTimeString(now);
@@ -482,6 +500,15 @@ app.post("/api/attendance/signout", async (req, res) => {
       valueInputOption: "USER_ENTERED",
       requestBody: {
         values: [[signOutTime, totalMinutes, lat, lng, accuracy, dateValue, status]],
+      },
+    });
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${SHEET_NAME}!M${rowNumber}:N${rowNumber}`,
+      valueInputOption: "USER_ENTERED",
+      requestBody: {
+        values: [[altitude, altitudeAccuracy]],
       },
     });
 
