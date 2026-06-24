@@ -1,18 +1,48 @@
 {
-"type": "FeatureCollection",
-"name": "3rd_floor_corridor",
-"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
-"features": [
-{ "type": "Feature", "properties": { "id": 1, "Floor": "3rd", "Latitude": 28.670895046752591, "Longitude": 77.133681167390179, "room_name": "Employee sitting places" }, "geometry": { "type": "Point", "coordinates": [ 77.133681167390179, 28.670895046752591 ] } },
-{ "type": "Feature", "properties": { "id": 3, "Floor": "3rd", "Latitude": 28.670955769440614, "Longitude": 77.133640638053635, "room_name": "Employee sitting places" }, "geometry": { "type": "Point", "coordinates": [ 77.133642888974407, 28.670952239807892 ] } },
-{ "type": "Feature", "properties": { "id": 5, "Floor": "3rd", "Latitude": 28.670962369759167, "Longitude": 77.133650001913338, "room_name": "Employee sitting places" }, "geometry": { "type": "Point", "coordinates": [ 77.133652252834111, 28.670958840126445 ] } },
-{ "type": "Feature", "properties": { "id": 6, "Floor": "3rd", "Latitude": 28.670969050310362, "Longitude": 77.133659213082012, "room_name": "Employee sitting places" }, "geometry": { "type": "Point", "coordinates": [ 77.133661464002785, 28.67096552067764 ] } },
-{ "type": "Feature", "properties": { "id": 7, "Floor": "3rd", "Latitude": 28.670975023449842, "Longitude": 77.133667790435013, "room_name": "Employee sitting places" }, "geometry": { "type": "Point", "coordinates": [ 77.133670041355785, 28.67097149381712 ] } },
-{ "type": "Feature", "properties": { "id": 8, "Floor": "3rd", "Latitude": 28.670980891828119, "Longitude": 77.13367457574742, "room_name": "Employee sitting places" }, "geometry": { "type": "Point", "coordinates": [ 77.133676826668193, 28.670977362195398 ] } },
-{ "type": "Feature", "properties": { "id": 9, "Floor": "3rd", "Latitude": 28.670991619957174, "Longitude": 77.13366728612128, "room_name": "Employee sitting places" }, "geometry": { "type": "Point", "coordinates": [ 77.133669537042053, 28.670988090324453 ] } },
-{ "type": "Feature", "properties": { "id": 10, "Floor": "3rd", "Latitude": 28.670996518550101, "Longitude": 77.133664100682267, "room_name": "Employee sitting places" }, "geometry": { "type": "Point", "coordinates": [ 77.13366635160304, 28.67099298891738 ] } },
-{ "type": "Feature", "properties": { "id": 11, "Floor": "3rd", "Latitude": 28.67100587846771, "Longitude": 77.13365619981019, "room_name": "Employee sitting places" }, "geometry": { "type": "Point", "coordinates": [ 77.133658450730962, 28.671002348834989 ] } },
-{ "type": "Feature", "properties": { "id": 12, "Floor": "3rd", "Latitude": 28.671009259458181, "Longitude": 77.133660798494915, "room_name": "Employee sitting places" }, "geometry": { "type": "Point", "coordinates": [ 77.133663049415688, 28.67100572982546 ] } },
-{ "type": "Feature", "properties": { "id": 13, "Floor": "3rd", "Latitude": 28.671012308062743, "Longitude": 77.133665180863986, "room_name": "Employee sitting places" }, "geometry": { "type": "Point", "coordinates": [ 77.133667431784758, 28.671008778430021 ] } }
-]
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "type": "main" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [77.1337015566809,  28.670925505440955, 9.013555571937994],
+          [77.1337168863309,  28.67091164028271,  7.762241214348218],
+          [77.13368586268267, 28.67089637708329,  9.0089558916471],
+          [77.13364046557564, 28.670949666129225, 7.241761470341059],
+          [77.13365423425256, 28.670962501360055, 7.3417242408063395],
+          [77.13366460772706, 28.670968168138835, 9.008688731014702],
+          [77.13368334341531, 28.670982618319854, 7.534440911180029],
+          [77.13370893107256, 28.670959502003,    6.543050708592208],
+          [77.1337272781176,  28.670973982465267, 7.689418987400068],
+          [77.133690879625,   28.6710136484002,   9.012841445763977]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "type": "branch" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [77.13366383560015, 28.670967464185814, 9.09605221409541],
+          [77.13368148313997, 28.670946088675567, 9.012390301756984]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "type": "branch" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [77.13368113003843, 28.670981540639257, 7.965816024881887],
+          [77.1336503053284,  28.671011298929304, 7.485615146809673],
+          [77.13363600451218, 28.670997102400637, 9.009050693938853],
+          [77.13364902968033, 28.670979214460694, 7.377243325346665]
+        ]
+      }
+    }
+  ]
 }

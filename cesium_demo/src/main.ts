@@ -3,6 +3,7 @@ import { Cesium, viewer } from "./viewer";
 import { loadModels } from "./models";
 import { getSelectedFloor, initSmartFloorCamera, openFloorProfessional, preloadFloor, showFloor } from "./floors";
 import { getNavigableRoomNames, loadRooms } from "./rooms";
+import { getNavigablePersonNames, chairNavPoints } from "./chairs";
 import { initializeCalendar } from "./calendar";
 import {
   exitNavigation,
@@ -11,6 +12,23 @@ import {
   installStairPathDebug,
   startNavigation,
   setNavigationFloorSwitchHandler,
+  showStairDebugUI,
+  hideStairDebugUI,
+  setStairDragEnabled,
+  getStairPathPoints,
+  setStairPathPoint,
+  flyToStairDebugUI,
+  copyStairPathToClipboard,
+  startStairAddPointMode,
+  stopStairAddPointMode,
+  removeLastStairPathPoint,
+  showCursorCoordinateDisplay,
+  hideCursorCoordinateDisplay,
+  saveCurrentCameraAsChairPreset,
+  flyToChairViewPreset,
+  deleteChairViewPreset,
+  getAllChairViewPresets,
+  getChairViewPresetsCode,
 } from "./navigation";
 import { clearCctvViewshed } from "./cameraShed/cctvViewshed";
 import {
@@ -27,6 +45,8 @@ import {
   installMapDirectionsControl,
   showFloorSpinner,
   setEnterBuildingFloorSwitchCallback,
+  installSeatViewDebug,
+  installArrivalViewTuner,
 } from "./ui";
 import { createBooking, getCurrentEvents, showToast } from "./booking";
 
@@ -124,7 +144,7 @@ async function bootstrap(): Promise<void> {
 
   await Promise.all([modelLoad, roomLoad]);
   await installCorridorPointDebug();
-  populateRoomDropdowns(getNavigableRoomNames());
+  populateRoomDropdowns(getNavigableRoomNames(), getNavigablePersonNames());
   applySelectedFloor();
   initSmartFloorCamera();
   installStairPathDebug();
@@ -170,6 +190,26 @@ async function bootstrap(): Promise<void> {
   void initializeCalendar();
   setNavigationMessage("Choose rooms to start navigation.");
 
+  // ── Arrival view tuner (enable with ?arrivalViewDebug=1 in URL) ──
+  installArrivalViewTuner();
+
+  // ── Seat view debug card (enable with ?seatViewDebug=1 in URL) ──
+  if (new URLSearchParams(window.location.search).get("seatViewDebug") === "1") {
+    const persons = chairNavPoints.map((p) => ({
+      name: p.name,
+      floor: p.floor,
+      label: `${p.floor === 3 ? "2F" : "3F"} — ${p.name}`,
+    }));
+    installSeatViewDebug({
+      persons,
+      onSave: saveCurrentCameraAsChairPreset,
+      onTest: flyToChairViewPreset,
+      onDelete: deleteChairViewPreset,
+      getPresets: getAllChairViewPresets,
+      getCopyCode: getChairViewPresetsCode,
+    });
+  }
+
   // ── Hamburger Menu ──
   const hamburgerBtn = document.getElementById("hamburgerMenu") as HTMLButtonElement | null;
   const backdrop = document.getElementById("menuBackdrop") as HTMLElement | null;
@@ -195,11 +235,176 @@ async function bootstrap(): Promise<void> {
     const sidebar = document.querySelector(".left-sidebar");
     const isClickInsideSidebar = sidebar?.contains(target);
     const isClickOnHamburger = hamburgerBtn?.contains(target);
-    
+
     if (!isClickInsideSidebar && !isClickOnHamburger) {
       document.body.classList.remove("side-panel-open");
       if (hamburgerBtn) hamburgerBtn.classList.remove("open");
     }
+  });
+
+  // ── Stair Debug Panel ──────────────────────────────────────────────────────
+  const stairPanel   = document.getElementById("stairDebugPanel") as HTMLElement | null;
+  const stairOpenBtn = document.getElementById("stairDebugOpenBtn") as HTMLButtonElement | null;
+  const stairCloseBtn= document.getElementById("stairDebugCloseBtn") as HTMLButtonElement | null;
+  const stairShowBtn = document.getElementById("stairShowBtn") as HTMLButtonElement | null;
+  const stairDragBtn = document.getElementById("stairDragBtn") as HTMLButtonElement | null;
+  const stairFlyBtn  = document.getElementById("stairFlyBtn") as HTMLButtonElement | null;
+  const stairAddBtn  = document.getElementById("stairAddBtn") as HTMLButtonElement | null;
+  const stairUndoBtn = document.getElementById("stairUndoBtn") as HTMLButtonElement | null;
+  const stairCopyBtn = document.getElementById("stairCopyBtn") as HTMLButtonElement | null;
+  const stairCards   = document.getElementById("stairPointCards") as HTMLElement | null;
+
+  const FLOOR_TAGS = [
+    { label: "2nd Floor", cls: "floor-2nd" },
+    { label: "Step 2",    cls: "floor-landing" },
+    { label: "Landing",   cls: "floor-landing" },
+    { label: "Step 4",    cls: "floor-landing" },
+    { label: "Step 5",    cls: "floor-landing" },
+    { label: "3rd Floor", cls: "floor-3rd" },
+  ];
+
+  let stairPointsVisible = false;
+  let stairDragActive = false;
+  let stairAddActive = false;
+
+  function setStairSecondaryBtns(enabled: boolean): void {
+    if (stairDragBtn) stairDragBtn.disabled = !enabled;
+    if (stairFlyBtn)  stairFlyBtn.disabled  = !enabled;
+    if (stairAddBtn)  stairAddBtn.disabled  = !enabled;
+    if (stairUndoBtn) stairUndoBtn.disabled = !enabled;
+    if (stairCopyBtn) stairCopyBtn.disabled = !enabled;
+  }
+
+  function stopAddMode(): void {
+    if (!stairAddActive) return;
+    stairAddActive = false;
+    stopStairAddPointMode();
+    if (stairAddBtn) { stairAddBtn.textContent = "+ Click to Add"; stairAddBtn.classList.remove("active"); }
+  }
+
+  function buildStairCards(): void {
+    if (!stairCards) return;
+    const pts = getStairPathPoints();
+    stairCards.innerHTML = pts.map((pt, i) => {
+      const tag = FLOOR_TAGS[i];
+      return `
+        <div class="stair-point-card">
+          <div class="stair-point-card-header">
+            <span>Point ${i + 1}</span>
+            <span class="stair-point-floor-tag ${tag.cls}">${tag.label}</span>
+          </div>
+          <div class="stair-point-inputs">
+            <input id="stairLat${i}" type="text" value="${pt.lat.toFixed(9)}" placeholder="Latitude" />
+            <input id="stairLon${i}" type="text" value="${pt.lon.toFixed(9)}" placeholder="Longitude" />
+            <button class="btn" type="button" data-stair-update="${i}">✓</button>
+          </div>
+        </div>`;
+    }).join("");
+
+    stairCards.querySelectorAll<HTMLButtonElement>("[data-stair-update]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const idx = Number(btn.dataset.stairUpdate);
+        const lat = parseFloat((document.getElementById(`stairLat${idx}`) as HTMLInputElement).value);
+        const lon = parseFloat((document.getElementById(`stairLon${idx}`) as HTMLInputElement).value);
+        if (isNaN(lat) || isNaN(lon)) return;
+        setStairPathPoint(idx, lon, lat);
+      });
+    });
+  }
+
+  stairOpenBtn?.addEventListener("click", () => {
+    if (stairPanel) stairPanel.hidden = false;
+    buildStairCards();
+  });
+
+  stairCloseBtn?.addEventListener("click", () => {
+    stopAddMode();
+    if (stairPointsVisible) { hideStairDebugUI(); stairPointsVisible = false; stairDragActive = false; }
+    if (stairShowBtn) { stairShowBtn.textContent = "Show Points"; stairShowBtn.classList.remove("active"); }
+    if (stairDragBtn) { stairDragBtn.textContent = "Drag Edit"; stairDragBtn.classList.remove("active"); }
+    setStairSecondaryBtns(false);
+    if (stairPanel) stairPanel.hidden = true;
+  });
+
+  stairShowBtn?.addEventListener("click", () => {
+    stairPointsVisible = !stairPointsVisible;
+    if (stairPointsVisible) {
+      showStairDebugUI();
+      showCursorCoordinateDisplay();
+      stairShowBtn.textContent = "Hide Points";
+      stairShowBtn.classList.add("active");
+      setStairSecondaryBtns(true);
+    } else {
+      stopAddMode();
+      hideStairDebugUI();
+      hideCursorCoordinateDisplay();
+      stairDragActive = false;
+      stairShowBtn.textContent = "Show Points";
+      stairShowBtn.classList.remove("active");
+      if (stairDragBtn) { stairDragBtn.textContent = "Drag Edit"; stairDragBtn.classList.remove("active"); }
+      setStairSecondaryBtns(false);
+    }
+  });
+
+  stairDragBtn?.addEventListener("click", () => {
+    stairDragActive = !stairDragActive;
+    setStairDragEnabled(stairDragActive);
+    stairDragBtn.textContent = stairDragActive ? "Drag On" : "Drag Edit";
+    stairDragBtn.classList.toggle("active", stairDragActive);
+  });
+
+  stairFlyBtn?.addEventListener("click", () => { flyToStairDebugUI(); });
+
+  stairAddBtn?.addEventListener("click", () => {
+    stairAddActive = !stairAddActive;
+    if (stairAddActive) {
+      startStairAddPointMode((index, lon, lat) => {
+        // append a new card for the added point
+        if (!stairCards) return;
+        const floorTag = index === 0
+          ? { label: "2nd Floor", cls: "floor-2nd" }
+          : index === 4
+            ? { label: "3rd Floor", cls: "floor-3rd" }
+            : { label: `Step ${index + 1}`, cls: "floor-landing" };
+        const card = document.createElement("div");
+        card.className = "stair-point-card";
+        card.innerHTML = `
+          <div class="stair-point-card-header">
+            <span>Point ${index + 1}</span>
+            <span class="stair-point-floor-tag ${floorTag.cls}">${floorTag.label}</span>
+          </div>
+          <div class="stair-point-inputs">
+            <input id="stairLat${index}" type="text" value="${lat.toFixed(9)}" placeholder="Latitude" />
+            <input id="stairLon${index}" type="text" value="${lon.toFixed(9)}" placeholder="Longitude" />
+            <button class="btn" type="button" data-stair-update="${index}">✓</button>
+          </div>`;
+        stairCards.appendChild(card);
+        card.querySelector<HTMLButtonElement>("[data-stair-update]")?.addEventListener("click", (e) => {
+          const idx = Number((e.currentTarget as HTMLButtonElement).dataset.stairUpdate);
+          const latVal = parseFloat((document.getElementById(`stairLat${idx}`) as HTMLInputElement).value);
+          const lonVal = parseFloat((document.getElementById(`stairLon${idx}`) as HTMLInputElement).value);
+          if (!isNaN(latVal) && !isNaN(lonVal)) setStairPathPoint(idx, lonVal, latVal);
+        });
+      });
+      stairAddBtn.textContent = "🔴 Adding…";
+      stairAddBtn.classList.add("active");
+    } else {
+      stopAddMode();
+    }
+  });
+
+  stairUndoBtn?.addEventListener("click", () => {
+    const removed = removeLastStairPathPoint();
+    if (removed && stairCards) {
+      stairCards.removeChild(stairCards.lastElementChild!);
+    }
+  });
+
+  stairCopyBtn?.addEventListener("click", async () => {
+    await copyStairPathToClipboard();
+    const prev = stairCopyBtn.textContent;
+    stairCopyBtn.textContent = "✓ Copied!";
+    window.setTimeout(() => { stairCopyBtn.textContent = prev; }, 1800);
   });
 }
 

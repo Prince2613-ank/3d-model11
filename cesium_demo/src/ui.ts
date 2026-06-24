@@ -1,7 +1,7 @@
 import { Cesium, viewer, ALT_2ND, ALT_3RD } from "./viewer";
 import { BUILDING_ENTRANCE, lookupRoomPOI, type RoomPOI } from "./buildingPOI";
 import outdoorNavigationPointsUrl from "../Outdoor_navigation_points.geojson?url";
-import { ChairModel, getPickedChair, highlightChair } from "./chairs";
+import { ChairModel, getPickedChair, highlightChair, findChairByName, chairNavPoints, getActualChairPosition } from "./chairs";
 import {
   CameraModel,
   getPickedCamera,
@@ -106,7 +106,11 @@ const KNOWN_MAP_PLACES: Record<string, MapCoordinate> = {
 };
 
 function normalizeLabel(value: string): string {
-  return value.toLowerCase().replace(/\s+\((2nd|3rd) floor\)$/i, "").trim();
+  return value.toLowerCase().replace(/^\[person\]\s*/i, "").replace(/\s+\((2nd|3rd) floor\)$/i, "").trim();
+}
+
+function displayRouteOption(value: string): string {
+  return value.replace(/^\[Person\]\s*/i, "");
 }
 
 function selectIndoorRoom(selectId: string, preferredRoom: string, preferredFloorLabel?: string): boolean {
@@ -943,34 +947,6 @@ async function fetchOutdoorRoute(start: MapCoordinate, end: MapCoordinate): Prom
   return { points: [], distanceMeters: haversineDistanceMeters(start, end) };
 }
 
-function createAttendanceToolbarButton(): HTMLButtonElement {
-  const button = document.createElement("button");
-  button.id = "attendanceToolbarBtn";
-  button.className = "cesium-toolbar-button attendance-toolbar-btn";
-  button.type = "button";
-  button.title = "Attendance";
-  button.setAttribute("aria-label", "Attendance");
-  button.innerHTML = `
-    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="7" r="3.5" stroke="currentColor" stroke-width="1.8"/>
-      <path d="M4.5 20c0-4 3.4-7 7.5-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-      <circle cx="18" cy="17" r="4" fill="#22c55e"/>
-      <path d="M15.8 17l1.4 1.5 2.5-2.8" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-  `;
-  button.addEventListener("click", () => {
-    const panel = document.getElementById("attendancePanel");
-    if (!panel) return;
-    const opening = panel.hidden === true;
-    closeAllToolbarPanels();
-    if (opening) {
-      panel.hidden = false;
-      button.classList.add("active");
-      button.setAttribute("aria-pressed", "true");
-    }
-  });
-  return button;
-}
 
 function createMapToolbarButton(): HTMLButtonElement {
   const button = document.createElement("button");
@@ -1073,7 +1049,7 @@ function bindEnterBuildingPrompt(): void {
           destination: Cesium.Cartesian3.fromDegrees(
             BUILDING_ENTRANCE.lon,
             BUILDING_ENTRANCE.lat,
-            floorAlt + 7
+            floorAlt + 1.3
           ),
           orientation: {
             heading: Cesium.Math.toRadians(342),
@@ -1136,14 +1112,6 @@ function syncUserProfileToToolbar(toolbar: HTMLElement): void {
 }
 
 function closeAllToolbarPanels(): void {
-  const attendancePanel = document.getElementById("attendancePanel");
-  if (attendancePanel) attendancePanel.hidden = true;
-  const attendanceBtn = document.getElementById("attendanceToolbarBtn");
-  if (attendanceBtn) {
-    attendanceBtn.classList.remove("active");
-    attendanceBtn.setAttribute("aria-pressed", "false");
-  }
-
   const mapPanel = document.getElementById("mapDirectionsPanel");
   if (mapPanel) mapPanel.hidden = true;
 }
@@ -1159,10 +1127,6 @@ export function installMapDirectionsControl(): void {
 
   const button = createMapToolbarButton();
   toolbar.prepend(button);
-
-  if (!document.getElementById("attendanceToolbarBtn")) {
-    button.insertAdjacentElement("afterend", createAttendanceToolbarButton());
-  }
 
   syncUserProfileToToolbar(toolbar);
   new ResizeObserver(() => syncUserProfileToToolbar(toolbar)).observe(toolbar);
@@ -1542,6 +1506,18 @@ let activeCameraControlFloor: number | null = null;
 let cameraPanelUserOpen = false;
 let lastHoverPickAt = 0;
 const HOVER_PICK_INTERVAL_MS = 80;
+
+let coordCollecting = false;
+type CollectedPoint = { lat: number; lon: number; alt: number };
+const collectedCoordPoints: CollectedPoint[] = [];
+const collectedCoordMarkerIds: string[] = [];
+
+type PathCoord = { lat: number; lon: number; alt: number };
+type DrawnPath = { coords: PathCoord[]; kind: "main" | "branch"; entityId: string };
+let pathDrawMode: "off" | "main" | "branch" = "off";
+const drawnPaths: DrawnPath[] = [];
+let activeDrawPath: DrawnPath | null = null;
+const PATH_PREVIEW_ID = "pathDrawPreview";
 
 function syncCameraPanelVisibility(): void {
   const panel = optionalElement<HTMLElement>("cameraPanel");
@@ -1925,12 +1901,34 @@ export function bindUiControls(callbacks: UiCallbacks): void {
 }
 
 let cachedRoomNames: string[] = [];
+let cachedIndoorRoomNames: string[] = [];
+let cachedPersonNames: string[] = [];
 
-export function populateRoomDropdowns(names: string[]): void {
-  cachedRoomNames = names;
-  const options = names.map((name) => `<option>${name}</option>`).join("");
-  element<HTMLSelectElement>("fromRoom").innerHTML = options;
-  element<HTMLSelectElement>("toRoom").innerHTML = options;
+export function populateRoomDropdowns(names: string[], personNames: string[] = []): void {
+  cachedIndoorRoomNames = names;
+  cachedPersonNames = personNames;
+  cachedRoomNames = [...names, ...personNames];
+  const roomOpts = names.map((name) => `<option>${name}</option>`).join("");
+  const personOpts = personNames.length
+    ? `<optgroup label="People">${personNames.map((n) => `<option>${n}</option>`).join("")}</optgroup>`
+    : "";
+  const html = `<optgroup label="Rooms">${roomOpts}</optgroup>${personOpts}`;
+  element<HTMLSelectElement>("fromRoom").innerHTML = html;
+  element<HTMLSelectElement>("toRoom").innerHTML = html;
+}
+
+function escapeMapOption(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;",
+  }[char] ?? char));
+}
+
+function renderMapOption(name: string): string {
+  return `<li role="option" tabindex="-1">${escapeMapOption(displayRouteOption(name))}</li>`;
 }
 
 async function fetchAddressSuggestions(query: string): Promise<string[]> {
@@ -1968,18 +1966,48 @@ function bindMapAutocomplete(
   let selecting = false;
 
   function getRoomNames(): string[] {
-    return cachedRoomNames.length > 0
-      ? cachedRoomNames
+    return cachedIndoorRoomNames.length > 0
+      ? cachedIndoorRoomNames
       : Array.from(
           (optionalElement<HTMLSelectElement>("fromRoom") ?? { options: [] as unknown as HTMLOptionsCollection }).options
-        ).map((o) => o.value).filter(Boolean);
+        ).map((o) => o.value).filter((value) => value && !value.startsWith("[Person]"));
+  }
+
+  function getPersonNames(): string[] {
+    return cachedPersonNames.length > 0
+      ? cachedPersonNames
+      : cachedRoomNames.filter((value) => value.startsWith("[Person]"));
   }
 
   function buildRoomItems(filter: string): string[] {
     const q = filter.toLowerCase().trim();
-    const rooms = getRoomNames();
-    if (!q) return rooms;
-    return rooms.filter((r) => r.toLowerCase().includes(q));
+    const items = [...getRoomNames(), ...getPersonNames()];
+    if (!q) return items;
+    return items.filter((item) => item.toLowerCase().includes(q));
+  }
+
+  function buildCategoryItems(kind: "room" | "person", filter = ""): string[] {
+    const q = filter.toLowerCase().trim();
+    const items = kind === "room" ? getRoomNames() : getPersonNames();
+    if (!q) return items;
+    return items.filter((item) => item.toLowerCase().includes(q));
+  }
+
+  function renderInitialChoice(): void {
+    const roomExample = getRoomNames()[0] ?? "Conference Room";
+    const personExample = getPersonNames()[0] ?? "Employee";
+    dropdown.innerHTML = `
+      <li class="map-ac-section" role="presentation">Choose type</li>
+      <li class="map-ac-choice" role="option" tabindex="-1" data-picker-kind="room">
+        <strong>Rooms</strong>
+        <span>Example: ${escapeMapOption(displayRouteOption(roomExample))}</span>
+      </li>
+      <li class="map-ac-choice" role="option" tabindex="-1" data-picker-kind="person">
+        <strong>People</strong>
+        <span>Example: ${escapeMapOption(displayRouteOption(personExample))}</span>
+      </li>
+    `;
+    dropdown.hidden = false;
   }
 
   function renderDropdown(rooms: string[], addresses: string[]): void {
@@ -1989,14 +2017,29 @@ function bindMapAutocomplete(
     }
     let html = "";
     if (rooms.length > 0) {
-      html += `<li class="map-ac-section" role="presentation">Rooms</li>`;
-      html += rooms.map((name) => `<li role="option" tabindex="-1">${name}</li>`).join("");
+      html += `<li class="map-ac-section" role="presentation">Rooms and People</li>`;
+      html += rooms.map(renderMapOption).join("");
     }
     if (addresses.length > 0) {
       html += `<li class="map-ac-section" role="presentation">Addresses</li>`;
-      html += addresses.map((name) => `<li role="option" tabindex="-1">${name}</li>`).join("");
+      html += addresses.map((name) => `<li role="option" tabindex="-1">${escapeMapOption(name)}</li>`).join("");
     }
     dropdown.innerHTML = html;
+    dropdown.hidden = false;
+  }
+
+  function renderCategoryDropdown(kind: "room" | "person"): void {
+    const items = buildCategoryItems(kind);
+    if (items.length === 0) {
+      dropdown.hidden = true;
+      return;
+    }
+
+    const title = kind === "room" ? "Rooms" : "People";
+    dropdown.innerHTML = `
+      <li class="map-ac-section" role="presentation">${title}</li>
+      ${items.map(renderMapOption).join("")}
+    `;
     dropdown.hidden = false;
   }
 
@@ -2031,14 +2074,14 @@ function bindMapAutocomplete(
   });
 
   input.addEventListener("focus", () => {
-    if (!input.value.trim()) renderDropdown(buildRoomItems(""), []);
+    if (!input.value.trim()) renderInitialChoice();
   });
 
   // Arrow button: always show full room list so user can pick a different room
   const arrow = input.parentElement?.querySelector<HTMLButtonElement>(".map-autocomplete-arrow");
   arrow?.addEventListener("click", () => {
     if (dropdown.hidden) {
-      renderDropdown(buildRoomItems(""), []);
+      renderInitialChoice();
       input.focus();
     } else {
       closeDropdown();
@@ -2049,6 +2092,11 @@ function bindMapAutocomplete(
     const li = (e.target as HTMLElement).closest("li");
     if (!li || li.classList.contains("map-ac-section")) return;
     e.preventDefault();
+    const pickerKind = li.dataset.pickerKind;
+    if (pickerKind === "room" || pickerKind === "person") {
+      renderCategoryDropdown(pickerKind);
+      return;
+    }
     selectItem(li.textContent ?? "");
   });
 
@@ -2196,6 +2244,72 @@ function showChairPopup(chair: ChairModel, selectedFloor: number): void {
 
 function closeChairPopup(): void {
   element<HTMLElement>("chairPopup").style.display = "none";
+  stopArrivalBlink();
+  if (arrivalHighlightedChair) {
+    highlightChair(arrivalHighlightedChair, Cesium.Color.WHITE);
+    arrivalHighlightedChair = null;
+  }
+}
+
+let arrivalHighlightedChair: ChairModel | null = null;
+let arrivalOriginalMatrix: Cesium.Matrix4 | null = null;
+let arrivalBlinkTimer: number | null = null;
+let arrivalAnimRemove: (() => void) | null = null;
+
+function stopArrivalBlink(): void {
+  if (arrivalBlinkTimer !== null) {
+    window.clearInterval(arrivalBlinkTimer);
+    arrivalBlinkTimer = null;
+  }
+  if (arrivalAnimRemove !== null) {
+    arrivalAnimRemove();
+    arrivalAnimRemove = null;
+  }
+  if (arrivalHighlightedChair && arrivalOriginalMatrix !== null) {
+    arrivalHighlightedChair.modelMatrix = Cesium.Matrix4.clone(arrivalOriginalMatrix, new Cesium.Matrix4());
+    arrivalOriginalMatrix = null;
+  }
+}
+
+export function showChairArrivalEffect(name: string, floor: 3 | 4): void {
+  stopArrivalBlink();
+  if (arrivalHighlightedChair) {
+    highlightChair(arrivalHighlightedChair, Cesium.Color.WHITE);
+    arrivalHighlightedChair = null;
+  }
+  const chair = findChairByName(name, floor);
+  if (!chair) return;
+  arrivalHighlightedChair = chair;
+  arrivalOriginalMatrix = Cesium.Matrix4.clone(chair.modelMatrix);
+  showChairPopup(chair, floor);
+
+  // ── Blue blink ───────────────────────────────────────────────────
+  let blinkOn = true;
+  highlightChair(chair, Cesium.Color.BLUE);
+  arrivalBlinkTimer = window.setInterval(() => {
+    blinkOn = !blinkOn;
+    highlightChair(chair, blinkOn ? Cesium.Color.BLUE : Cesium.Color.WHITE);
+    viewer.scene.requestRender();
+  }, 480);
+
+  // ── Vertical bounce: move chair up/down along ECEF "up" axis ────
+  const savedMatrix = arrivalOriginalMatrix!;
+  const baseTranslation = Cesium.Matrix4.getTranslation(savedMatrix, new Cesium.Cartesian3());
+  const upDir = Cesium.Cartesian3.normalize(baseTranslation, new Cesium.Cartesian3());
+
+  arrivalAnimRemove = viewer.scene.postRender.addEventListener(() => {
+    if (!arrivalHighlightedChair) return;
+    // 0 → 0.45 m upward bounce, smooth sine
+    const bounceM = 0.45 * Math.abs(Math.sin(performance.now() * 0.008));
+    const offset = Cesium.Cartesian3.multiplyByScalar(upDir, bounceM, new Cesium.Cartesian3());
+    const newPos = Cesium.Cartesian3.add(baseTranslation, offset, new Cesium.Cartesian3());
+    const nextMatrix = Cesium.Matrix4.clone(savedMatrix, new Cesium.Matrix4());
+    Cesium.Matrix4.setTranslation(nextMatrix, newPos, nextMatrix);
+    arrivalHighlightedChair.modelMatrix = nextMatrix;
+    viewer.scene.requestRender();
+  });
+
+  viewer.scene.requestRender();
 }
 
 // ── CCTV panel ────────────────────────────────────────────────────
@@ -2543,6 +2657,442 @@ export function renderCameraControls(floor: number): void {
 
 
 
+// ── Floor arrival view card (always visible, left side) ──────────
+
+export type FloorArrivalPresetUI = {
+  lon: number; lat: number; height: number;
+  heading: number; pitch: number; roll: number;
+};
+
+export function installFloorArrivalCard(params: {
+  onSave:  (floor: 3 | 4, preset: FloorArrivalPresetUI) => void;
+  onReset: (floor: 3 | 4) => void;
+  getOverride: (floor: 3 | 4) => FloorArrivalPresetUI | null;
+}): void {
+  const card = document.createElement("div");
+  card.id = "floorArrivalCard";
+  card.style.cssText = `
+    position:fixed; bottom:340px; left:8px; z-index:9999;
+    background:rgba(10,14,26,0.94); border:1px solid rgba(0,200,255,0.35);
+    border-radius:10px; padding:12px 14px; width:232px;
+    font-family:monospace; font-size:12px; color:#cce8ff;
+    box-shadow:0 4px 18px rgba(0,0,0,0.65);
+  `;
+
+  // Floor tabs
+  let activeFloor: 3 | 4 = 4;
+
+  card.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-size:13px;font-weight:bold;color:#00ccff">Arrival View</span>
+      <div style="display:flex;gap:4px">
+        <button id="favFloor3" style="padding:2px 8px;border-radius:4px;border:1px solid #00ccff44;background:#003355;color:#cce8ff;cursor:pointer;font-size:11px">2F</button>
+        <button id="favFloor4" style="padding:2px 8px;border-radius:4px;border:1px solid #00ccff;background:#005baa;color:#fff;cursor:pointer;font-size:11px">3F</button>
+      </div>
+    </div>
+    <div id="favLiveBar" style="font-size:10px;color:#55aacc;background:rgba(0,200,255,0.06);border-radius:5px;padding:4px 6px;margin-bottom:8px;line-height:1.7">—</div>
+    ${field("favLon",     "Lon")}
+    ${field("favLat",     "Lat")}
+    ${field("favHeight",  "Height (m)")}
+    ${field("favHeading", "Heading (°)")}
+    ${field("favPitch",   "Pitch (°)")}
+    ${field("favRoll",    "Roll (°)")}
+    <div style="display:flex;gap:5px;margin-top:8px">
+      <button id="favCapture" style="flex:1;background:#004488;color:#fff;border:none;border-radius:5px;padding:5px 0;cursor:pointer;font-size:11px">Capture</button>
+      <button id="favPreview" style="flex:1;background:#006633;color:#fff;border:none;border-radius:5px;padding:5px 0;cursor:pointer;font-size:11px">Preview</button>
+    </div>
+    <div style="display:flex;gap:5px;margin-top:5px">
+      <button id="favSave"  style="flex:1;background:#005baa;color:#fff;border:none;border-radius:5px;padding:5px 0;cursor:pointer;font-size:11px">Save Default</button>
+      <button id="favReset" style="flex:1;background:#550011;color:#fff;border:none;border-radius:5px;padding:5px 0;cursor:pointer;font-size:11px">Reset</button>
+    </div>
+    <div id="favStatus" style="margin-top:6px;font-size:10px;color:#aaffcc;min-height:14px;text-align:center"></div>
+  `;
+  document.body.appendChild(card);
+
+  function field(id: string, label: string): string {
+    return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+      <label style="width:76px;color:#88bbdd;font-size:11px">${label}</label>
+      <input id="${id}" type="number" step="any"
+        style="flex:1;background:#0a0e1a;color:#cce8ff;border:1px solid #00ccff33;border-radius:4px;padding:3px 5px;font-size:11px;width:0"/>
+    </div>`;
+  }
+
+  const get = (id: string) => card.querySelector<HTMLElement>(`#${id}`)!;
+  const inp = (id: string) => card.querySelector<HTMLInputElement>(`#${id}`)!;
+  const setStatus = (msg: string, color = "#aaffcc") => {
+    const el = get("favStatus") as HTMLElement;
+    el.style.color = color;
+    el.textContent = msg;
+    window.setTimeout(() => { el.textContent = ""; }, 2500);
+  };
+
+  function readCam(): FloorArrivalPresetUI {
+    const pos = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+    return {
+      lon:     Number(Cesium.Math.toDegrees(pos.longitude).toFixed(9)),
+      lat:     Number(Cesium.Math.toDegrees(pos.latitude).toFixed(9)),
+      height:  Number(pos.height.toFixed(3)),
+      heading: Number(Cesium.Math.toDegrees(viewer.camera.heading).toFixed(3)),
+      pitch:   Number(Cesium.Math.toDegrees(viewer.camera.pitch).toFixed(3)),
+      roll:    Number(Cesium.Math.toDegrees(viewer.camera.roll).toFixed(3)),
+    };
+  }
+
+  function fillFields(p: FloorArrivalPresetUI): void {
+    inp("favLon").value     = String(p.lon);
+    inp("favLat").value     = String(p.lat);
+    inp("favHeight").value  = String(p.height);
+    inp("favHeading").value = String(p.heading);
+    inp("favPitch").value   = String(p.pitch);
+    inp("favRoll").value    = String(p.roll);
+  }
+
+  function readFields(): FloorArrivalPresetUI {
+    return {
+      lon:     parseFloat(inp("favLon").value)     || 0,
+      lat:     parseFloat(inp("favLat").value)     || 0,
+      height:  parseFloat(inp("favHeight").value)  || 0,
+      heading: parseFloat(inp("favHeading").value) || 0,
+      pitch:   parseFloat(inp("favPitch").value)   || 0,
+      roll:    parseFloat(inp("favRoll").value)    || 0,
+    };
+  }
+
+  function activateFloorTab(floor: 3 | 4): void {
+    activeFloor = floor;
+    const on  = "border:1px solid #00ccff;background:#005baa;color:#fff";
+    const off = "border:1px solid #00ccff44;background:#003355;color:#cce8ff";
+    (get("favFloor3") as HTMLElement).style.cssText += floor === 3 ? on : off;
+    (get("favFloor4") as HTMLElement).style.cssText += floor === 4 ? on : off;
+    // Load saved preset for this floor if present
+    const saved = params.getOverride(floor);
+    if (saved) fillFields(saved); else fillFields(readCam());
+  }
+
+  // Live camera bar update
+  setInterval(() => {
+    const c = readCam();
+    get("favLiveBar").innerHTML =
+      `Lon <b style='color:#cce8ff'>${c.lon.toFixed(6)}</b>  Lat <b style='color:#cce8ff'>${c.lat.toFixed(6)}</b><br>` +
+      `H <b style='color:#cce8ff'>${c.height.toFixed(1)}m</b>  Hdg <b style='color:#cce8ff'>${c.heading.toFixed(1)}°</b>  Ptch <b style='color:#cce8ff'>${c.pitch.toFixed(1)}°</b>`;
+  }, 300);
+
+  // Floor tab buttons
+  get("favFloor3").addEventListener("click", () => activateFloorTab(3));
+  get("favFloor4").addEventListener("click", () => activateFloorTab(4));
+
+  // Capture current camera → fill fields
+  get("favCapture").addEventListener("click", () => { fillFields(readCam()); setStatus("Camera captured"); });
+
+  // Preview → fly to field values
+  get("favPreview").addEventListener("click", () => {
+    const p = readFields();
+    if (typeof (viewer.camera as any).cancelFlight === "function") {
+      (viewer.camera as any).cancelFlight();
+    }
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(p.lon, p.lat, p.height),
+      orientation: {
+        heading: Cesium.Math.toRadians(p.heading),
+        pitch:   Cesium.Math.toRadians(p.pitch),
+        roll:    Cesium.Math.toRadians(p.roll),
+      },
+      duration: 1.0,
+      easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT,
+    });
+  });
+
+  // Save
+  get("favSave").addEventListener("click", () => {
+    params.onSave(activeFloor, readFields());
+    setStatus(`Saved for ${activeFloor === 3 ? "2nd" : "3rd"} floor`);
+  });
+
+  // Reset
+  get("favReset").addEventListener("click", () => {
+    params.onReset(activeFloor);
+    setStatus("Reset to default", "#ffaa44");
+  });
+
+  // Init with 3F
+  activateFloorTab(4);
+}
+
+// ── Arrival view tuner card ───────────────────────────────────────
+
+export function installArrivalViewTuner(): void {
+  const PARAM = "arrivalViewDebug";
+  if (new URLSearchParams(window.location.search).get(PARAM) !== "1") return;
+
+  // State
+  let pitch   = -70;
+  let heading = 15;
+  let height  = 7.5;
+  let backM   = 3.5;  // metres to shift camera back along the anti-heading direction
+
+  const card = document.createElement("div");
+  card.style.cssText = `
+    position:fixed; top:80px; right:16px; z-index:9999;
+    background:rgba(10,14,26,0.94); border:1px solid rgba(0,200,255,0.38);
+    border-radius:10px; padding:14px 16px; width:270px;
+    font-family:monospace; font-size:12px; color:#cce8ff;
+    box-shadow:0 4px 20px rgba(0,0,0,0.65);
+  `;
+
+  function row(label: string, id: string, min: number, max: number, step: number, val: number): string {
+    return `
+      <div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+          <span style="color:#88bbdd">${label}</span>
+          <span id="${id}Val" style="color:#00ccff;font-weight:bold">${val}</span>
+        </div>
+        <input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${val}"
+          style="width:100%;accent-color:#00ccff;cursor:pointer"/>
+      </div>`;
+  }
+
+  card.innerHTML = `
+    <div style="font-size:13px;font-weight:bold;color:#00ccff;margin-bottom:10px">Arrival View Tuner</div>
+    <div style="margin-bottom:8px">
+      <div style="color:#88bbdd;margin-bottom:3px">Person</div>
+      <select id="avt_person" style="width:100%;background:#0a0e1a;color:#cce8ff;border:1px solid #00ccff44;border-radius:5px;padding:4px 6px;font-size:12px"></select>
+    </div>
+    ${row("Pitch (°)",   "avt_pitch",   -90, 0,    1,   pitch)}
+    ${row("Heading (°)", "avt_heading",  0,  360,  1,   heading)}
+    ${row("Height (m)",  "avt_height",   2,  20,   0.5, height)}
+    ${row("Back offset (m)", "avt_back", 0,  15,   0.5, backM)}
+    <button id="avt_preview" style="width:100%;background:#005baa;color:#fff;border:none;border-radius:6px;padding:7px 0;cursor:pointer;font-size:13px;margin-bottom:7px">Preview Arrival View</button>
+    <button id="avt_copy" style="width:100%;background:#333;color:#cce8ff;border:1px solid #00ccff44;border-radius:6px;padding:6px 0;cursor:pointer;font-size:12px">Copy Settings</button>
+  `;
+  document.body.appendChild(card);
+
+  // Populate person dropdown
+  const personSel = card.querySelector<HTMLSelectElement>("#avt_person")!;
+  const seen = new Set<string>();
+  for (const p of chairNavPoints) {
+    const key = `${p.floor}|${p.name}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = `${p.floor === 3 ? "2F" : "3F"} — ${p.name}`;
+    personSel.appendChild(opt);
+  }
+
+  // Slider wiring
+  function wire(id: string, setter: (v: number) => void): void {
+    const el = card.querySelector<HTMLInputElement>(`#${id}`)!;
+    const valEl = card.querySelector<HTMLElement>(`#${id}Val`)!;
+    el.addEventListener("input", () => {
+      const v = Number(el.value);
+      setter(v);
+      valEl.textContent = String(v);
+    });
+  }
+  wire("avt_pitch",   (v) => { pitch   = v; });
+  wire("avt_heading", (v) => { heading = v; });
+  wire("avt_height",  (v) => { height  = v; });
+  wire("avt_back",    (v) => { backM   = v; });
+
+  // Preview
+  card.querySelector("#avt_preview")!.addEventListener("click", () => {
+    const [floorStr, ...nameParts] = personSel.value.split("|");
+    const floor = Number(floorStr) as 3 | 4;
+    const name = nameParts.join("|");
+
+    const actual = getActualChairPosition(name, floor);
+    const pt = chairNavPoints.find((p) => p.name === name && p.floor === floor);
+    const lon = actual?.lon ?? pt?.lon;
+    const lat = actual?.lat ?? pt?.lat;
+    const altitude = floor === 3 ? ALT_2ND : ALT_3RD;
+
+    if (lon === undefined || lat === undefined) {
+      console.warn("Arrival view tuner: chair position unknown for", name, floor);
+      return;
+    }
+
+    // Shift camera backwards (opposite heading direction) by backM metres
+    const headRad = Cesium.Math.toRadians(heading);
+    const latRad  = Cesium.Math.toRadians(lat);
+    const camLon = lon - backM * Math.sin(headRad) / (111320 * Math.cos(latRad));
+    const camLat = lat - backM * Math.cos(headRad) / 110540;
+
+    if (typeof (viewer.camera as any).cancelFlight === "function") {
+      (viewer.camera as any).cancelFlight();
+    }
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(camLon, camLat, altitude + height),
+      orientation: {
+        heading: Cesium.Math.toRadians(heading),
+        pitch:   Cesium.Math.toRadians(pitch),
+        roll:    0,
+      },
+      duration: 1.0,
+      easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT,
+    });
+  });
+
+  // Copy settings
+  card.querySelector("#avt_copy")!.addEventListener("click", async () => {
+    const code =
+      `// Arrival view defaults\n` +
+      `pitch:   Cesium.Math.toRadians(${pitch}),\n` +
+      `heading: Cesium.Math.toRadians(${heading}),\n` +
+      `// height offset: altitude + ${height}\n` +
+      `// back offset: ${backM} m`;
+    await navigator.clipboard.writeText(code);
+    const btn = card.querySelector<HTMLButtonElement>("#avt_copy")!;
+    btn.textContent = "Copied!";
+    window.setTimeout(() => { btn.textContent = "Copy Settings"; }, 2000);
+  });
+}
+
+// ── Seat view debug card ──────────────────────────────────────────
+
+export function installSeatViewDebug(params: {
+  persons: Array<{ name: string; floor: 3 | 4; label: string }>;
+  onSave: (name: string, floor: 3 | 4) => void;
+  onTest: (name: string, floor: 3 | 4) => boolean;
+  onDelete: (name: string, floor: 3 | 4) => void;
+  getPresets: () => Record<string, unknown>;
+  getCopyCode: () => string;
+}): void {
+  const card = document.createElement("div");
+  card.id = "seatViewDebugCard";
+  card.style.cssText = `
+    position:fixed; bottom:16px; right:16px; z-index:9999;
+    background:rgba(10,14,26,0.93); border:1px solid rgba(0,200,255,0.35);
+    border-radius:10px; padding:12px 14px; min-width:240px; max-width:290px;
+    font-family:monospace; font-size:12px; color:#cce8ff;
+    box-shadow:0 4px 18px rgba(0,0,0,0.6);
+  `;
+
+  const title = document.createElement("div");
+  title.textContent = "Seat View Debug";
+  title.style.cssText = "font-size:13px;font-weight:bold;color:#00ccff;margin-bottom:8px;";
+  card.appendChild(title);
+
+  // Person selector
+  const sel = document.createElement("select");
+  sel.style.cssText = "width:100%;background:#0a0e1a;color:#cce8ff;border:1px solid #00ccff44;border-radius:5px;padding:4px 6px;margin-bottom:8px;font-size:12px;";
+  params.persons.forEach((p) => {
+    const opt = document.createElement("option");
+    opt.value = `${p.floor}|${p.name}`;
+    opt.textContent = p.label;
+    sel.appendChild(opt);
+  });
+  card.appendChild(sel);
+
+  // Live camera info
+  const camInfo = document.createElement("div");
+  camInfo.style.cssText = "font-size:11px;color:#88bbdd;margin-bottom:8px;line-height:1.6;background:rgba(0,200,255,0.05);border-radius:5px;padding:5px 7px;";
+  card.appendChild(camInfo);
+
+  // Buttons row 1
+  const row1 = document.createElement("div");
+  row1.style.cssText = "display:flex;gap:6px;margin-bottom:6px;";
+
+  const saveBtn = document.createElement("button");
+  saveBtn.textContent = "Save View";
+  saveBtn.style.cssText = "flex:1;background:#005baa;color:#fff;border:none;border-radius:5px;padding:5px 0;cursor:pointer;font-size:12px;";
+
+  const testBtn = document.createElement("button");
+  testBtn.textContent = "Test";
+  testBtn.style.cssText = "flex:1;background:#006633;color:#fff;border:none;border-radius:5px;padding:5px 0;cursor:pointer;font-size:12px;";
+
+  const delBtn = document.createElement("button");
+  delBtn.textContent = "Delete";
+  delBtn.style.cssText = "flex:1;background:#880011;color:#fff;border:none;border-radius:5px;padding:5px 0;cursor:pointer;font-size:12px;";
+
+  row1.appendChild(saveBtn);
+  row1.appendChild(testBtn);
+  row1.appendChild(delBtn);
+  card.appendChild(row1);
+
+  // Copy button
+  const copyBtn = document.createElement("button");
+  copyBtn.textContent = "Copy All Presets Code";
+  copyBtn.style.cssText = "width:100%;background:#333;color:#cce8ff;border:1px solid #00ccff44;border-radius:5px;padding:5px 0;cursor:pointer;font-size:12px;margin-bottom:8px;";
+  card.appendChild(copyBtn);
+
+  // Preset list
+  const presetList = document.createElement("div");
+  presetList.style.cssText = "font-size:11px;color:#88bbdd;max-height:90px;overflow-y:auto;";
+  card.appendChild(presetList);
+
+  function getSelected(): { name: string; floor: 3 | 4 } | null {
+    const val = sel.value;
+    if (!val) return null;
+    const [floorStr, ...nameParts] = val.split("|");
+    return { floor: Number(floorStr) as 3 | 4, name: nameParts.join("|") };
+  }
+
+  function refreshPresetList(): void {
+    const presets = params.getPresets();
+    const keys = Object.keys(presets);
+    if (keys.length === 0) {
+      presetList.textContent = "No presets saved.";
+      return;
+    }
+    presetList.innerHTML = "<b style='color:#00ccff'>Saved:</b> " +
+      keys.map((k) => `<span style='margin-right:6px;color:#aaffcc'>${k}</span>`).join("");
+  }
+
+  // Live camera update
+  let camUpdateTimer: number | null = null;
+  function startCamUpdate(): void {
+    if (camUpdateTimer !== null) return;
+    camUpdateTimer = window.setInterval(() => {
+      const cam = viewer.camera;
+      const pos = Cesium.Cartographic.fromCartesian(cam.position);
+      const lon = Cesium.Math.toDegrees(pos.longitude).toFixed(6);
+      const lat = Cesium.Math.toDegrees(pos.latitude).toFixed(6);
+      const h = pos.height.toFixed(1);
+      const heading = Cesium.Math.toDegrees(cam.heading).toFixed(1);
+      const pitch = Cesium.Math.toDegrees(cam.pitch).toFixed(1);
+      camInfo.innerHTML =
+        `Lon: ${lon}<br>Lat: ${lat}<br>H: ${h}m &nbsp; Hdg: ${heading}° &nbsp; Ptch: ${pitch}°`;
+    }, 300);
+  }
+
+  saveBtn.addEventListener("click", () => {
+    const sel2 = getSelected();
+    if (!sel2) return;
+    params.onSave(sel2.name, sel2.floor);
+    saveBtn.textContent = "Saved!";
+    window.setTimeout(() => { saveBtn.textContent = "Save View"; }, 1500);
+    refreshPresetList();
+  });
+
+  testBtn.addEventListener("click", () => {
+    const sel2 = getSelected();
+    if (!sel2) return;
+    const ok = params.onTest(sel2.name, sel2.floor);
+    if (!ok) {
+      testBtn.textContent = "No preset";
+      window.setTimeout(() => { testBtn.textContent = "Test"; }, 1500);
+    }
+  });
+
+  delBtn.addEventListener("click", () => {
+    const sel2 = getSelected();
+    if (!sel2) return;
+    params.onDelete(sel2.name, sel2.floor);
+    refreshPresetList();
+  });
+
+  copyBtn.addEventListener("click", async () => {
+    const code = params.getCopyCode();
+    await navigator.clipboard.writeText(code);
+    copyBtn.textContent = "Copied!";
+    window.setTimeout(() => { copyBtn.textContent = "Copy All Presets Code"; }, 2000);
+  });
+
+  document.body.appendChild(card);
+  startCamUpdate();
+  refreshPresetList();
+}
+
 // ── Scene interactions ────────────────────────────────────────────
 export function installSceneInteractions(
   getSelectedFloor: () => number,
@@ -2575,6 +3125,64 @@ export function installSceneInteractions(
       return;
     }
 
+    // Path drawing: add point to active line
+    if (pathDrawMode !== "off" && activeDrawPath) {
+      const cartesian = viewer.scene.pickPosition(click.position);
+      if (cartesian && Cesium.defined(cartesian)) {
+        const carto = Cesium.Cartographic.fromCartesian(cartesian);
+        activeDrawPath.coords.push({
+          lat: Cesium.Math.toDegrees(carto.latitude),
+          lon: Cesium.Math.toDegrees(carto.longitude),
+          alt: carto.height,
+        });
+        syncPathEntity(activeDrawPath);
+        viewer.scene.requestRender();
+        refreshPathStatus();
+      }
+      return;
+    }
+
+    // Collect clicked floor position when recording mode is active
+    if (coordCollecting) {
+      const cartesian = viewer.scene.pickPosition(click.position);
+      if (cartesian && Cesium.defined(cartesian)) {
+        const carto = Cesium.Cartographic.fromCartesian(cartesian);
+        const index = collectedCoordPoints.length;
+        collectedCoordPoints.push({
+          lat: Cesium.Math.toDegrees(carto.latitude),
+          lon: Cesium.Math.toDegrees(carto.longitude),
+          alt: carto.height,
+        });
+        const markerId = `coordDebugMarker-${Date.now()}-${index}`;
+        collectedCoordMarkerIds.push(markerId);
+        viewer.entities.add({
+          id: markerId,
+          position: cartesian,
+          point: {
+            pixelSize: 10,
+            color: Cesium.Color.RED,
+            outlineColor: Cesium.Color.WHITE,
+            outlineWidth: 2,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+          label: {
+            text: String(index + 1),
+            font: "bold 11px sans-serif",
+            fillColor: Cesium.Color.WHITE,
+            outlineColor: Cesium.Color.fromCssColorString("#990000"),
+            outlineWidth: 2,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            pixelOffset: new Cesium.Cartesian2(0, -16),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            scale: 0.9,
+          },
+        });
+        viewer.scene.requestRender();
+        refreshPointsList();
+      }
+      return;
+    }
+
     const camera = getPickedCamera(click.position);
     if (camera) {
       openCameraView(camera);
@@ -2602,10 +3210,280 @@ export function installSceneInteractions(
     }
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
+  // ── Coordinate debug card wiring ─────────────────────────────────
+  const coordLatEl = document.getElementById("coordDebugLat");
+  const coordLonEl = document.getElementById("coordDebugLon");
+  const coordAltEl = document.getElementById("coordDebugAlt");
+  const coordCopyBtn = document.getElementById("coordDebugCopyBtn") as HTMLButtonElement | null;
+  const coordCollectBtn = document.getElementById("coordCollectToggle") as HTMLButtonElement | null;
+  const coordPointsSection = document.getElementById("coordPointsSection") as HTMLElement | null;
+  const coordPointsList = document.getElementById("coordPointsList") as HTMLElement | null;
+  const coordPointsCount = document.getElementById("coordPointsCount") as HTMLElement | null;
+  const coordClearBtn = document.getElementById("coordClearPoints") as HTMLButtonElement | null;
+  const coordUndoBtn = document.getElementById("coordUndoPoint") as HTMLButtonElement | null;
+  const coordCopyGeoJSONBtn = document.getElementById("coordCopyGeoJSON") as HTMLButtonElement | null;
+  let lastCoord: { lat: number; lon: number } | null = null;
+
+  function refreshPointsList(): void {
+    if (!coordPointsList || !coordPointsCount || !coordPointsSection) return;
+    coordPointsSection.hidden = false;
+    coordPointsCount.textContent = `${collectedCoordPoints.length} point${collectedCoordPoints.length !== 1 ? "s" : ""}`;
+    coordPointsList.innerHTML = collectedCoordPoints
+      .map((pt, i) => `<li><span class="pt-index">${i + 1}.</span>${pt.lat.toFixed(8)}, ${pt.lon.toFixed(8)}</li>`)
+      .join("");
+    coordPointsList.scrollTop = coordPointsList.scrollHeight;
+  }
+
+  coordCopyBtn?.addEventListener("click", () => {
+    if (!lastCoord) return;
+    const text = `${lastCoord.lat.toFixed(9)}, ${lastCoord.lon.toFixed(9)}`;
+    void navigator.clipboard.writeText(text).then(() => {
+      if (!coordCopyBtn) return;
+      const prev = coordCopyBtn.textContent;
+      coordCopyBtn.textContent = "✓ Copied!";
+      setTimeout(() => { coordCopyBtn.textContent = prev; }, 1500);
+    });
+  });
+
+  coordCollectBtn?.addEventListener("click", () => {
+    coordCollecting = !coordCollecting;
+    coordCollectBtn.classList.toggle("active", coordCollecting);
+    coordCollectBtn.textContent = coordCollecting ? "⏹ Stop" : "● Record";
+    if (coordCollecting && coordPointsSection) {
+      coordPointsSection.hidden = false;
+      refreshPointsList();
+    }
+  });
+
+  coordClearBtn?.addEventListener("click", () => {
+    collectedCoordPoints.length = 0;
+    collectedCoordMarkerIds.splice(0).forEach((id) => viewer.entities.removeById(id));
+    viewer.scene.requestRender();
+    refreshPointsList();
+  });
+
+  coordUndoBtn?.addEventListener("click", () => {
+    collectedCoordPoints.pop();
+    const lastId = collectedCoordMarkerIds.pop();
+    if (lastId) { viewer.entities.removeById(lastId); viewer.scene.requestRender(); }
+    refreshPointsList();
+  });
+
+  coordCopyGeoJSONBtn?.addEventListener("click", () => {
+    if (collectedCoordPoints.length === 0) return;
+    const geojson = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: collectedCoordPoints.map((pt) => [pt.lon, pt.lat, pt.alt]),
+          },
+        },
+      ],
+    };
+    void navigator.clipboard.writeText(JSON.stringify(geojson, null, 2)).then(() => {
+      if (!coordCopyGeoJSONBtn) return;
+      const prev = coordCopyGeoJSONBtn.textContent;
+      coordCopyGeoJSONBtn.textContent = "✓ Copied!";
+      setTimeout(() => { coordCopyGeoJSONBtn.textContent = prev; }, 1800);
+    });
+  });
+
+  // ── Path drawing wiring ───────────────────────────────────────────
+  const pathDrawMainBtn    = document.getElementById("pathDrawMain")        as HTMLButtonElement | null;
+  const pathDrawBranchBtn  = document.getElementById("pathDrawBranch")      as HTMLButtonElement | null;
+  const pathDrawStopBtn    = document.getElementById("pathDrawStop")        as HTMLButtonElement | null;
+  const pathDrawUndoBtn    = document.getElementById("pathDrawUndo")        as HTMLButtonElement | null;
+  const pathDrawUndoLineBtn= document.getElementById("pathDrawUndoLine")    as HTMLButtonElement | null;
+  const pathDrawClearBtn   = document.getElementById("pathDrawClear")       as HTMLButtonElement | null;
+  const pathDrawStatusEl   = document.getElementById("pathDrawStatus")      as HTMLElement | null;
+  const pathDrawCopyBtn    = document.getElementById("pathDrawCopyGeoJSON") as HTMLButtonElement | null;
+
+  function pathColor(kind: "main" | "branch"): Cesium.Color {
+    return kind === "main"
+      ? Cesium.Color.fromCssColorString("#00CCFF").withAlpha(0.95)
+      : Cesium.Color.fromCssColorString("#FFB000").withAlpha(0.95);
+  }
+
+  function syncPathEntity(path: DrawnPath): void {
+    viewer.entities.removeById(path.entityId);
+    if (path.coords.length < 2) return;
+    viewer.entities.add({
+      id: path.entityId,
+      polyline: {
+        positions: path.coords.map((c) => Cesium.Cartesian3.fromDegrees(c.lon, c.lat, c.alt + 0.25)),
+        width: path.kind === "main" ? 5 : 3,
+        material: new Cesium.PolylineOutlineMaterialProperty({
+          color: pathColor(path.kind),
+          outlineColor: Cesium.Color.BLACK.withAlpha(0.55),
+          outlineWidth: 1.5,
+        }),
+        clampToGround: false,
+        depthFailMaterial: pathColor(path.kind).withAlpha(0.5),
+      },
+    });
+  }
+
+  function updatePathPreview(toCartesian: Cesium.Cartesian3 | null): void {
+    viewer.entities.removeById(PATH_PREVIEW_ID);
+    if (!activeDrawPath || activeDrawPath.coords.length === 0 || !toCartesian) return;
+    const last = activeDrawPath.coords[activeDrawPath.coords.length - 1];
+    viewer.entities.add({
+      id: PATH_PREVIEW_ID,
+      polyline: {
+        positions: [
+          Cesium.Cartesian3.fromDegrees(last.lon, last.lat, last.alt + 0.25),
+          toCartesian,
+        ],
+        width: 1.5,
+        material: new Cesium.PolylineDashMaterialProperty({
+          color: pathColor(activeDrawPath.kind).withAlpha(0.5),
+          dashLength: 10,
+        }),
+        clampToGround: false,
+      },
+    });
+  }
+
+  function refreshPathStatus(): void {
+    if (!pathDrawStatusEl) return;
+    const mains    = drawnPaths.filter((p) => p.kind === "main").length;
+    const branches = drawnPaths.filter((p) => p.kind === "branch").length;
+    const active   = activeDrawPath
+      ? ` | ${activeDrawPath.kind === "main" ? "Main" : "Branch"}: ${activeDrawPath.coords.length} pts`
+      : "";
+    pathDrawStatusEl.textContent =
+      mains + branches === 0 && !activeDrawPath
+        ? "No paths drawn"
+        : `${mains} main · ${branches} branch${active}`;
+  }
+
+  function startPath(kind: "main" | "branch"): void {
+    if (activeDrawPath) finishPath();
+    // disable point-record mode
+    if (coordCollecting) {
+      coordCollecting = false;
+      coordCollectBtn?.classList.remove("active");
+      if (coordCollectBtn) coordCollectBtn.textContent = "● Record";
+      if (coordPointsSection) coordPointsSection.hidden = true;
+    }
+    activeDrawPath = { coords: [], kind, entityId: `pathDraw-${kind}-${Date.now()}` };
+    pathDrawMode   = kind;
+    pathDrawStopBtn && (pathDrawStopBtn.disabled = false);
+    pathDrawMainBtn?.classList.toggle("active",   kind === "main");
+    pathDrawBranchBtn?.classList.toggle("active", kind === "branch");
+    refreshPathStatus();
+  }
+
+  function finishPath(): void {
+    viewer.entities.removeById(PATH_PREVIEW_ID);
+    if (activeDrawPath) {
+      if (activeDrawPath.coords.length >= 2) {
+        drawnPaths.push(activeDrawPath);
+        syncPathEntity(activeDrawPath);
+      } else {
+        viewer.entities.removeById(activeDrawPath.entityId);
+      }
+      activeDrawPath = null;
+    }
+    pathDrawMode = "off";
+    pathDrawStopBtn && (pathDrawStopBtn.disabled = true);
+    pathDrawMainBtn?.classList.remove("active");
+    pathDrawBranchBtn?.classList.remove("active");
+    viewer.scene.requestRender();
+    refreshPathStatus();
+  }
+
+  pathDrawMainBtn?.addEventListener("click",   () => startPath("main"));
+  pathDrawBranchBtn?.addEventListener("click", () => startPath("branch"));
+  pathDrawStopBtn?.addEventListener("click",   () => finishPath());
+
+  pathDrawUndoBtn?.addEventListener("click", () => {
+    if (activeDrawPath && activeDrawPath.coords.length > 0) {
+      activeDrawPath.coords.pop();
+      syncPathEntity(activeDrawPath);
+      viewer.scene.requestRender();
+    }
+    refreshPathStatus();
+  });
+
+  pathDrawUndoLineBtn?.addEventListener("click", () => {
+    // undo active line first, then last finished line
+    if (activeDrawPath) {
+      viewer.entities.removeById(activeDrawPath.entityId);
+      viewer.entities.removeById(PATH_PREVIEW_ID);
+      activeDrawPath = null;
+      pathDrawMode   = "off";
+      pathDrawStopBtn && (pathDrawStopBtn.disabled = true);
+      pathDrawMainBtn?.classList.remove("active");
+      pathDrawBranchBtn?.classList.remove("active");
+    } else if (drawnPaths.length > 0) {
+      const last = drawnPaths.pop()!;
+      viewer.entities.removeById(last.entityId);
+    }
+    viewer.scene.requestRender();
+    refreshPathStatus();
+  });
+
+  pathDrawClearBtn?.addEventListener("click", () => {
+    if (activeDrawPath) { viewer.entities.removeById(activeDrawPath.entityId); activeDrawPath = null; }
+    viewer.entities.removeById(PATH_PREVIEW_ID);
+    drawnPaths.forEach((p) => viewer.entities.removeById(p.entityId));
+    drawnPaths.length = 0;
+    pathDrawMode = "off";
+    pathDrawStopBtn && (pathDrawStopBtn.disabled = true);
+    pathDrawMainBtn?.classList.remove("active");
+    pathDrawBranchBtn?.classList.remove("active");
+    viewer.scene.requestRender();
+    refreshPathStatus();
+  });
+
+  pathDrawCopyBtn?.addEventListener("click", () => {
+    const all = [...drawnPaths, ...(activeDrawPath && activeDrawPath.coords.length >= 2 ? [activeDrawPath] : [])];
+    if (all.length === 0) return;
+    const geojson = {
+      type: "FeatureCollection",
+      features: all.map((path) => ({
+        type: "Feature",
+        properties: { type: path.kind },
+        geometry: {
+          type: "LineString",
+          coordinates: path.coords.map((c) => [c.lon, c.lat, c.alt]),
+        },
+      })),
+    };
+    void navigator.clipboard.writeText(JSON.stringify(geojson, null, 2)).then(() => {
+      const prev = pathDrawCopyBtn?.textContent ?? "";
+      if (pathDrawCopyBtn) pathDrawCopyBtn.textContent = "✓ Copied!";
+      setTimeout(() => { if (pathDrawCopyBtn) pathDrawCopyBtn.textContent = prev; }, 1800);
+    });
+  });
+
   viewer.screenSpaceEventHandler.setInputAction((movement: { endPosition: Cesium.Cartesian2 }) => {
     const now = performance.now();
     if (now - lastHoverPickAt < HOVER_PICK_INTERVAL_MS) return;
     lastHoverPickAt = now;
+
+    // Update coordinate debug card
+    const cartesian = viewer.scene.pickPosition(movement.endPosition);
+    if (cartesian && Cesium.defined(cartesian)) {
+      const carto = Cesium.Cartographic.fromCartesian(cartesian);
+      const lat = Cesium.Math.toDegrees(carto.latitude);
+      const lon = Cesium.Math.toDegrees(carto.longitude);
+      const alt = carto.height;
+      lastCoord = { lat, lon };
+      if (coordLatEl) coordLatEl.textContent = lat.toFixed(9);
+      if (coordLonEl) coordLonEl.textContent = lon.toFixed(9);
+      if (coordAltEl) coordAltEl.textContent = isFinite(alt) ? alt.toFixed(2) : "—";
+    }
+
+    // Path drawing preview line
+    if (pathDrawMode !== "off" && activeDrawPath && activeDrawPath.coords.length > 0) {
+      updatePathPreview(cartesian && Cesium.defined(cartesian) ? cartesian : null);
+    }
 
     if (lastHoveredChair) {
       highlightChair(lastHoveredChair);

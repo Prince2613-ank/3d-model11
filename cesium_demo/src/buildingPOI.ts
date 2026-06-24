@@ -37,9 +37,9 @@ export const BUILDING_ENTRANCE = {
 export const INDOOR_ENTRANCE_CAMERA = {
   lon: 77.13370217030000,
   lat: 28.67091500000000,  // slightly inside the building from entrance
-  altOffset: 4.5,          // metres above floor altitude
+  altOffset: 1.3,          // metres above floor altitude (eye height)
   heading: 342,            // degrees
-  pitch: -55,              // degrees
+  pitch: -15,              // degrees
 } as const;
 
 /**

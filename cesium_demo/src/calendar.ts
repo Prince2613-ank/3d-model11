@@ -7,13 +7,6 @@ import {
 } from "./booking";
 import type { GlobalEvent, UpdateContext } from "./booking";
 import { ALLOWED_DOMAIN } from "./config";
-import {
-  bindAttendanceControls,
-  clearAttendanceUser,
-  onAttendanceAutoSignOut,
-  signOutAttendanceOnLogout,
-  startAttendanceTracking,
-} from "./attendance";
 
 declare const google: any;
 declare const gapi: any;
@@ -130,14 +123,7 @@ function setButtonState(state: "ready" | "loading" | "signed-in", label?: string
 }
 
 async function handleSignOut(): Promise<void> {
-  try {
-    await signOutAttendanceOnLogout();
-  } catch {
-    return;
-  }
-
   stopPolling();
-  clearAttendanceUser();
   setCurrentUser(null);
   if (currentAccessToken) {
     google.accounts.oauth2.revoke(currentAccessToken, () => {});
@@ -318,10 +304,6 @@ function bindCalendarControls(button: HTMLElement): void {
     event.stopPropagation();
     void handleSignOut();
   });
-  onAttendanceAutoSignOut(() => {
-    void handleSignOut();
-  });
-
   document.addEventListener("click", (event) => {
     if (!button.contains(event.target as Node)) closeUserMenu();
   });
@@ -372,7 +354,6 @@ async function verifyDomainAndLoad(accessToken: string): Promise<void> {
     isSignedIn = true;
     currentAccessToken = accessToken;
     setCurrentUser(email);
-    startAttendanceTracking(email, info.name ?? "");
     showSignedInAvatar(info);
     setButtonState("signed-in", `✓ ${email.split("@")[0]}`);
 
@@ -419,7 +400,6 @@ export async function initializeCalendar(): Promise<void> {
   if (!button) return;
   defaultAvatarHtml = getAvatar()?.innerHTML ?? "";
   bindCalendarControls(button);
-  bindAttendanceControls();
 
   if (!CLIENT_ID) {
     button.style.pointerEvents = "auto";

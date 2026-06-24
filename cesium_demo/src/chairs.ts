@@ -113,6 +113,7 @@ async function loadSecondFloorChairs(onChairLoaded?: (chair: ChairModel) => void
     await Promise.allSettled(
       batch.map(async (index) => {
         try {
+          if (secondFloorChairs.some((chair) => chair.chairIndex === index)) return;
           const model = await loadChair(
             `final_2nd_floor_${index}.glb`,
             ALT_2ND,
@@ -137,24 +138,14 @@ async function loadThirdFloorChairs(onChairLoaded?: (chair: ChairModel) => void)
     await Promise.allSettled(
       batch.map(async (index) => {
         try {
-          const model = (await Cesium.Model.fromGltfAsync({
-            url: modelUrl(`${index}.glb`),
-            modelMatrix: computeMatrix(ALT_3RD),
-            scale: MODEL_SCALE,
-            shadows: Cesium.ShadowMode.DISABLED,
-            allowPicking: true,
-            cull: true,
-            incrementallyLoadTextures: true,
-            enablePick: true,
-            lightColor: INDOOR_MODEL_LIGHT_COLOR,
-            imageBasedLighting: sharedIndoorIBL
-          } as any)) as ChairModel;
-          model.chairName = thirdFloorChairNames[index] ?? `3F Chair ${index}`;
-          model.chairIndex = index;
-          model.chairFloor = 4;
-          model.id = model;
-          model.show = false;
-          viewer.scene.primitives.add(model);
+          if (thirdFloorChairs.some((chair) => chair.chairIndex === index)) return;
+          const model = await loadChair(
+            `${index}.glb`,
+            ALT_3RD,
+            thirdFloorChairNames[index] ?? `3F Chair ${index}`,
+            index,
+            4
+          );
           thirdFloorChairs.push(model);
           onChairLoaded?.(model);
         } catch (error) {
@@ -202,4 +193,124 @@ export function getPickedChair(position: Cesium.Cartesian2): ChairModel | null {
 export function highlightChair(chair: ChairModel | null, color = Cesium.Color.WHITE): void {
   if (!chair) return;
   chair.color = color;
+}
+
+// ── Person / chair navigation points ────────────────────────────────────────
+
+export interface ChairNavPoint {
+  name: string;
+  floor: 3 | 4;  // 3 = 2nd physical floor, 4 = 3rd physical floor
+  lat: number;
+  lon: number;
+}
+
+export const chairNavPoints: ChairNavPoint[] = [
+  // 2nd floor (floor=3) — one unique node per chair (nodes 1-18 of 2nd_floor_corridor_v2.geojson)
+  { name: "unknown1",  floor: 3, lat: 28.670886321205604, lon: 77.13368028251561 },
+  { name: "Shuvankit", floor: 3, lat: 28.670895309105752, lon: 77.13367395601170 },
+  { name: "unknown2",  floor: 3, lat: 28.670909041686500, lon: 77.13366524374470 },
+  { name: "Vidit",     floor: 3, lat: 28.670916992228854, lon: 77.13365960266368 },
+  { name: "Diksha",    floor: 3, lat: 28.670924515237306, lon: 77.13365565763435 },
+  { name: "Apoorva",   floor: 3, lat: 28.670932109317192, lon: 77.13365124410326 },
+  { name: "unknown3",  floor: 3, lat: 28.670934567587334, lon: 77.13364951638200 },
+  { name: "unknown4",  floor: 3, lat: 28.670940667293540, lon: 77.13365915214976 },
+  { name: "Kushi",     floor: 3, lat: 28.670945706181264, lon: 77.13366728509138 },
+  { name: "Vishal",    floor: 3, lat: 28.670950656667460, lon: 77.13367497602529 },
+  { name: "Rohit",     floor: 3, lat: 28.670955783956735, lon: 77.13368195974688 },
+  { name: "Vibhu",     floor: 3, lat: 28.670963961099110, lon: 77.13369499897394 },
+  { name: "Jiteswar",  floor: 3, lat: 28.670960148297805, lon: 77.13369821782014 },
+  { name: "Swati",     floor: 3, lat: 28.670952717324177, lon: 77.13370345760923 },
+  { name: "Chair O",   floor: 3, lat: 28.670968583293670, lon: 77.13369141120200 },
+  { name: "Chair P",   floor: 3, lat: 28.670980200395720, lon: 77.13368379115549 },
+  { name: "Ankita",    floor: 3, lat: 28.670984704682880, lon: 77.13368079113602 },
+  { name: "Himanshi",  floor: 3, lat: 28.670986122721004, lon: 77.13368327939159 },
+
+  // 3rd floor (floor=4) — distributed across nodes 1-11 of 3rd_floor_corridor_v2.geojson
+  { name: "Kush",         floor: 4, lat: 28.670895046752590, lon: 77.13368116739018 },
+  { name: "Uthkarsh",     floor: 4, lat: 28.670895046752590, lon: 77.13368116739018 },
+  { name: "Nitish",       floor: 4, lat: 28.670895046752590, lon: 77.13368116739018 },
+  { name: "Sparsh",       floor: 4, lat: 28.670952239807892, lon: 77.13364288897440 },
+  { name: "Nimit",        floor: 4, lat: 28.670952239807892, lon: 77.13364288897440 },
+  { name: "Albin",        floor: 4, lat: 28.670952239807892, lon: 77.13364288897440 },
+  { name: "Vikas",        floor: 4, lat: 28.670958840126445, lon: 77.13365225283411 },
+  { name: "Shekhar",      floor: 4, lat: 28.670958840126445, lon: 77.13365225283411 },
+  { name: "Pratham",      floor: 4, lat: 28.670958840126445, lon: 77.13365225283411 },
+  { name: "Jay",          floor: 4, lat: 28.670965520677640, lon: 77.13366146400278 },
+  { name: "Desk Chair D", floor: 4, lat: 28.670965520677640, lon: 77.13366146400278 },
+  { name: "Desk Chair E", floor: 4, lat: 28.670965520677640, lon: 77.13366146400278 },
+  { name: "Harsh",        floor: 4, lat: 28.670971493817120, lon: 77.13367004135578 },
+  { name: "Vikrant",      floor: 4, lat: 28.670971493817120, lon: 77.13367004135578 },
+  { name: "Raghav",       floor: 4, lat: 28.670971493817120, lon: 77.13367004135578 },
+  { name: "Aniket",       floor: 4, lat: 28.670977362195398, lon: 77.13367682666820 },
+  { name: "Manav",        floor: 4, lat: 28.670977362195398, lon: 77.13367682666820 },
+  { name: "Pushkar",      floor: 4, lat: 28.670977362195398, lon: 77.13367682666820 },
+  { name: "Astami",       floor: 4, lat: 28.670988090324453, lon: 77.13366953704205 },
+  { name: "Carig",        floor: 4, lat: 28.670988090324453, lon: 77.13366953704205 },
+  { name: "Anshika",      floor: 4, lat: 28.670988090324453, lon: 77.13366953704205 },
+  { name: "Vanshika",     floor: 4, lat: 28.670992988917380, lon: 77.13366635160304 },
+  { name: "Kapil",        floor: 4, lat: 28.670992988917380, lon: 77.13366635160304 },
+  { name: "Rohit",        floor: 4, lat: 28.670992988917380, lon: 77.13366635160304 },
+  { name: "Unknown3",     floor: 4, lat: 28.671002348834990, lon: 77.13365845073096 },
+  { name: "Prince",       floor: 4, lat: 28.671002348834990, lon: 77.13365845073096 },
+  { name: "Samata",       floor: 4, lat: 28.671002348834990, lon: 77.13365845073096 },
+  { name: "Payel",        floor: 4, lat: 28.671005729825460, lon: 77.13366304941569 },
+  { name: "Akshay",       floor: 4, lat: 28.671005729825460, lon: 77.13366304941569 },
+  { name: "Aishwarya",    floor: 4, lat: 28.671008778430020, lon: 77.13366743178476 },
+  { name: "unknown6",     floor: 4, lat: 28.671008778430020, lon: 77.13366743178476 },
+  { name: "unknown7",     floor: 4, lat: 28.671008778430020, lon: 77.13366743178476 },
+  { name: "unknown4",     floor: 4, lat: 28.671008778430020, lon: 77.13366743178476 },
+];
+
+// ── Actual chair positions (read from loaded GLB models after scene render) ──
+
+const actualChairPositions = new Map<string, { lat: number; lon: number }>();
+
+export function extractAndCacheChairPositions(floor: 3 | 4): void {
+  const chairs = floor === 3 ? secondFloorChairs : thirdFloorChairs;
+  for (const chair of chairs) {
+    if (!chair.chairName || !chair.chairFloor) continue;
+    const key = `${chair.chairFloor}:${chair.chairName}`;
+    if (actualChairPositions.has(key)) continue;
+    const center = chair.boundingSphere?.center;
+    if (!center || (center.x === 0 && center.y === 0 && center.z === 0)) continue;
+    const carto = Cesium.Cartographic.fromCartesian(center);
+    const lat = Cesium.Math.toDegrees(carto.latitude);
+    const lon = Cesium.Math.toDegrees(carto.longitude);
+    // Sanity-check: must be within the building's bounding box
+    if (lat > 28.669 && lat < 28.672 && lon > 77.132 && lon < 77.136) {
+      actualChairPositions.set(key, { lat, lon });
+    }
+  }
+}
+
+export function getActualChairPosition(name: string, floor: 3 | 4): { lat: number; lon: number } | null {
+  return actualChairPositions.get(`${floor}:${name}`) ?? null;
+}
+
+export function findChairByName(name: string, floor: 3 | 4): ChairModel | null {
+  const chairs = floor === 3 ? secondFloorChairs : thirdFloorChairs;
+  return chairs.find((c) => c.chairName === name) ?? null;
+}
+
+export function getNavigablePersonNames(): string[] {
+  const nameFloors = new Map<string, Set<number>>();
+  for (const pt of chairNavPoints) {
+    const key = pt.name.toLowerCase();
+    if (!nameFloors.has(key)) nameFloors.set(key, new Set());
+    nameFloors.get(key)!.add(pt.floor);
+  }
+
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const pt of chairNavPoints) {
+    const multiFloor = (nameFloors.get(pt.name.toLowerCase())?.size ?? 0) > 1;
+    const label = multiFloor
+      ? `[Person] ${pt.name} (${pt.floor === 3 ? "2nd" : "3rd"} Floor)`
+      : `[Person] ${pt.name}`;
+    if (!seen.has(label)) {
+      seen.add(label);
+      result.push(label);
+    }
+  }
+  return result.sort((a, b) => a.localeCompare(b));
 }

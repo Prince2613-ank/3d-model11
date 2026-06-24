@@ -1,22 +1,8 @@
 import * as Cesium from "cesium";
-import { ATTENDANCE_CONFIG } from "./attendanceConfig";
 
 export const ALLOWED_DOMAIN = "flodataanalytics.com";
 export const POLL_INTERVAL_MS = 8000;
 export const CACHE_TTL_MS = 5000;
-
-const DEFAULT_ATTENDANCE_API_BASE_URL = window.location.hostname.endsWith("onrender.com")
-  ? window.location.origin
-  : "http://localhost:5000";
-
-export const ATTENDANCE_API_BASE_URL = import.meta.env.VITE_ATTENDANCE_API_BASE_URL ?? DEFAULT_ATTENDANCE_API_BASE_URL;
-export const ATTENDANCE_BUILDING_CENTER = {
-  lat: Number(import.meta.env.VITE_ATTENDANCE_BUILDING_LAT ?? "28.670903"),
-  lon: Number(import.meta.env.VITE_ATTENDANCE_BUILDING_LON ?? "77.133783"),
-};
-export const ATTENDANCE_ENTER_RADIUS_METERS = Number(import.meta.env.VITE_ATTENDANCE_ENTER_RADIUS_METERS ?? String(ATTENDANCE_CONFIG.ENTER_RADIUS_METERS));
-export const ATTENDANCE_EXIT_RADIUS_METERS = Number(import.meta.env.VITE_ATTENDANCE_EXIT_RADIUS_METERS ?? String(ATTENDANCE_CONFIG.EXIT_RADIUS_METERS));
-export const ATTENDANCE_MAX_ACCURACY_METERS = Number(import.meta.env.VITE_ATTENDANCE_MAX_ACCURACY_METERS ?? String(ATTENDANCE_CONFIG.MAX_ACCURACY_METERS));
 
 export type CameraPreset = {
   name: string;

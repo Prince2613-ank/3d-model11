@@ -322,67 +322,6 @@
     </div>
   </div>
 
-  <section id="attendancePanel" class="attendance-panel common-panel" aria-label="Attendance" hidden>
-    <div class="attendance-header">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
-        <path d="M5 20c0-4 3.1-7 7-7s7 3 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      </svg>
-      <h3>Attendance</h3>
-    </div>
-    <p id="attendanceStatus" class="attendance-status-msg" data-active="false" data-inside="false">Sign in with Google to start attendance.</p>
-    <div class="attendance-info">
-      <div class="attendance-info-row">
-        <span>Status</span>
-        <strong id="attendanceCurrentStatus" class="attendance-badge">Inactive</strong>
-      </div>
-      <div class="attendance-info-row">
-        <span>Check-In</span>
-        <strong id="attendanceLastSignIn">--</strong>
-      </div>
-      <div class="attendance-info-row">
-        <span>GPS Accuracy</span>
-        <strong id="attendanceAccuracy">--</strong>
-      </div>
-      <div class="attendance-info-row">
-        <span>Distance</span>
-        <strong id="attendanceDistance">--</strong>
-      </div>
-      <div class="attendance-info-row">
-        <span>Latitude</span>
-        <strong id="attendanceLatitude">--</strong>
-      </div>
-      <div class="attendance-info-row">
-        <span>Longitude</span>
-        <strong id="attendanceLongitude">--</strong>
-      </div>
-      <div class="attendance-info-row">
-        <span>Elevation</span>
-        <strong id="attendanceAltitude">--</strong>
-      </div>
-      <div class="attendance-info-row">
-        <span>Elevation Accuracy</span>
-        <strong id="attendanceAltitudeAccuracy">--</strong>
-      </div>
-      <div class="attendance-info-row">
-        <span>Elevation Change</span>
-        <strong id="attendanceElevationDelta">--</strong>
-      </div>
-      <div class="attendance-info-row">
-        <span>Speed</span>
-        <strong id="attendanceSpeed">--</strong>
-      </div>
-      <div class="attendance-info-row">
-        <span>Samples</span>
-        <strong id="attendanceProgress">--</strong>
-      </div>
-      <div class="attendance-info-row">
-        <span>Last GPS</span>
-        <strong id="attendanceLastGpsUpdate">--</strong>
-      </div>
-    </div>
-    <button id="attendanceStartBtn" class="btn attendance-action-btn" type="button" disabled>Start Attendance</button>
-  </section>
 
   <section id="cameraPanel" class="panel common-panel" aria-label="Camera controls"
     style="display: none; top: 360px; right: 10px; left: auto;">
@@ -455,8 +394,26 @@
       </div>
       <button class="btn" type="button" data-floor="0">Show All Floors</button>
     </section>
-  
+    <button id="stairDebugOpenBtn" class="btn stair-debug-open-btn" type="button">🪜 Stair Debug</button>
   </div>
+
+  <section id="stairDebugPanel" class="common-panel stair-debug-panel" hidden>
+    <div class="panel-header">
+      <h3>🪜 Stair Path</h3>
+      <button id="stairDebugCloseBtn" type="button" title="Close">✕</button>
+    </div>
+    <div class="stair-debug-toolbar">
+      <button id="stairShowBtn" class="btn" type="button">Show Points</button>
+      <button id="stairDragBtn" class="btn" type="button" disabled>Drag Edit</button>
+      <button id="stairFlyBtn" class="btn" type="button" disabled>Fly To</button>
+    </div>
+    <div class="stair-debug-toolbar">
+      <button id="stairAddBtn" class="btn" type="button" disabled>+ Click to Add</button>
+      <button id="stairUndoBtn" class="btn" type="button" disabled>↩ Undo Last</button>
+    </div>
+    <div id="stairPointCards" class="stair-point-cards"></div>
+    <button id="stairCopyBtn" class="btn stair-copy-btn" type="button" disabled>📋 Copy Path Code</button>
+  </section>
 
   <div id="menuBackdrop" class="menu-backdrop"></div>
 
@@ -508,6 +465,41 @@
 
   <div id="tooltip" class="tooltip"></div>
   <div id="toastContainer" aria-live="assertive"></div>
+
+  <div id="coordDebugCard" class="coord-debug-card">
+    <div class="coord-debug-title">&#128204; Cursor Position</div>
+    <div class="coord-debug-row"><span>Lat</span><strong id="coordDebugLat">—</strong></div>
+    <div class="coord-debug-row"><span>Lon</span><strong id="coordDebugLon">—</strong></div>
+    <div class="coord-debug-row"><span>Alt (m)</span><strong id="coordDebugAlt">—</strong></div>
+    <div class="coord-debug-actions">
+      <button id="coordDebugCopyBtn" class="coord-debug-btn" type="button" title="Copy current lat,lon">&#128203; Copy</button>
+      <button id="coordCollectToggle" class="coord-debug-btn coord-collect-btn" type="button">&#9679; Record</button>
+    </div>
+    <div id="coordPointsSection" class="coord-points-section" hidden>
+      <div class="coord-points-header">
+        <span id="coordPointsCount" class="coord-points-count">0 points</span>
+        <button id="coordUndoPoint" class="coord-mini-btn" type="button" title="Remove last point">&#8617; Undo</button>
+        <button id="coordClearPoints" class="coord-mini-btn coord-mini-danger" type="button">&#128465; Clear</button>
+      </div>
+      <ol id="coordPointsList" class="coord-points-list"></ol>
+      <button id="coordCopyGeoJSON" class="coord-debug-copy" type="button">&#128203; Copy as GeoJSON</button>
+    </div>
+
+    <div class="coord-section-divider"></div>
+    <div class="coord-debug-subtitle">&#9998; Draw Path</div>
+    <div class="coord-debug-actions">
+      <button id="pathDrawMain" class="coord-debug-btn path-draw-main-btn" type="button">&#9644; Main</button>
+      <button id="pathDrawBranch" class="coord-debug-btn path-draw-branch-btn" type="button">&#8627; Branch</button>
+      <button id="pathDrawStop" class="coord-debug-btn path-draw-stop-btn" type="button" disabled>&#9646; Finish</button>
+    </div>
+    <div class="coord-debug-actions" style="margin-top:4px;">
+      <button id="pathDrawUndo" class="coord-mini-btn" type="button">&#8617; Undo Pt</button>
+      <button id="pathDrawUndoLine" class="coord-mini-btn" type="button">&#10006; Del Line</button>
+      <button id="pathDrawClear" class="coord-mini-btn coord-mini-danger" type="button">&#128465; All</button>
+    </div>
+    <div id="pathDrawStatus" class="coord-points-count" style="margin-top:5px; min-height:14px;">No paths drawn</div>
+    <button id="pathDrawCopyGeoJSON" class="coord-debug-copy" style="margin-top:6px;" type="button">&#128203; Copy Path GeoJSON</button>
+  </div>
 
   <script type="module" src="/src/main.ts"></script>
 </body>
