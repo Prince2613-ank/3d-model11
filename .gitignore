@@ -22,6 +22,9 @@ cesium_demo/vite-dev.err.log
 cesium_demo/splash_log.txt
 cesium_demo/splash_log_utf8.txt
 
+# Large data downloads
+cesium_demo/geo/downloads/
+
 # OS / editor
 .DS_Store
 Thumbs.db
