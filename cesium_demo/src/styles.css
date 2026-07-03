@@ -3380,6 +3380,120 @@ body {
   }
 }
 
+/* ── Mobile splash: hide complex 3D viewport, show clean layout ── */
+@media (max-width: 480px) {
+  .onboarding-stage {
+    width: 100vw;
+    min-height: 100dvh;
+    padding: 20px 16px 24px;
+    gap: 16px;
+    justify-items: center;
+    align-content: center;
+  }
+
+  .onboarding-brand-row {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 14px;
+  }
+
+  .onboarding-copy {
+    text-align: center;
+  }
+
+  .onboarding-logo-card {
+    width: 96px;
+  }
+
+  .onboarding-copy h1 {
+    font-size: clamp(26px, 9vw, 36px);
+  }
+
+  .onboarding-copy p {
+    font-size: 13px;
+  }
+
+  /* Hide the 3D building viewport entirely on phones — it renders broken */
+  .building-demo-viewport {
+    display: none !important;
+  }
+
+  /* Expand progress panel to fill full width */
+  .building-demo-shell {
+    grid-template-columns: 1fr;
+    gap: 0;
+    min-height: 0;
+  }
+
+  .onboarding-progress-panel {
+    width: 100%;
+    max-width: 380px;
+    padding: 20px 18px;
+    border-radius: 20px;
+  }
+
+  .onboarding-progress-panel ol {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 10px 0 0;
+  }
+
+  .onboarding-progress-panel ol::before,
+  .onboarding-progress-panel ol::after {
+    left: 14px;
+    top: 24px;
+    bottom: 24px;
+    width: 2px;
+    height: auto;
+    transform-origin: top;
+  }
+
+  .onboarding-progress-panel ol::after {
+    animation-name: workflow-fill-down;
+  }
+
+  .onboarding-progress-panel li {
+    min-height: 26px;
+    padding: 0 0 0 42px;
+    font-size: 13px;
+    text-align: left;
+    display: block;
+    line-height: 1.4;
+  }
+
+  .onboarding-progress-panel li span {
+    top: 50%;
+    left: 0 !important;
+    transform: translateY(-50%);
+    margin-left: 0;
+    width: 26px;
+    height: 26px;
+  }
+
+  .onboarding-progress-panel li:nth-child(1) span,
+  .onboarding-progress-panel li:nth-child(2) span,
+  .onboarding-progress-panel li:nth-child(3) span,
+  .onboarding-progress-panel li:nth-child(4) span,
+  .onboarding-progress-panel li:nth-child(5) span { left: 0; }
+
+  .onboarding-progress-panel li b {
+    font-size: 12px;
+    margin-right: 6px;
+    display: inline-block;
+  }
+
+  .onboarding-progress-panel li::before,
+  .onboarding-progress-panel li:last-child::before,
+  .onboarding-progress-panel li::after {
+    display: none;
+  }
+
+  .workflow-meter {
+    display: none;
+  }
+}
+
 @media (max-width: 720px) {
   .onboarding-stage {
     width: min(100vw - 18px, 560px);
