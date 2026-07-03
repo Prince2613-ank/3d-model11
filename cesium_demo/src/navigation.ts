@@ -6,9 +6,9 @@ import {
 } from "./viewer";
 import { geo2, geo3, geoJsonUrl, normalizeRoomName } from "./rooms";
 import { chairNavPoints, loadChairsForFloor, extractAndCacheChairPositions, getActualChairPosition } from "./chairs";
-import { setNavigationAllowedFloors, setNavigationMessage, updateNavigationUI, disableCameraControls, enableCameraControls, showFloorSpinner, hideFloorSpinner, updateNavigationHud, hideNavigationHud, clearMapRoute, hideTooltip, showChairArrivalEffect, type NavigationHudState } from "./ui";
+import { setNavigationAllowedFloors, setRoutePreviewAvailable, setNavigationMessage, updateNavigationUI, highlightNavStep, flyToDefaultFloorView, disableCameraControls, enableCameraControls, showFloorSpinner, hideFloorSpinner, hideNavigationHud, clearRoomPreviewEffect } from "./ui";
 import { ensureFloorModelLoaded } from "./models";
-import intermediatePointUrl from "./intermidiate_point.geojson?url";
+import intermediatePointUrl from "../geodata/intermidiate_point.geojson?url";
 
 type DoorFeature = {
   properties: { room_name: string };
@@ -80,6 +80,21 @@ type ResolvedRoomSelection = {
   floor: number;
 };
 
+type CorridorDrawNode = {
+  id: string;
+  lon: number;
+  lat: number;
+  entity: Cesium.Entity;
+};
+
+type CorridorDrawEdge = {
+  fromId: string;
+  toId: string;
+  fromNode: CorridorDrawNode;
+  toNode: CorridorDrawNode;
+  entity: Cesium.Entity;
+};
+
 const doorPositions = new Map<string, Cesium.Cartesian3>();
 let centerlineGraph2: GraphNode[] | null = null;
 let centerlineGraph3: GraphNode[] | null = null;
@@ -92,6 +107,8 @@ const corridorDebugPoints = new Map<string, CorridorDebugPointState>();
 const stairDebugEntities: Cesium.Entity[] = [];
 const stairDebugPoints = new Map<string, { index: number; entity: Cesium.Entity }>();
 let stairDebugUIActive = false;
+let corridorDebugUIActive = false;
+let corridorDebugUIEditable = false;
 let stairDragUIEnabled = false;
 const intermediateDebugEntities: Cesium.Entity[] = [];
 const intermediateDebugPoints = new Map<string, IntermediatePointState>();
@@ -102,45 +119,51 @@ let intermediateDebugDragHandler: Cesium.ScreenSpaceEventHandler | null = null;
 let selectedCorridorDebugPoint: CorridorDebugPointState | null = null;
 let selectedStairDebugPoint: { index: number; entity: Cesium.Entity } | null = null;
 let selectedIntermediateDebugPoint: IntermediatePointState | null = null;
+let activeStairClimbPath: Cesium.Cartesian3[] = [];
+let corridorDrawNodes: CorridorDrawNode[] = [];
+let corridorDrawEdges: CorridorDrawEdge[] = [];
+let corridorDrawHandler: Cesium.ScreenSpaceEventHandler | null = null;
+type CorridorDrawMode = "node" | "connect" | null;
+let corridorDrawMode: CorridorDrawMode = null;
+let corridorConnectFirstId: string | null = null;
+let corridorDrawNodeCounter = 0;
 
-const routeArrowCollectionA = viewer.scene.primitives.add(new Cesium.BillboardCollection());
-const routeArrowCollectionB = viewer.scene.primitives.add(new Cesium.BillboardCollection());
-const routeBubbleCollectionA = viewer.scene.primitives.add(new Cesium.BillboardCollection());
-const routeBubbleCollectionB = viewer.scene.primitives.add(new Cesium.BillboardCollection());
+const routeTrackCollectionA = viewer.scene.primitives.add(new Cesium.PolylineCollection());
+const routeTrackCollectionB = viewer.scene.primitives.add(new Cesium.PolylineCollection());
 const routeGlowCollectionA = viewer.scene.primitives.add(new Cesium.BillboardCollection());
 const routeGlowCollectionB = viewer.scene.primitives.add(new Cesium.BillboardCollection());
+const routeNodeCollectionA = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
+const routeNodeCollectionB = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
+const routeLabelCollectionA = viewer.scene.primitives.add(new Cesium.LabelCollection());
+const routeLabelCollectionB = viewer.scene.primitives.add(new Cesium.LabelCollection());
 
 const ROAD_VIEW_EYE_HEIGHT_METERS = 0.85;
 const ROAD_VIEW_LOOK_HEIGHT_METERS = 0.1;
 const ROAD_VIEW_BACK_OFFSET_METERS = 0.9;
 const ROAD_VIEW_FOV_DEGREES = 58;
 const ROAD_VIEW_LOOK_AHEAD_STEPS = 1;
-const LIVE_NAVIGATION_STEP_MS = 420;
 
 let liveNavTimer: number | null = null;
 let liveNavPath: Cesium.Cartesian3[] = [];
-let liveNavFloorByIndex: number[] = [];
 let liveNavIndex = 0;
-let liveNavFirstSegmentLength = 0;
-let liveNavStairStartIndex = -1;
-let liveNavStairEndIndex = -1;
-let liveNavActiveFloor: number | null = null;
-let liveNavPendingFloor: number | null = null;
-let liveNavDestinationName = "";
-let liveNavDestinationRoomName = "";
-let liveNavDestinationFloor: number | null = null;
+let liveNavCameraActive = false;
 let navigationFloorSwitchHandler: ((floor: number) => void | Promise<void>) | null = null;
 let routeAnimRemove: (() => void) | null = null;
 let routeAnimStart = 0;
-let routeDotTValuesA: number[] = [];
-let routeDotTValuesB: number[] = [];
-let routeBubbleBillboardsA: Cesium.Billboard[] = [];
-let routeBubbleBillboardsB: Cesium.Billboard[] = [];
-let routeBubbleDensityStride = 1;
+let routeFlowMatA: Cesium.Material | null = null;
+let routeFlowMatB: Cesium.Material | null = null;
+let routePathPointsA: Cesium.Cartesian3[] = [];
+let routePathPointsB: Cesium.Cartesian3[] = [];
+let previewAnimRemove: (() => void) | null = null;
 let arrivalHudHideTimer: number | null = null;
+let liveNavSteps: Array<{ startDist: number }> = [];
+let liveNavFloorSwitchDistance: number | null = null;
+let liveNavFloorSwitchTarget: number | null = null;
+let liveNavFloorSwitchDone = false;
+let liveNavFloorBreakIndex: number | null = null;
 
 const MAX_CORRIDOR_EDGE_METERS = 3.5;
-const MAX_CORRIDOR_NEAREST_NEIGHBORS = 3;
+const MAX_CORRIDOR_NEAREST_NEIGHBORS = 8;
 const HOP_PENALTY_METERS = 0.4;
 const CORRIDOR_DEBUG_PARAM = "corridorDebug";
 const STAIR_DEBUG_PARAM = "stairDebug";
@@ -150,10 +173,6 @@ const CORRIDOR_DEBUG_HEIGHT_OFFSET = 2.8;
 const STAIR_DEBUG_HEIGHT_OFFSET = 4.0;
 
 // Fixed full-floor overview camera shown on person-destination arrival (absolute height)
-const FLOOR_ARRIVAL_OVERVIEW: Record<number, { lon: number; lat: number; height: number; heading: number; pitch: number; roll: number }> = {
-  3: { lon: 77.133656728, lat: 28.670958868, height: 18.803, heading: 328.664, pitch: -83.18, roll: 360 }, // 2nd floor
-  4: { lon: 77.133674962, lat: 28.670971271, height: 23.244, heading: 54.258, pitch: -86.862, roll: 0 }, // 3rd floor
-};
 const INTERMEDIATE_DEBUG_HEIGHT_OFFSET = 4.4;
 const SECOND_FLOOR_PANTRY_EMPLOYEE_SIDE_DOOR = Cesium.Cartesian3.fromDegrees(
   77.13362535043548,
@@ -170,14 +189,16 @@ const THIRD_FLOOR_PANTRY_LOWER_DOOR = Cesium.Cartesian3.fromDegrees(
   28.67092052705272,
   ALT_3RD + 0.1
 );
-
-const ROUTE_BUBBLE_SVG = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56">
-  <circle cx="28" cy="28" r="25" fill="none" stroke="rgba(255,255,255,0.92)" stroke-width="5"/>
-  <circle cx="28" cy="28" r="18" fill="#00CCFF"/>
-  <circle cx="28" cy="28" r="9" fill="white" fill-opacity="0.65"/>
-</svg>
-`)}`;
+const THIRD_FLOOR_CONFERENCE_ROOM_INSIDE = Cesium.Cartesian3.fromDegrees(
+  77.133630,
+  28.670958,
+  ALT_3RD
+);
+const THIRD_FLOOR_LIBRARY_POSITION = Cesium.Cartesian3.fromDegrees(
+  77.133680,
+  28.670900,
+  ALT_3RD
+);
 
 const ROUTE_GLOW_SVG = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" width="140" height="140" viewBox="0 0 140 140">
@@ -193,143 +214,29 @@ const ROUTE_GLOW_SVG = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
 </svg>
 `)}`;
 
-const DESTINATION_CAMERA_PRESETS: Record<string, {
-  lon: number;
-  lat: number;
-  height: number;
-  heading: number;
-  pitch: number;
-  roll: number;
-  fov: number;
-}> = {
-  "3|manthan": {
-    lon: 77.13375476,
-    lat: 28.67090875,
-    height: 11.16,
-    heading: 329.38,
-    pitch: -47.94,
-    roll: 0,
-    fov: 58
-  },
-  "4|conference room": {
-    lon: 77.13363249,
-    lat: 28.67093738,
-    height: 16.19,
-    heading: 326.63,
-    pitch: -60.56,
-    roll: 0,
-    fov: 58
-  },
-  "3|dojo": {
-    lon: 77.13365024541,
-    lat: 28.67095863016,
-    height: 8.1784,
-    heading: 149.2359,
-    pitch: -32.1258,
-    roll: 0,
-    fov: 58
-  },
-  "3|eureka": {
-    lon: 77.13369630647,
-    lat: 28.67097179017,
-    height: 11.8672,
-    heading: 63.91,
-    pitch: -74.1073,
-    roll: 0.0001,
-    fov: 58
-  },
-  "4|library": {
-    lon: 77.13367953877,
-    lat: 28.67086780995,
-    height: 12.2209,
-    heading: 332.3004,
-    pitch: -34.9491,
-    roll: 0,
-    fov: 58
-  },
-  "4|meeting room": {
-    lon: 77.13367129265,
-    lat: 28.67101945937,
-    height: 13.5826,
-    heading: 322.9066,
-    pitch: -77.6764,
-    roll: 0,
-    fov: 58
-  },
-  "3|pantry": {
-    lon: 77.13359931811,
-    lat: 28.67099906596,
-    height: 10.4152,
-    heading: 151.8243,
-    pitch: -77.5895,
-    roll: 0.0001,
-    fov: 58
-  },
-  "4|pantry": {
-    lon: 77.13372773723,
-    lat: 28.67093722174,
-    height: 15.9639,
-    heading: 55.0383,
-    pitch: -81.3355,
-    roll: 0.0001,
-    fov: 58
-  },
-  "3|admin": {
-    lon: 77.13367876163,
-    lat: 28.67090258073,
-    height: 9.9028,
-    heading: 226.3380,
-    pitch: -61.5925,
-    roll: 0,
-    fov: 58
-  },
-  "3|ug's cabin": {
-    lon: 77.13366237738,
-    lat: 28.67100804682,
-    height: 11.0537,
-    heading: 59.4988,
-    pitch: -58.4382,
-    roll: 0,
-    fov: 58
-  },
-  "3|vg's cabin": {
-    lon: 77.13360662650,
-    lat: 28.67096091377,
-    height: 10.6954,
-    heading: 63.7303,
-    pitch: -77.9384,
-    roll: 0.0002,
-    fov: 58
-  }
-};
 
-// Points 1-3: lower half of staircase (2nd floor → landing)
-// Points 4-6: upper half of staircase (landing → 3rd floor)
+// Stair path: 2nd floor entry → spiral up → 3rd floor exit.
+// Points spaced ~0.5 m apart along the staircase to give a clear climb visual.
+// Use Stair Debug panel (Drag Edit) to fine-tune these positions.
 const CUSTOM_STAIR_PATH = [
-  { lon: 77.13370004, lat: 28.67090941 }, // 1 — 2nd floor entry
-  { lon: 77.13369578, lat: 28.67091353 }, // 2
-  { lon: 77.13368746, lat: 28.67092326 }, // 3 — landing
-  { lon: 77.13369627, lat: 28.67093470 }, // 4
-  { lon: 77.13369886, lat: 28.67093041 }, // 5
-  { lon: 77.13370144, lat: 28.67092714 }, // 6 — 3rd floor exit
+  { lon: 77.13369898351728, lat: 28.670912218623947 }, // 1 — 2nd floor entry
+  { lon: 77.13369578,       lat: 28.67091690 },        // 2
+  { lon: 77.13369100,       lat: 28.67092100 },        // 3
+  { lon: 77.13368746,       lat: 28.67092650 },        // 4 — mid lower
+  { lon: 77.13368900,       lat: 28.67093200 },        // 5 — landing
+  { lon: 77.13369400,       lat: 28.67093650 },        // 6
+  { lon: 77.13369900,       lat: 28.67093350 },        // 7 — mid upper
+  { lon: 77.13370144,       lat: 28.67092900 },        // 8
+  { lon: 77.13370400,       lat: 28.67092714 },        // 9 — 3rd floor exit
 ];
 
-// Landing-aware height: first half rises from startAlt to landing, second half from landing to targetAlt.
-// For N points the landing sits at index floor(N/2)-1 (for 6 pts → index 2).
+// Height interpolation across the stair path.
+// The landing sits at the midpoint index; both halves ramp linearly through it.
 function stairPointHeight(index: number, total: number, startAlt: number, targetAlt: number): number {
-  const landingAlt = (startAlt + targetAlt) / 2;
-  const landingIdx = Math.floor(total / 2) - 1; // index 2 for 6 points
-  if (index <= landingIdx) {
-    const t = landingIdx > 0 ? index / landingIdx : 0;
-    return startAlt + (landingAlt - startAlt) * t;
-  }
-  const t = (index - landingIdx) / (total - 1 - landingIdx);
-  return landingAlt + (targetAlt - landingAlt) * t;
+  if (total <= 1) return startAlt;
+  const t = index / (total - 1);
+  return startAlt + (targetAlt - startAlt) * t;
 }
-
-viewer.camera.changed.addEventListener(() => {
-  applyRouteBubbleDensity();
-});
 
 function clearRouteEntities(): void {
   viewer.entities.removeById("debugDoorStart");
@@ -343,22 +250,24 @@ function clearRouteEntities(): void {
   viewer.entities.removeById("endMarker");
   viewer.entities.removeById("navMarkerDot");
   viewer.entities.removeById("liveNavigationMarker");
-  routeArrowCollectionA.removeAll();
-  routeArrowCollectionB.removeAll();
-  routeBubbleCollectionA.removeAll();
-  routeBubbleCollectionB.removeAll();
-  routeBubbleBillboardsA = [];
-  routeBubbleBillboardsB = [];
-  routeDotTValuesA = [];
-  routeDotTValuesB = [];
-  routeBubbleDensityStride = 1;
+  routeTrackCollectionA.removeAll();
+  routeTrackCollectionB.removeAll();
+  routeFlowMatA = null;
+  routeFlowMatB = null;
+  routePathPointsA = [];
+  routePathPointsB = [];
   routeGlowCollectionA.removeAll();
   routeGlowCollectionB.removeAll();
-
+  routeNodeCollectionA.removeAll();
+  routeNodeCollectionB.removeAll();
+  routeLabelCollectionA.removeAll();
+  routeLabelCollectionB.removeAll();
   if (routeAnimRemove !== null) {
     routeAnimRemove();
     routeAnimRemove = null;
   }
+  if (previewAnimRemove) { previewAnimRemove(); previewAnimRemove = null; }
+  setRoutePreviewAvailable(false);
 }
 
 function stopLiveNavigationMarker(): void {
@@ -367,37 +276,17 @@ function stopLiveNavigationMarker(): void {
     liveNavTimer = null;
   }
   liveNavPath = [];
-  liveNavFloorByIndex = [];
   liveNavIndex = 0;
-  liveNavFirstSegmentLength = 0;
-  liveNavStairStartIndex = -1;
-  liveNavStairEndIndex = -1;
-  liveNavActiveFloor = null;
-  liveNavPendingFloor = null;
-  liveNavDestinationName = "";
-  liveNavDestinationRoomName = "";
-  liveNavDestinationFloor = null;
+  liveNavFloorSwitchDistance = null;
+  liveNavFloorSwitchTarget = null;
+  liveNavFloorSwitchDone = false;
+  liveNavFloorBreakIndex = null;
+
+  liveNavCameraActive = false;
   viewer.entities.removeById("liveNavigationMarker");
   hideNavigationHud();
 }
 
-function requestLiveNavigationFloor(floor: number | undefined): void {
-  if (!floor || floor === liveNavActiveFloor || floor === liveNavPendingFloor) return;
-
-  liveNavPendingFloor = floor;
-  void Promise.resolve(navigationFloorSwitchHandler?.(floor))
-    .then(() => {
-      liveNavActiveFloor = floor;
-    })
-    .catch((error) => {
-      console.error(`Failed to switch navigation floor to ${floor}:`, error);
-    })
-    .finally(() => {
-      if (liveNavPendingFloor === floor) {
-        liveNavPendingFloor = null;
-      }
-    });
-}
 
 function offsetAlongLocalUp(position: Cesium.Cartesian3, meters: number): Cesium.Cartesian3 {
   const up = Cesium.Cartesian3.normalize(position, new Cesium.Cartesian3());
@@ -408,11 +297,11 @@ function offsetAlongLocalUp(position: Cesium.Cartesian3, meters: number): Cesium
   );
 }
 
-function applyRoadNavigationView(index: number, smooth = true): void {
+function applyRoadNavigationView(index: number, smooth = true, flyDuration = 0.18, lookAheadSteps = ROAD_VIEW_LOOK_AHEAD_STEPS): void {
   if (liveNavPath.length < 2) return;
 
   const current = liveNavPath[index];
-  const next = liveNavPath[Math.min(index + ROAD_VIEW_LOOK_AHEAD_STEPS, liveNavPath.length - 1)] ?? current;
+  const next = liveNavPath[Math.min(index + lookAheadSteps, liveNavPath.length - 1)] ?? current;
   const previous = liveNavPath[Math.max(index - 1, 0)] ?? current;
   const forwardSource = Cesium.Cartesian3.distance(current, next) > 0.05 ? next : previous;
   const forward = Cesium.Cartesian3.subtract(forwardSource, current, new Cesium.Cartesian3());
@@ -455,349 +344,26 @@ function applyRoadNavigationView(index: number, smooth = true): void {
   if (typeof (viewer.camera as any).cancelFlight === "function") {
     (viewer.camera as any).cancelFlight();
   }
+  const easing = flyDuration > 0.3
+    ? Cesium.EasingFunction.LINEAR_NONE
+    : Cesium.EasingFunction.QUADRATIC_IN_OUT;
   viewer.camera.flyTo({
     destination: eye,
     orientation: { direction, up },
-    duration: 0.18,
-    easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT,
+    duration: flyDuration,
+    easingFunction: easing,
   });
 }
 
-function remainingPathDistance(path: Cesium.Cartesian3[], fromIndex: number): number {
-  let total = 0;
-  for (let index = Math.max(1, fromIndex + 1); index < path.length; index += 1) {
-    total += Cesium.Cartesian3.distance(path[index - 1], path[index]);
-  }
-  return total;
-}
-
-function liveNavigationHudState(index: number): NavigationHudState {
-  const floor = liveNavFloorByIndex[index];
-  const nextFloor = liveNavFloorByIndex[Math.min(index + 1, liveNavFloorByIndex.length - 1)];
-  const remaining = remainingPathDistance(liveNavPath, index);
-  const contextBase = liveNavDestinationName
-    ? `${floorLabel(floor)} to ${liveNavDestinationName}`
-    : floorLabel(floor);
-
-  if (index >= liveNavPath.length - 1) {
-    return {
-      icon: "arrive",
-      instruction: "Arrived",
-      context: contextBase,
-      distanceMeters: 0
-    };
-  }
-
-  if (index >= liveNavStairStartIndex && index <= liveNavStairEndIndex) {
-    const targetFloor = activeNavToFloor ?? nextFloor;
-    return {
-      icon: "stairs",
-      instruction: "Use stairs",
-      context: `Be careful - move to ${floorLabel(targetFloor)}`,
-      distanceMeters: remaining
-    };
-  }
-
-  if (nextFloor !== floor) {
-    return {
-      icon: "stairs",
-      instruction: "Stairs ahead",
-      context: `Be careful - move to ${floorLabel(nextFloor)}`,
-      distanceMeters: remaining
-    };
-  }
-
-  if (index < 1 || index >= liveNavPath.length - 2) {
-    return {
-      icon: "forward",
-      instruction: "Forward",
-      context: contextBase,
-      distanceMeters: remaining
-    };
-  }
-
-  const currentHeading = headingENU(liveNavPath[index - 1], liveNavPath[index]);
-  const nextHeading = headingENU(liveNavPath[index], liveNavPath[index + 1]);
-  let angleDiff = nextHeading - currentHeading;
-  while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-  while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-
-  if (Math.abs(angleDiff) < 0.45) {
-    return {
-      icon: "forward",
-      instruction: "Forward",
-      context: contextBase,
-      distanceMeters: remaining
-    };
-  }
-
-  const turnLeft = angleDiff > 0;
-  return {
-    icon: turnLeft ? "left" : "right",
-    instruction: `Turn ${turnLeft ? "left" : "right"}`,
-    context: `Next: ${contextBase}`,
-    distanceMeters: remaining
-  };
-}
-
-function updateLiveNavigationHud(index: number): void {
-  updateNavigationHud(liveNavigationHudState(index));
-}
-
-function showArrivalWelcomeHud(): void {
-  if (arrivalHudHideTimer !== null) {
-    window.clearTimeout(arrivalHudHideTimer);
-    arrivalHudHideTimer = null;
-  }
-
-  updateNavigationHud({
-    icon: "arrive",
-    instruction: `Welcome to ${liveNavDestinationRoomName || liveNavDestinationName || "destination"} 🎉`,
-    context: "You have arrived",
-    distanceMeters: 0
-  });
-
-  arrivalHudHideTimer = window.setTimeout(() => {
-    hideNavigationHud();
-    arrivalHudHideTimer = null;
-  }, 3000);
-}
-
-function isRouteBubbleAhead(segment: "A" | "B", index: number): boolean {
-  if (liveNavPath.length === 0) return true;
-  if (segment === "A") return index > liveNavIndex;
-  return liveNavIndex < liveNavFirstSegmentLength || index > liveNavIndex - liveNavFirstSegmentLength;
-}
-
-function updateCompletedRouteDots(): void {
-  routeBubbleBillboardsA.forEach((billboard, index) => {
-    billboard.show = isRouteBubbleAhead("A", index) && (index % routeBubbleDensityStride === 0 || index === routeBubbleBillboardsA.length - 1);
-  });
-  routeBubbleBillboardsB.forEach((billboard, index) => {
-    billboard.show = isRouteBubbleAhead("B", index) && (index % routeBubbleDensityStride === 0 || index === routeBubbleBillboardsB.length - 1);
-  });
-}
-
-function getRoomViewEntity(roomName: string, floor: number): Cesium.Entity | undefined {
-  const dataSource = floor === 3 ? geo2 : geo3;
-  const target = normalizeRoomName(roomName);
-  return dataSource?.entities.values.find((entity) => normalizeRoomName(getEntityRoomName(entity)) === target);
-}
-
-function roomBoundingSphere(entity: Cesium.Entity, floor: number): Cesium.BoundingSphere | null {
-  const hierarchy = entity.polygon?.hierarchy?.getValue(Cesium.JulianDate.now());
-  const positions = hierarchy?.positions ?? [];
-  if (positions.length > 0) {
-    return Cesium.BoundingSphere.fromPoints(positions);
-  }
-
-  const position = entity.position?.getValue(Cesium.JulianDate.now()) ?? getRoomFallbackPosition(
-    liveNavDestinationRoomName,
-    floor
-  );
-  return position ? new Cesium.BoundingSphere(position, 4) : null;
-}
 
 
-async function focusDestinationRoomView(): Promise<void> {
-  if (!liveNavDestinationRoomName || !liveNavDestinationFloor) return;
 
-  await Promise.resolve(navigationFloorSwitchHandler?.(liveNavDestinationFloor));
 
-  // Person / chair destination — highlight chair, show popup, fly to seat
-  if (liveNavDestinationRoomName.startsWith("person:")) {
-    const parts = liveNavDestinationRoomName.split(":");
-    const name = parts[1];
-    const personFloor = Number(parts[2]) as 3 | 4;
-    showChairArrivalEffect(name, personFloor);
 
-    if (typeof (viewer.camera as any).cancelFlight === "function") {
-      (viewer.camera as any).cancelFlight();
-    }
 
-    // Use saved preset if available, otherwise fall back to default view
-    const savedPreset = getChairViewPreset(name, personFloor);
-    if (savedPreset) {
-      if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
-        viewer.camera.frustum.fov = Cesium.Math.toRadians(savedPreset.fov);
-      }
-      await new Promise<void>((resolve) => {
-        viewer.camera.flyTo({
-          destination: Cesium.Cartesian3.fromDegrees(savedPreset.lon, savedPreset.lat, savedPreset.height),
-          orientation: {
-            heading: Cesium.Math.toRadians(savedPreset.heading),
-            pitch: Cesium.Math.toRadians(savedPreset.pitch),
-            roll: Cesium.Math.toRadians(savedPreset.roll),
-          },
-          duration: 1.2,
-          easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT,
-          complete: () => { viewer.scene.requestRender(); resolve(); },
-          cancel: () => { viewer.scene.requestRender(); resolve(); },
-        });
-      });
-      return;
-    }
 
-    // 1. Use user-saved override if present
-    const override = getFloorArrivalOverride(personFloor);
-    const flyPreset: FloorArrivalPreset | null =
-      override ?? ((): FloorArrivalPreset | null => {
-        const ov = FLOOR_ARRIVAL_OVERVIEW[personFloor];
-        if (!ov) return null;
-        return { lon: ov.lon, lat: ov.lat, height: ov.height, heading: ov.heading, pitch: ov.pitch, roll: ov.roll };
-      })();
 
-    if (flyPreset) {
-      await new Promise<void>((resolve) => {
-        viewer.camera.flyTo({
-          destination: Cesium.Cartesian3.fromDegrees(flyPreset.lon, flyPreset.lat, flyPreset.height),
-          orientation: {
-            heading: Cesium.Math.toRadians(flyPreset.heading),
-            pitch:   Cesium.Math.toRadians(flyPreset.pitch),
-            roll:    Cesium.Math.toRadians(flyPreset.roll),
-          },
-          duration: 1.2,
-          easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT,
-          complete: () => { viewer.scene.requestRender(); resolve(); },
-          cancel:   () => { viewer.scene.requestRender(); resolve(); },
-        });
-      });
-    }
-    return;
-  }
 
-  const entity = getRoomViewEntity(liveNavDestinationRoomName, liveNavDestinationFloor);
-  const sphere = entity ? roomBoundingSphere(entity, liveNavDestinationFloor) : null;
-  if (!sphere) return;
-
-  if (typeof (viewer.camera as any).cancelFlight === "function") {
-    (viewer.camera as any).cancelFlight();
-  }
-
-  const preset = DESTINATION_CAMERA_PRESETS[`${liveNavDestinationFloor}|${normalizeRoomName(liveNavDestinationRoomName)}`];
-  if (preset) {
-    if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
-      viewer.camera.frustum.fov = Cesium.Math.toRadians(preset.fov);
-    }
-
-    await new Promise<void>((resolve) => {
-      viewer.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(preset.lon, preset.lat, preset.height),
-        orientation: {
-          heading: Cesium.Math.toRadians(preset.heading),
-          pitch: Cesium.Math.toRadians(preset.pitch),
-          roll: Cesium.Math.toRadians(preset.roll)
-        },
-        duration: 1.2,
-        easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT,
-        complete: () => {
-          viewer.scene.requestRender();
-          resolve();
-        },
-        cancel: () => {
-          viewer.scene.requestRender();
-          resolve();
-        }
-      });
-    });
-    return;
-  }
-
-  await new Promise<void>((resolve) => {
-    viewer.camera.flyToBoundingSphere(sphere, {
-      duration: 1.2,
-      offset: new Cesium.HeadingPitchRange(
-        Cesium.Math.toRadians(18),
-        Cesium.Math.toRadians(-67),
-        Math.max(sphere.radius * 2.8, 11)
-      ),
-      complete: () => {
-        viewer.scene.requestRender();
-        resolve();
-      },
-      cancel: () => {
-        viewer.scene.requestRender();
-        resolve();
-      }
-    });
-  });
-}
-
-async function finishLiveNavigation(): Promise<void> {
-  if (liveNavTimer !== null) {
-    window.clearInterval(liveNavTimer);
-    liveNavTimer = null;
-  }
-
-  clearRouteEntities();
-  clearMapRoute();
-  hideTooltip();
-  showArrivalWelcomeHud();
-  activeNavFromFloor = null;
-  activeNavToFloor = null;
-  setNavigationAllowedFloors(null);
-  enableCameraControls();
-  await focusDestinationRoomView();
-  viewer.scene.requestRender();
-}
-
-function startLiveNavigationMarker(
-  path: Cesium.Cartesian3[],
-  floorByIndex: number[],
-  destinationName: string,
-  destinationRoomName: string,
-  destinationFloor: number,
-  firstSegmentLength: number,
-  stairRange?: { startIndex: number; endIndex: number }
-): void {
-  stopLiveNavigationMarker();
-
-  if (path.length < 2) return;
-
-  liveNavPath = path;
-  liveNavFloorByIndex = floorByIndex;
-  liveNavDestinationName = destinationName;
-  liveNavDestinationRoomName = destinationRoomName;
-  liveNavDestinationFloor = destinationFloor;
-  liveNavFirstSegmentLength = firstSegmentLength;
-  liveNavStairStartIndex = stairRange?.startIndex ?? -1;
-  liveNavStairEndIndex = stairRange?.endIndex ?? -1;
-  liveNavIndex = 0;
-  requestLiveNavigationFloor(liveNavFloorByIndex[0]);
-  applyRoadNavigationView(0, false);
-  updateLiveNavigationHud(0);
-
-  viewer.entities.add({
-    id: "liveNavigationMarker",
-    position: path[0],
-    point: {
-      pixelSize: new Cesium.CallbackProperty(() => 17 + 5 * Math.abs(Math.sin(performance.now() * 0.005)), false),
-      color: Cesium.Color.fromCssColorString("#00CCFF"),
-      outlineColor: Cesium.Color.WHITE,
-      outlineWidth: 4,
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
-    },
-  });
-
-  liveNavTimer = window.setInterval(() => {
-    const marker = viewer.entities.getById("liveNavigationMarker");
-    if (!marker || liveNavPath.length === 0) return;
-
-    if (liveNavIndex >= liveNavPath.length - 1) {
-      void finishLiveNavigation();
-      return;
-    }
-
-    liveNavIndex += 1;
-    marker.position = new Cesium.ConstantPositionProperty(liveNavPath[liveNavIndex]);
-    requestLiveNavigationFloor(liveNavFloorByIndex[liveNavIndex]);
-    applyRoadNavigationView(liveNavIndex);
-    updateLiveNavigationHud(liveNavIndex);
-    updateCompletedRouteDots();
-
-    viewer.scene.requestRender();
-  }, LIVE_NAVIGATION_STEP_MS);
-}
 
 export function setNavigationFloorSwitchHandler(
   handler: ((floor: number) => void | Promise<void>) | null
@@ -817,10 +383,156 @@ export function exitNavigation(): void {
   clearRouteEntities();
   activeNavFromFloor = null;
   activeNavToFloor = null;
+  activeStairClimbPath = [];
   setNavigationAllowedFloors(null);
   enableCameraControls();
   setNavigationMessage("Choose rooms to start navigation.");
   viewer.scene.requestRender();
+}
+
+export function startNavigationCameraView(): void {
+  if (liveNavPath.length < 2 || liveNavCameraActive) return;
+  liveNavCameraActive = true;
+  disableCameraControls();
+  applyRoadNavigationView(liveNavIndex, false);
+  viewer.scene.requestRender();
+}
+
+export function isNavigationCameraActive(): boolean {
+  return liveNavCameraActive;
+}
+
+export function flyRoutePreview(): void {
+  if (liveNavPath.length < 2) return;
+  if (previewAnimRemove) { previewAnimRemove(); previewAnimRemove = null; }
+
+  disableCameraControls();
+  if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
+    viewer.camera.frustum.fov = Cesium.Math.toRadians(ROAD_VIEW_FOV_DEGREES);
+  }
+
+  const path = liveNavPath;
+  liveNavFloorSwitchDone = false;
+  if (activeNavFromFloor !== null) {
+    void Promise.resolve(navigationFloorSwitchHandler?.(activeNavFromFloor));
+  }
+
+  // Build arc-length table so we can sample any position by distance
+  const cumLen: number[] = [0];
+  for (let i = 1; i < path.length; i++) {
+    const segmentDistance = liveNavFloorBreakIndex === i - 1
+      ? 0
+      : Cesium.Cartesian3.distance(path[i - 1], path[i]);
+    cumLen.push(cumLen[i - 1] + segmentDistance);
+  }
+  const totalLen = cumLen[cumLen.length - 1];
+
+  // Return world position at arc-length s along the path
+  function posAtS(s: number): Cesium.Cartesian3 {
+    s = Math.max(0, Math.min(totalLen, s));
+    for (let i = 1; i < cumLen.length; i++) {
+      if (cumLen[i] >= s) {
+        const segmentLength = cumLen[i] - cumLen[i - 1];
+        if (segmentLength <= 0.000001) {
+          return Cesium.Cartesian3.clone(path[i]);
+        }
+        const t = (s - cumLen[i - 1]) / segmentLength;
+        return Cesium.Cartesian3.lerp(path[i - 1], path[i], t, new Cesium.Cartesian3());
+      }
+    }
+    return Cesium.Cartesian3.clone(path[path.length - 1]);
+  }
+
+  // Aim 1.5m ahead along the path — stays straight on straights, curves naturally at turns
+  const LOOK_AHEAD_M = 1.5;
+  const SPEED_MPS = 1.00;
+
+  let currentS = 0;
+  let lastTime = performance.now();
+  let lastHighlightedStep = -1;
+
+  function updateStepHighlight(s: number): void {
+    if (liveNavSteps.length === 0) return;
+    let stepIdx = 0;
+    for (let i = liveNavSteps.length - 1; i >= 0; i--) {
+      if (s >= liveNavSteps[i].startDist) { stepIdx = i; break; }
+    }
+    if (stepIdx !== lastHighlightedStep) {
+      lastHighlightedStep = stepIdx;
+      highlightNavStep(stepIdx);
+    }
+  }
+
+  function updatePreviewFloorSwitch(s: number): void {
+    if (
+      liveNavFloorSwitchDone ||
+      liveNavFloorSwitchDistance === null ||
+      liveNavFloorSwitchTarget === null ||
+      s < liveNavFloorSwitchDistance
+    ) {
+      return;
+    }
+    liveNavFloorSwitchDone = true;
+    void Promise.resolve(navigationFloorSwitchHandler?.(liveNavFloorSwitchTarget));
+  }
+
+  // Place camera at start immediately
+  const p0 = posAtS(0);
+  const snapEye = offsetAlongLocalUp(p0, ROAD_VIEW_EYE_HEIGHT_METERS);
+  const snapAim = offsetAlongLocalUp(posAtS(LOOK_AHEAD_M), ROAD_VIEW_LOOK_HEIGHT_METERS);
+  const snapDir = Cesium.Cartesian3.normalize(Cesium.Cartesian3.subtract(snapAim, snapEye, new Cesium.Cartesian3()), new Cesium.Cartesian3());
+  const snapLU = Cesium.Cartesian3.normalize(p0, new Cesium.Cartesian3());
+  const snapR = Cesium.Cartesian3.normalize(Cesium.Cartesian3.cross(snapDir, snapLU, new Cesium.Cartesian3()), new Cesium.Cartesian3());
+  const snapUp = Cesium.Cartesian3.normalize(Cesium.Cartesian3.cross(snapR, snapDir, new Cesium.Cartesian3()), new Cesium.Cartesian3());
+  viewer.camera.setView({ destination: snapEye, orientation: { direction: snapDir, up: snapUp } });
+
+  const onRender = () => {
+    const now = performance.now();
+    const dt = Math.min((now - lastTime) / 1000, 0.1);
+    lastTime = now;
+    currentS += SPEED_MPS * dt;
+
+    if (currentS >= totalLen) {
+      viewer.scene.postRender.removeEventListener(onRender);
+      previewAnimRemove = null;
+      enableCameraControls();
+      highlightNavStep(liveNavSteps.length - 1);
+      void flyToDefaultFloorView(1.4);
+      return;
+    }
+
+    updateStepHighlight(currentS);
+    updatePreviewFloorSwitch(currentS);
+
+    const eyePos  = posAtS(currentS);
+    const aimPos  = posAtS(currentS + LOOK_AHEAD_M);
+    const localUp = Cesium.Cartesian3.normalize(eyePos, new Cesium.Cartesian3());
+    const eye     = offsetAlongLocalUp(eyePos, ROAD_VIEW_EYE_HEIGHT_METERS);
+    const aimElev = offsetAlongLocalUp(aimPos, ROAD_VIEW_LOOK_HEIGHT_METERS);
+
+    const direction = Cesium.Cartesian3.normalize(
+      Cesium.Cartesian3.subtract(aimElev, eye, new Cesium.Cartesian3()),
+      new Cesium.Cartesian3()
+    );
+    const right = Cesium.Cartesian3.normalize(
+      Cesium.Cartesian3.cross(direction, localUp, new Cesium.Cartesian3()),
+      new Cesium.Cartesian3()
+    );
+    if (Cesium.Cartesian3.magnitudeSquared(right) < 0.000001) return;
+    const up = Cesium.Cartesian3.normalize(
+      Cesium.Cartesian3.cross(right, direction, new Cesium.Cartesian3()),
+      new Cesium.Cartesian3()
+    );
+
+    viewer.camera.setView({ destination: eye, orientation: { direction, up } });
+    viewer.scene.requestRender();
+  };
+
+  viewer.scene.postRender.addEventListener(onRender);
+  previewAnimRemove = () => {
+    viewer.scene.postRender.removeEventListener(onRender);
+    enableCameraControls();
+  };
 }
 
 export function updateNavigationVisibility(activeFloor: number): void {
@@ -837,7 +549,7 @@ export function updateNavigationVisibility(activeFloor: number): void {
   if (lineB) lineB.show = false;
 
   const stairs = viewer.entities.getById("stairsLine");
-  if (stairs) stairs.show = false;
+  if (stairs) stairs.show = showStairs;
   
   const dot = viewer.entities.getById("navMarkerDot");
   if (dot) dot.show = showStairs;
@@ -850,23 +562,27 @@ export function updateNavigationVisibility(activeFloor: number): void {
 
   const endMarker = viewer.entities.getById("endMarker");
   if (endMarker) endMarker.show = showB;
-  
-  routeArrowCollectionA.show = false;
-  routeArrowCollectionB.show = false;
-  routeBubbleCollectionA.show = showA;
-  routeBubbleCollectionB.show = showB;
+
+  routeTrackCollectionA.show = showA;
+  routeTrackCollectionB.show = showB;
   routeGlowCollectionA.show = showA;
   routeGlowCollectionB.show = showB;
+  routeNodeCollectionA.show = showA;
+  routeNodeCollectionB.show = showB;
+  routeLabelCollectionA.show = showA;
+  routeLabelCollectionB.show = showB;
   corridorDebugEntities.forEach(({ entity, floor }) => {
     entity.show = activeFloor === 0 || activeFloor === floor;
   });
+  const showCorridorDraw = activeFloor === 0 || activeFloor === 3;
+  corridorDrawNodes.forEach(({ entity }) => { entity.show = showCorridorDraw; });
+  corridorDrawEdges.forEach(({ entity }) => { entity.show = showCorridorDraw; });
   stairDebugEntities.forEach((entity) => {
     entity.show = stairDebugEnabled();
   });
   intermediateDebugEntities.forEach((entity) => {
     entity.show = intermediateDebugEnabled();
   });
-  applyRouteBubbleDensity(true);
 
   if (activeNavFromFloor && activeNavToFloor) {
     let message = "Continue navigation on this floor.";
@@ -878,12 +594,14 @@ export function updateNavigationVisibility(activeFloor: number): void {
 }
 
 function corridorDebugEnabled(): boolean {
+  if (corridorDebugUIActive) return true;
   const params = new URLSearchParams(window.location.search);
   const value = params.get(CORRIDOR_DEBUG_PARAM);
   return value === "1" || value === "true" || value === "points" || value === "edit";
 }
 
 function corridorDebugEditable(): boolean {
+  if (corridorDebugUIEditable) return true;
   const params = new URLSearchParams(window.location.search);
   return params.get(CORRIDOR_DEBUG_PARAM) === "edit";
 }
@@ -930,7 +648,7 @@ function pickCorridorDebugLonLat(position: Cesium.Cartesian2): { lon: number; la
   };
 }
 
-function exportCorridorDebugGeoJSON(): void {
+export function exportCorridorDebugGeoJSON(): void {
   corridorDebugFiles.forEach((fileState) => {
     const geoJson = {
       type: "FeatureCollection",
@@ -1103,6 +821,223 @@ export async function installCorridorPointDebug(): Promise<void> {
       : `Corridor debug: ${graph2.length} second-floor points, ${graph3.length} third-floor points.`
   );
   viewer.scene.requestRender();
+}
+
+export async function showCorridorDebugUI(editable: boolean): Promise<void> {
+  corridorDebugUIActive = true;
+  corridorDebugUIEditable = editable;
+  corridorDebugLoaded = false; // allow reload if toggling edit mode
+  await installCorridorPointDebug();
+}
+
+export function clearCorridorDebugUI(): void {
+  for (const { entity } of corridorDebugEntities) {
+    viewer.entities.remove(entity);
+  }
+  corridorDebugEntities.length = 0;
+  corridorDebugPoints.clear();
+  corridorDebugFiles.clear();
+  if (corridorDebugDragHandler) {
+    corridorDebugDragHandler.destroy();
+    corridorDebugDragHandler = null;
+  }
+  corridorDebugLoaded = false;
+  corridorDebugUIActive = false;
+  corridorDebugUIEditable = false;
+  viewer.scene.requestRender();
+}
+
+// ── Corridor Draw Tool ────────────────────────────────────────────────────────
+
+function corridorDrawAlt(): number {
+  return ALT_2ND + 0.2;
+}
+
+function addCorridorDrawNodeEntity(lon: number, lat: number): CorridorDrawNode {
+  const num = ++corridorDrawNodeCounter;
+  const id = `cdraw-node-${num}`;
+  const entity = viewer.entities.add({
+    id,
+    position: new Cesium.ConstantPositionProperty(
+      Cesium.Cartesian3.fromDegrees(lon, lat, corridorDrawAlt())
+    ),
+    point: {
+      pixelSize: 14,
+      color: Cesium.Color.YELLOW,
+      outlineColor: Cesium.Color.BLACK,
+      outlineWidth: 2,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+    label: {
+      text: String(num),
+      font: "bold 10px sans-serif",
+      pixelOffset: new Cesium.Cartesian2(12, -12),
+      fillColor: Cesium.Color.WHITE,
+      outlineColor: Cesium.Color.BLACK,
+      outlineWidth: 2,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      scale: 0.8,
+    },
+  });
+  const node: CorridorDrawNode = { id, lon, lat, entity };
+  corridorDrawNodes.push(node);
+  viewer.scene.requestRender();
+  return node;
+}
+
+function highlightCorridorDrawNode(id: string, selected: boolean): void {
+  const node = corridorDrawNodes.find(n => n.id === id);
+  if (!node?.entity.point) return;
+  (node.entity.point.color as Cesium.ConstantProperty).setValue(
+    selected ? Cesium.Color.LIME : Cesium.Color.YELLOW
+  );
+  viewer.scene.requestRender();
+}
+
+function addCorridorDrawEdgeEntity(fromId: string, toId: string): void {
+  const fromNode = corridorDrawNodes.find(n => n.id === fromId);
+  const toNode = corridorDrawNodes.find(n => n.id === toId);
+  if (!fromNode || !toNode) return;
+  const dup = corridorDrawEdges.some(e =>
+    (e.fromId === fromId && e.toId === toId) ||
+    (e.fromId === toId && e.toId === fromId)
+  );
+  if (dup) return;
+  const alt = corridorDrawAlt();
+  const entity = viewer.entities.add({
+    polyline: {
+      positions: new Cesium.CallbackProperty(() => [
+        Cesium.Cartesian3.fromDegrees(fromNode.lon, fromNode.lat, alt),
+        Cesium.Cartesian3.fromDegrees(toNode.lon, toNode.lat, alt),
+      ], false),
+      width: 3,
+      material: new Cesium.ColorMaterialProperty(Cesium.Color.CYAN),
+    },
+  });
+  corridorDrawEdges.push({ fromId, toId, fromNode, toNode, entity });
+  viewer.scene.requestRender();
+}
+
+function handleCorridorDrawClick(screenPos: Cesium.Cartesian2): void {
+  if (!corridorDrawMode) return;
+
+  const picked = viewer.scene.pick(screenPos);
+  const pickedEntity = picked?.id instanceof Cesium.Entity ? picked.id : null;
+  const clickedNode = pickedEntity
+    ? (corridorDrawNodes.find(n => n.entity === pickedEntity) ?? null)
+    : null;
+
+  if (corridorDrawMode === "node") {
+    const cartesian = viewer.scene.pickPosition(screenPos)
+      ?? viewer.camera.pickEllipsoid(screenPos)
+      ?? null;
+    if (!cartesian) return;
+    const carto = Cesium.Cartographic.fromCartesian(cartesian);
+    addCorridorDrawNodeEntity(
+      Cesium.Math.toDegrees(carto.longitude),
+      Cesium.Math.toDegrees(carto.latitude)
+    );
+    return;
+  }
+
+  if (corridorDrawMode === "connect") {
+    if (!clickedNode) return;
+    if (!corridorConnectFirstId) {
+      corridorConnectFirstId = clickedNode.id;
+      highlightCorridorDrawNode(clickedNode.id, true);
+    } else if (corridorConnectFirstId !== clickedNode.id) {
+      addCorridorDrawEdgeEntity(corridorConnectFirstId, clickedNode.id);
+      highlightCorridorDrawNode(corridorConnectFirstId, false);
+      corridorConnectFirstId = null;
+    }
+  }
+}
+
+export function setCorridorDrawNodeMode(): void {
+  corridorDrawMode = "node";
+  if (corridorConnectFirstId) {
+    highlightCorridorDrawNode(corridorConnectFirstId, false);
+    corridorConnectFirstId = null;
+  }
+  if (!corridorDrawHandler) {
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    corridorDrawHandler = handler;
+    handler.setInputAction(
+      (e: { position: Cesium.Cartesian2 }) => handleCorridorDrawClick(e.position),
+      Cesium.ScreenSpaceEventType.LEFT_CLICK
+    );
+  }
+}
+
+export function setCorridorConnectMode(): void {
+  corridorDrawMode = "connect";
+  if (!corridorDrawHandler) {
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    corridorDrawHandler = handler;
+    handler.setInputAction(
+      (e: { position: Cesium.Cartesian2 }) => handleCorridorDrawClick(e.position),
+      Cesium.ScreenSpaceEventType.LEFT_CLICK
+    );
+  }
+}
+
+export function stopCorridorDrawTool(): void {
+  corridorDrawMode = null;
+  if (corridorConnectFirstId) {
+    highlightCorridorDrawNode(corridorConnectFirstId, false);
+    corridorConnectFirstId = null;
+  }
+  if (corridorDrawHandler) {
+    corridorDrawHandler.destroy();
+    corridorDrawHandler = null;
+  }
+}
+
+export function undoCorridorDraw(): void {
+  if (corridorConnectFirstId) {
+    highlightCorridorDrawNode(corridorConnectFirstId, false);
+    corridorConnectFirstId = null;
+  }
+  if (corridorDrawEdges.length > 0) {
+    const edge = corridorDrawEdges.pop()!;
+    viewer.entities.remove(edge.entity);
+  } else if (corridorDrawNodes.length > 0) {
+    const node = corridorDrawNodes.pop()!;
+    for (let i = corridorDrawEdges.length - 1; i >= 0; i--) {
+      if (corridorDrawEdges[i].fromId === node.id || corridorDrawEdges[i].toId === node.id) {
+        viewer.entities.remove(corridorDrawEdges[i].entity);
+        corridorDrawEdges.splice(i, 1);
+      }
+    }
+    viewer.entities.remove(node.entity);
+  }
+  viewer.scene.requestRender();
+}
+
+export function clearCorridorDrawTool(): void {
+  for (const e of corridorDrawEdges) viewer.entities.remove(e.entity);
+  for (const n of corridorDrawNodes) viewer.entities.remove(n.entity);
+  corridorDrawEdges = [];
+  corridorDrawNodes = [];
+  corridorConnectFirstId = null;
+  corridorDrawNodeCounter = 0;
+  viewer.scene.requestRender();
+}
+
+export function getCorridorDrawGeoJSON(): string {
+  const features = corridorDrawEdges.map((edge, i) => ({
+    type: "Feature",
+    properties: { type: i === 0 ? "main" : "branch" },
+    geometry: {
+      type: "LineString",
+      coordinates: [
+        [edge.fromNode.lon, edge.fromNode.lat],
+        [edge.toNode.lon, edge.toNode.lat],
+      ],
+    },
+  }));
+  return JSON.stringify({ type: "FeatureCollection", name: "2nd_floor_corridor", features }, null, 2);
 }
 
 function stairDebugEnabled(): boolean {
@@ -1691,25 +1626,55 @@ async function loadCenterlineGeoJSON(fileName: string, altitude: number): Promis
   };
 
   const features = geoJsonData.features ?? [];
+  const hasLines = features.some((f) => f.geometry?.type === "LineString");
+  const hasPoints = features.some((f) => f.geometry?.type === "Point");
 
-  // LineString-based format (main corridor + branch lines)
-  if (features.some((f) => f.geometry?.type === "LineString")) {
+  // Pure LineString format
+  if (hasLines && !hasPoints) {
     return buildCenterlineGraphFromLines(features, altitude);
   }
 
-  // Original Point format
+  // Build Point-based graph
   const points = features
     .filter((feature) => feature.geometry?.type === "Point")
     .map((feature, index) => {
       const coordinates = feature.geometry?.coordinates ?? [0, 0];
-      return {
-        lon: coordinates[0],
-        lat: coordinates[1],
-        id: feature.properties?.id ?? `node-${index}`
-      };
+      return { lon: coordinates[0], lat: coordinates[1], id: feature.properties?.id ?? `node-${index}` };
     });
+  const graph = buildCenterlineGraph(points, altitude);
 
-  return buildCenterlineGraph(points, altitude);
+  // Hybrid: wire explicit LineString shortcuts into the Point graph
+  if (hasLines) {
+    let lineCounter = 0;
+    for (const feature of features) {
+      if (feature.geometry?.type !== "LineString") continue;
+      const coords: [number, number][] = feature.geometry.coordinates;
+      const lineNodes: GraphNode[] = coords.map(([lon, lat]) => ({
+        pos: Cesium.Cartesian3.fromDegrees(lon, lat, altitude + 0.1),
+        lon, lat,
+        id: `shortcut-${lineCounter++}`,
+        edges: [],
+      }));
+
+      // Connect consecutive nodes along the line explicitly
+      for (let i = 0; i < lineNodes.length - 1; i++) {
+        const d = Cesium.Cartesian3.distance(lineNodes[i].pos, lineNodes[i + 1].pos);
+        addGraphEdge(lineNodes[i], lineNodes[i + 1], d);
+      }
+
+      // Snap first and last node to nearest existing Point graph node
+      if (lineNodes.length > 0) {
+        const snapFirst = nearest(graph, lineNodes[0].pos);
+        addGraphEdge(lineNodes[0], snapFirst, Cesium.Cartesian3.distance(lineNodes[0].pos, snapFirst.pos));
+        const snapLast = nearest(graph, lineNodes[lineNodes.length - 1].pos);
+        addGraphEdge(lineNodes[lineNodes.length - 1], snapLast, Cesium.Cartesian3.distance(lineNodes[lineNodes.length - 1].pos, snapLast.pos));
+      }
+
+      graph.push(...lineNodes);
+    }
+  }
+
+  return graph;
 }
 
 function buildCenterlineGraphFromLines(
@@ -1717,6 +1682,7 @@ function buildCenterlineGraphFromLines(
   altitude: number
 ): GraphNode[] {
   const MAX_JUNCTION_METERS = 5.0;
+  const SHARED_ENDPOINT_METERS = 0.35;
   const lineGroups: Array<{ kind: string; nodes: GraphNode[] }> = [];
   let counter = 0;
 
@@ -1741,6 +1707,22 @@ function buildCenterlineGraphFromLines(
     lineGroups.push({ kind, nodes });
   }
 
+  // GeoJSON corridor networks are often exported as many separate LineStrings.
+  // Join shared endpoints so exact node-to-node corridors remain connected even
+  // when only one short segment is marked as "main".
+  for (let i = 0; i < lineGroups.length; i++) {
+    for (let j = i + 1; j < lineGroups.length; j++) {
+      for (const nodeA of lineGroups[i].nodes) {
+        for (const nodeB of lineGroups[j].nodes) {
+          const d = Cesium.Cartesian3.distance(nodeA.pos, nodeB.pos);
+          if (d <= SHARED_ENDPOINT_METERS) {
+            addGraphEdge(nodeA, nodeB, d);
+          }
+        }
+      }
+    }
+  }
+
   // Connect multiple main segments to each other at the closest pair of nodes
   const mainGroups = lineGroups.filter((g) => g.kind === "main");
   for (let i = 0; i < mainGroups.length; i++) {
@@ -1760,12 +1742,30 @@ function buildCenterlineGraphFromLines(
     }
   }
 
-  // Connect each branch to the main network at exactly ONE junction point
-  // (whichever branch node is closest to any main node)
+  // Connect a branch to the main network only when the exported LineStrings do
+  // not already reach it through shared endpoints. This keeps hand-drawn indoor
+  // routes from gaining artificial shortcuts through rooms or walls.
   const mainNodes = mainGroups.flatMap((g) => g.nodes);
+  const mainNodeSet = new Set(mainNodes);
+
+  function groupReachesMain(group: { nodes: GraphNode[] }): boolean {
+    const stack = [...group.nodes];
+    const visited = new Set<GraphNode>();
+    while (stack.length > 0) {
+      const node = stack.pop()!;
+      if (visited.has(node)) continue;
+      if (mainNodeSet.has(node)) return true;
+      visited.add(node);
+      for (const edge of node.edges) {
+        stack.push(edge.node);
+      }
+    }
+    return false;
+  }
 
   for (const group of lineGroups) {
     if (group.kind === "main") continue;
+    if (mainNodes.length === 0 || groupReachesMain(group)) continue;
 
     let closestBranchNode: GraphNode | null = null;
     let closestMainNode: GraphNode | null = null;
@@ -1899,18 +1899,6 @@ function nearest(graph: GraphNode[], position: Cesium.Cartesian3): GraphNode {
   return best;
 }
 
-function nearestPathIndex(path: Cesium.Cartesian3[], position: Cesium.Cartesian3): number {
-  let bestIndex = 0;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  path.forEach((point, index) => {
-    const distance = Cesium.Cartesian3.distance(point, position);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestIndex = index;
-    }
-  });
-  return bestIndex;
-}
 
 function headingENU(start: Cesium.Cartesian3, end: Cesium.Cartesian3): number {
   const enu = Cesium.Transforms.eastNorthUpToFixedFrame(start);
@@ -1918,6 +1906,61 @@ function headingENU(start: Cesium.Cartesian3, end: Cesium.Cartesian3): number {
   const localStart = Cesium.Matrix4.multiplyByPoint(inverse, start, new Cesium.Cartesian3());
   const localEnd = Cesium.Matrix4.multiplyByPoint(inverse, end, new Cesium.Cartesian3());
   return Math.atan2(localEnd.y - localStart.y, localEnd.x - localStart.x);
+}
+
+function ptToSegDist(p: Cesium.Cartesian3, a: Cesium.Cartesian3, b: Cesium.Cartesian3): number {
+  const ab = Cesium.Cartesian3.subtract(b, a, new Cesium.Cartesian3());
+  const len2 = Cesium.Cartesian3.dot(ab, ab);
+  if (len2 < 1e-10) return Cesium.Cartesian3.distance(p, a);
+  const ap = Cesium.Cartesian3.subtract(p, a, new Cesium.Cartesian3());
+  const t = Math.max(0, Math.min(1, Cesium.Cartesian3.dot(ap, ab) / len2));
+  const proj = Cesium.Cartesian3.add(a, Cesium.Cartesian3.multiplyByScalar(ab, t, new Cesium.Cartesian3()), new Cesium.Cartesian3());
+  return Cesium.Cartesian3.distance(p, proj);
+}
+
+function rdpSimplify(points: Cesium.Cartesian3[], tol: number): Cesium.Cartesian3[] {
+  if (points.length <= 2) return [...points];
+  let maxD = 0, maxI = 0;
+  for (let i = 1; i < points.length - 1; i++) {
+    const d = ptToSegDist(points[i], points[0], points[points.length - 1]);
+    if (d > maxD) { maxD = d; maxI = i; }
+  }
+  if (maxD > tol) {
+    return [
+      ...rdpSimplify(points.slice(0, maxI + 1), tol).slice(0, -1),
+      ...rdpSimplify(points.slice(maxI), tol),
+    ];
+  }
+  return [points[0], points[points.length - 1]];
+}
+
+function quadBezierPt(p0: Cesium.Cartesian3, p1: Cesium.Cartesian3, p2: Cesium.Cartesian3, t: number): Cesium.Cartesian3 {
+  const mt = 1 - t;
+  return new Cesium.Cartesian3(
+    mt * mt * p0.x + 2 * mt * t * p1.x + t * t * p2.x,
+    mt * mt * p0.y + 2 * mt * t * p1.y + t * t * p2.y,
+    mt * mt * p0.z + 2 * mt * t * p1.z + t * t * p2.z
+  );
+}
+
+function smoothCorners(points: Cesium.Cartesian3[], radius: number, segs = 6): Cesium.Cartesian3[] {
+  if (points.length <= 2) return points;
+  const out: Cesium.Cartesian3[] = [points[0]];
+  for (let i = 1; i < points.length - 1; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const next = points[i + 1];
+    const d1 = Cesium.Cartesian3.distance(prev, curr);
+    const d2 = Cesium.Cartesian3.distance(curr, next);
+    const r = Math.min(radius, d1 * 0.45, d2 * 0.45);
+    const p1 = Cesium.Cartesian3.lerp(curr, prev, r / d1, new Cesium.Cartesian3());
+    const p2 = Cesium.Cartesian3.lerp(curr, next, r / d2, new Cesium.Cartesian3());
+    for (let s = 0; s <= segs; s++) {
+      out.push(quadBezierPt(p1, curr, p2, s / segs));
+    }
+  }
+  out.push(points[points.length - 1]);
+  return out;
 }
 
 function samplePathByDistance(path: Cesium.Cartesian3[], spacingMeters = 1.2): Cesium.Cartesian3[] {
@@ -1974,71 +2017,17 @@ function isCustomStairSegment(start: Cesium.Cartesian3, end: Cesium.Cartesian3):
   return isNearCustomStairPath(start) && isNearCustomStairPath(end);
 }
 
-function addRouteBubbles(
-  collection: Cesium.BillboardCollection,
-  path: Cesium.Cartesian3[],
-  spacingMeters = 0.45
-): Cesium.Cartesian3[] {
-  const points = samplePathByDistance(path, spacingMeters);
-  const billboards = collection === routeBubbleCollectionA ? routeBubbleBillboardsA : routeBubbleBillboardsB;
-  const tValues = collection === routeBubbleCollectionA ? routeDotTValuesA : routeDotTValuesB;
-
-  points.forEach((position, index) => {
-    const t = points.length > 1 ? index / (points.length - 1) : 0;
-    const billboard = collection.add({
-      position,
-      image: ROUTE_BUBBLE_SVG,
-      scale: 0.09,
-      color: Cesium.Color.WHITE.withAlpha(0.32),
-      scaleByDistance: new Cesium.NearFarScalar(8, 1.2, 100, 1.5),
-      verticalOrigin: Cesium.VerticalOrigin.CENTER,
-      horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
-    });
-    billboards.push(billboard);
-    tValues.push(t);
-  });
-
-  return points;
-}
-
-function routeBubbleStrideForCamera(): number {
-  const height = viewer.camera.positionCartographic.height;
-  if (height < 45) return 1;
-  if (height < 100) return 1;
-  if (height < 170) return 2;
-  return 3;
-}
-
-function applyRouteBubbleDensity(force = false): void {
-  const stride = routeBubbleStrideForCamera();
-  if (!force && stride === routeBubbleDensityStride) return;
-
-  routeBubbleDensityStride = stride;
-  const updateBillboards = (billboards: Cesium.Billboard[]) => {
-    const segment = billboards === routeBubbleBillboardsA ? "A" : "B";
-    const lastIndex = billboards.length - 1;
-    billboards.forEach((billboard, index) => {
-      billboard.show = isRouteBubbleAhead(segment, index) && (index === lastIndex || index % stride === 0);
-    });
-  };
-
-  updateBillboards(routeBubbleBillboardsA);
-  updateBillboards(routeBubbleBillboardsB);
-  viewer.scene.requestRender();
-}
-
 function addGlowBillboards(
   collection: Cesium.BillboardCollection,
-  count = 2
+  count = 3
 ): Cesium.Billboard[] {
   const glows: Cesium.Billboard[] = [];
   for (let i = 0; i < count; i += 1) {
     glows.push(collection.add({
       position: Cesium.Cartesian3.ZERO,
       image: ROUTE_GLOW_SVG,
-      scale: 0.32,
-      color: Cesium.Color.WHITE.withAlpha(0.85),
+      scale: 0.38,
+      color: Cesium.Color.WHITE.withAlpha(0.9),
       verticalOrigin: Cesium.VerticalOrigin.CENTER,
       horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
@@ -2048,10 +2037,55 @@ function addGlowBillboards(
   return glows;
 }
 
-function startRouteGlowAnimation(
-  pointsA: Cesium.Cartesian3[],
-  pointsB: Cesium.Cartesian3[]
-): void {
+function buildRouteLine(
+  lineCollection: Cesium.PolylineCollection,
+  nodeCollection: Cesium.PointPrimitiveCollection,
+  _labelCollection: Cesium.LabelCollection,
+  path: Cesium.Cartesian3[]
+): { flowMat: Cesium.Material; sampledPoints: Cesium.Cartesian3[] } {
+  // Simplify redundant collinear points, then add gentle bezier curves at turns
+  const simplified = rdpSimplify(path, 0.30);
+  const drawPath = smoothCorners(simplified, 0.50, 8);
+
+  // Dashed white line  (- - - - style)
+  const dashMat = Cesium.Material.fromType("PolylineDash", {
+    color: Cesium.Color.fromCssColorString("#FFFFFF").withAlpha(0.92),
+    gapColor: Cesium.Color.fromCssColorString("#000000").withAlpha(0.0),
+    dashLength: 10.0,
+    dashPattern: 0xF0F0,   // alternating 4-on / 4-off
+    dashOffset: 0.0,
+  });
+  lineCollection.add({ positions: drawPath, width: 5, material: dashMat });
+
+  // Animated highlight layer that flows along the dashes
+  const flowMat = Cesium.Material.fromType("PolylineDash", {
+    color: Cesium.Color.fromCssColorString("#F5A623").withAlpha(0.7),
+    gapColor: Cesium.Color.TRANSPARENT,
+    dashLength: 10.0,
+    dashPattern: 0xF0F0,
+    dashOffset: 0.0,
+  });
+  lineCollection.add({ positions: drawPath, width: 3, material: flowMat });
+
+  // Orange dots every 1 m along the smoothed path
+  const dotPositions = samplePathByDistance(drawPath, 1.0);
+  dotPositions.forEach((pos) => {
+    nodeCollection.add({
+      position: pos,
+      pixelSize: 12,
+      color: Cesium.Color.fromCssColorString("#F5A623"),
+      outlineColor: Cesium.Color.WHITE,
+      outlineWidth: 2,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    });
+  });
+
+  // Orb animation uses a finer sample of the smoothed path
+  const sampledPoints = samplePathByDistance(drawPath, 0.5);
+  return { flowMat, sampledPoints };
+}
+
+function startRouteAnimation(): void {
   if (routeAnimRemove !== null) {
     routeAnimRemove();
     routeAnimRemove = null;
@@ -2060,149 +2094,118 @@ function startRouteGlowAnimation(
   routeGlowCollectionA.removeAll();
   routeGlowCollectionB.removeAll();
 
-  const glowsA = addGlowBillboards(routeGlowCollectionA, 2);
-  const glowsB = addGlowBillboards(routeGlowCollectionB, 2);
+  const glowsA = addGlowBillboards(routeGlowCollectionA, 3);
+  const glowsB = addGlowBillboards(routeGlowCollectionB, 3);
 
   routeAnimStart = performance.now();
 
-  // 3 pulse waves flow from start→end simultaneously at 60fps
-  const WAVES = 3;
-  const SPEED = 0.55;  // path traversals per second
-  const SIGMA = 0.16;  // gaussian half-width (fraction of path)
+  const ORBS_SPEED = 0.6;  // path traversals per second
 
   routeAnimRemove = viewer.scene.postRender.addEventListener(() => {
     const elapsed = (performance.now() - routeAnimStart) * 0.001;
-    const cycleT = elapsed * SPEED;
+    const flowOffset = (elapsed * 1.1) % 1.0;
 
-    // Flowing brightness wave across dots
-    const updateDots = (billboards: Cesium.Billboard[], tValues: number[]) => {
-      billboards.forEach((bb, i) => {
-        if (!bb.show) return;
-        const dotT = tValues[i] ?? 0;
-        let peak = 0;
-        for (let w = 0; w < WAVES; w++) {
-          const waveT = (cycleT + w / WAVES) % 1;
-          let dist = Math.abs(waveT - dotT);
-          if (dist > 0.5) dist = 1 - dist;
-          peak = Math.max(peak, Math.exp(-(dist * dist) / (2 * SIGMA * SIGMA)));
-        }
-        bb.scale = 0.085 + 0.135 * peak;
-        bb.color = Cesium.Color.WHITE.withAlpha(0.30 + 0.70 * peak);
-      });
-    };
+    // Animate dash flow
+    if (routeFlowMatA) routeFlowMatA.uniforms["dashOffset"] = flowOffset;
+    if (routeFlowMatB) routeFlowMatB.uniforms["dashOffset"] = flowOffset;
 
-    updateDots(routeBubbleBillboardsA, routeDotTValuesA);
-    updateDots(routeBubbleBillboardsB, routeDotTValuesB);
-
-    // Two bright glow orbs ride the path
+    // Move glow orbs along path (orange-white pulse to match node dot style)
     const updateGlows = (points: Cesium.Cartesian3[], glows: Cesium.Billboard[]) => {
       if (points.length === 0) { glows.forEach((g) => { g.show = false; }); return; }
       glows.forEach((glow, i) => {
-        const waveT = (cycleT + i / glows.length) % 1;
-        const idx = Math.min(Math.floor(waveT * points.length), points.length - 1);
+        const t = (elapsed * ORBS_SPEED + i / glows.length) % 1;
+        const idx = Math.min(Math.floor(t * points.length), points.length - 1);
         glow.position = points[idx];
         glow.show = true;
-        glow.scale = 0.30 + 0.10 * Math.sin(elapsed * 4.5 + i * 2.5);
-        glow.color = Cesium.Color.WHITE.withAlpha(0.75 + 0.20 * Math.sin(elapsed * 3 + i));
+        glow.scale = 0.22 + 0.10 * Math.sin(elapsed * 5 + i * 2.1);
+        glow.color = Cesium.Color.fromCssColorString("#FFCC44").withAlpha(
+          0.80 + 0.18 * Math.sin(elapsed * 3.5 + i * 1.5)
+        );
       });
     };
 
-    updateGlows(pointsA, glowsA);
-    updateGlows(pointsB, glowsB);
+    updateGlows(routePathPointsA, glowsA);
+    updateGlows(routePathPointsB, glowsB);
 
     viewer.scene.requestRender();
   });
 }
 
-function generateTurnSteps(path: Cesium.Cartesian3[]): Array<{ icon: string; title: string; primary: string }> {
+function generateTurnSteps(path: Cesium.Cartesian3[]): Array<{ icon: string; title: string; primary: string; startDist: number }> {
   if (path.length < 2) return [];
-  const steps: Array<{ icon: string; title: string; primary: string }> = [];
-  
+  const steps: Array<{ icon: string; title: string; primary: string; startDist: number }> = [];
+
   let currentHeading = headingENU(path[0], path[1]);
   let accumulatedDistance = Cesium.Cartesian3.distance(path[0], path[1]);
-  
+  let absoluteDist = accumulatedDistance;
+
   steps.push({
     icon: "↑",
     title: "Start",
-    primary: "Go forward"
+    primary: "Go forward",
+    startDist: 0
   });
-  
+
   for (let i = 1; i < path.length - 1; i++) {
     const p1 = path[i];
-    const p2 = path[i+1];
+    const p2 = path[i + 1];
     const distance = Cesium.Cartesian3.distance(p1, p2);
     if (distance < 0.8) {
       accumulatedDistance += distance;
-      continue; 
+      absoluteDist += distance;
+      continue;
     }
-    
+
     const nextHeading = headingENU(p1, p2);
     let angleDiff = nextHeading - currentHeading;
     while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
     while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-    
-    if (Math.abs(angleDiff) > 0.45) { // roughly 25 degrees
+
+    if (Math.abs(angleDiff) > 0.45) {
       steps[steps.length - 1].primary += ` for ${Math.max(1, Math.round(accumulatedDistance))} m`;
-      
+
       const turnDir = angleDiff > 0 ? "left" : "right";
       steps.push({
         icon: angleDiff > 0 ? "↰" : "↱",
         title: `Turn ${turnDir}`,
-        primary: `Turn ${turnDir} and go ahead`
+        primary: `Turn ${turnDir} and go ahead`,
+        startDist: absoluteDist
       });
-      
+
       currentHeading = nextHeading;
       accumulatedDistance = distance;
     } else {
       accumulatedDistance += distance;
     }
+    absoluteDist += distance;
   }
-  
+
   steps[steps.length - 1].primary += ` for ${Math.max(1, Math.round(accumulatedDistance))} m`;
   return steps;
 }
 
-function drawRoute(
-  pathA: Cesium.Cartesian3[],
-  pathB: Cesium.Cartesian3[]
-): { pointsA: Cesium.Cartesian3[]; pointsB: Cesium.Cartesian3[] } {
+function drawRoute(pathA: Cesium.Cartesian3[], pathB: Cesium.Cartesian3[]): void {
   clearRouteEntities();
 
-  let pointsA: Cesium.Cartesian3[] = [];
-  let pointsB: Cesium.Cartesian3[] = [];
-
   if (pathA.length > 1) {
-    viewer.entities.add({
-      id: "navigationLineA",
-      show: false,
-      polyline: {
-        positions: pathA,
-        width: 1,
-        material: Cesium.Color.TRANSPARENT,
-      },
-    });
-
-    pointsA = addRouteBubbles(routeBubbleCollectionA, pathA, 0.40);
+    const { flowMat, sampledPoints } = buildRouteLine(routeTrackCollectionA, routeNodeCollectionA, routeLabelCollectionA, pathA);
+    routeFlowMatA = flowMat;
+    routePathPointsA = sampledPoints;
   }
 
   if (pathB.length > 1) {
-    viewer.entities.add({
-      id: "navigationLineB",
-      show: false,
-      polyline: {
-        positions: pathB,
-        width: 1,
-        material: Cesium.Color.TRANSPARENT,
-      },
-    });
-
-    pointsB = addRouteBubbles(routeBubbleCollectionB, pathB, 0.40);
+    const { flowMat, sampledPoints } = buildRouteLine(routeTrackCollectionB, routeNodeCollectionB, routeLabelCollectionB, pathB);
+    routeFlowMatB = flowMat;
+    routePathPointsB = sampledPoints;
   }
 
-  const start = pathA[0];
-  const end = pathB.length > 0
-    ? pathB[pathB.length - 1]
-    : pathA[pathA.length - 1];
+  // Stair segment intentionally not drawn — no corridor nodes connect those points
+
+  const path = pathA.length > 0 ? pathA : pathB;
+  if (path.length === 0) return;
+
+  const start = path[0];
+  const end = pathB.length > 0 ? pathB[pathB.length - 1] : pathA[pathA.length - 1];
 
   viewer.entities.add({
     id: "startMarker",
@@ -2228,11 +2231,10 @@ function drawRoute(
     },
   });
 
-  startRouteGlowAnimation(pointsA, pointsB);
+  startRouteAnimation();
   updateNavigationVisibility(currentVisibleFloor);
+  setRoutePreviewAvailable(true);
   viewer.scene.requestRender();
-
-  return { pointsA, pointsB };
 }
 
 async function ensureNavData(): Promise<void> {
@@ -2316,16 +2318,21 @@ function getRoomFallbackPosition(roomName: string, floor: number): Cesium.Cartes
   const dataSource = floor === 3 ? geo2 : geo3;
   const target = normalizeRoomName(roomName);
   const entity = dataSource?.entities.values.find((candidate) => normalizeRoomName(getEntityRoomName(candidate)) === target);
-  const position = entity?.position?.getValue(Cesium.JulianDate.now());
-  if (position) return position;
+  if (!entity) return undefined;
 
-  const hierarchy = entity?.polygon?.hierarchy?.getValue(Cesium.JulianDate.now());
+  const altitude = floor === 3 ? ALT_2ND : ALT_3RD;
+  const position = entity.position?.getValue(Cesium.JulianDate.now());
+  if (position) {
+    const carto = Cesium.Cartographic.fromCartesian(position);
+    return Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, altitude + 0.1);
+  }
+
+  const hierarchy = entity.polygon?.hierarchy?.getValue(Cesium.JulianDate.now());
   const positions = hierarchy?.positions ?? [];
   if (positions.length === 0) return undefined;
 
   const sphere = Cesium.BoundingSphere.fromPoints(positions);
   const cartographic = Cesium.Cartographic.fromCartesian(sphere.center);
-  const altitude = floor === 3 ? ALT_2ND : ALT_3RD;
   return Cesium.Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, altitude + 0.1);
 }
 
@@ -2373,6 +2380,10 @@ function getRouteDoorPosition(
       : THIRD_FLOOR_PANTRY_LOWER_DOOR;
   }
 
+  if (selection.floor === 4 && normalizeRoomName(selection.roomName) === "library") {
+    return THIRD_FLOOR_LIBRARY_POSITION;
+  }
+
   return getDoorPosition(selection.roomName, selection.floor);
 }
 
@@ -2384,14 +2395,6 @@ function floorLabel(floor: number): string {
   return floor === 3 ? "2nd Floor" : floor === 4 ? "3rd Floor" : `Floor ${floor}`;
 }
 
-function floorForNavigationPosition(position: Cesium.Cartesian3, fallbackFloor: number): number {
-  const height = Cesium.Cartographic.fromCartesian(position).height;
-  const secondFloorDistance = Math.abs(height - ALT_2ND);
-  const thirdFloorDistance = Math.abs(height - ALT_3RD);
-
-  if (!Number.isFinite(height)) return fallbackFloor;
-  return secondFloorDistance <= thirdFloorDistance ? 3 : 4;
-}
 function pathDistance(paths: Cesium.Cartesian3[][]): number {
   let total = 0;
   for (const path of paths) {
@@ -2403,6 +2406,7 @@ function pathDistance(paths: Cesium.Cartesian3[][]): number {
 }
 
 export async function startNavigation(): Promise<void> {
+  clearRoomPreviewEffect();
   if (!geo2 || !geo3) {
     setNavigationMessage("Room data is still loading.");
     return;
@@ -2444,54 +2448,99 @@ export async function startNavigation(): Promise<void> {
   const zLift = 0.5;
   let pathFloorA: Cesium.Cartesian3[] = [];
   let pathFloorB: Cesium.Cartesian3[] = [];
-  let stairStartPosition: Cesium.Cartesian3 | null = null;
-  let stairEndPosition: Cesium.Cartesian3 | null = null;
 
+  activeStairClimbPath = [];
   if (fromFloor === toFloor) {
     const path = findPath(graphA, nearest(graphA, startDoorPosition), nearest(graphA, endDoorPosition));
     if (!path) {
       setNavigationMessage("No route found.");
       return;
     }
-    pathFloorA = [startDoorPosition, ...path, endDoorPosition].map((position) =>
+    const corridorPoints = [startDoorPosition, ...path, endDoorPosition];
+    if (fromSelection.floor === 4 && normalizeRoomName(fromSelection.roomName) === "conference room") {
+      corridorPoints.unshift(THIRD_FLOOR_CONFERENCE_ROOM_INSIDE);
+    }
+    if (toSelection.floor === 4 && normalizeRoomName(toSelection.roomName) === "conference room") {
+      corridorPoints.push(THIRD_FLOOR_CONFERENCE_ROOM_INSIDE);
+    }
+    pathFloorA = corridorPoints.map((position) =>
       Cesium.Cartesian3.add(position, new Cesium.Cartesian3(0, 0, zLift), new Cesium.Cartesian3())
     );
   } else {
     const startAltitude = fromFloor === 3 ? ALT_2ND : ALT_3RD;
     const targetAltitude = fromFloor === 3 ? ALT_3RD : ALT_2ND;
-    const bridge = fromFloor === 3 ? [...CUSTOM_STAIR_PATH] : [...CUSTOM_STAIR_PATH].reverse();
-    const total = bridge.length;
-    const stairPath3D = bridge.map((point, index) => {
-      // Landing-aware height: points 1-3 rise from startAlt to landing, points 4-6 from landing to targetAlt
-      const height = stairPointHeight(index, total, startAltitude, targetAltitude);
-      return Cesium.Cartesian3.fromDegrees(point.lon, point.lat, height + zLift);
-    });
-    stairStartPosition = stairPath3D[0];
-    stairEndPosition = stairPath3D[stairPath3D.length - 1];
+    const secondFloorStairPoint = CUSTOM_STAIR_PATH[0];
+    const thirdFloorStairPoint = CUSTOM_STAIR_PATH[CUSTOM_STAIR_PATH.length - 1];
+    const stairEntrySource = fromFloor === 3 ? secondFloorStairPoint : thirdFloorStairPoint;
+    const stairExitSource = toFloor === 3 ? secondFloorStairPoint : thirdFloorStairPoint;
+    const stairEntryPoint = Cesium.Cartesian3.fromDegrees(
+      stairEntrySource.lon,
+      stairEntrySource.lat,
+      startAltitude + zLift
+    );
+    const stairExitPoint = Cesium.Cartesian3.fromDegrees(
+      stairExitSource.lon,
+      stairExitSource.lat,
+      targetAltitude + zLift
+    );
 
-    const part1 = findPath(graphA, nearest(graphA, startDoorPosition), nearest(graphA, stairPath3D[0]));
-    const part2 = findPath(graphB, nearest(graphB, stairPath3D[stairPath3D.length - 1]), nearest(graphB, endDoorPosition));
+    const part1 = findPath(graphA, nearest(graphA, startDoorPosition), nearest(graphA, stairEntryPoint));
+    const part2 = findPath(graphB, nearest(graphB, stairExitPoint), nearest(graphB, endDoorPosition));
     if (!part1 || !part2) {
       setNavigationMessage("No route found.");
       return;
     }
 
-    // "From" floor path: corridor → stair entry → full staircase traversal
-    pathFloorA = [startDoorPosition, ...part1].map((position) =>
-      Cesium.Cartesian3.add(position, new Cesium.Cartesian3(0, 0, zLift), new Cesium.Cartesian3())
-    );
-    pathFloorA.push(...stairPath3D);
+    // Build stair climb positions — all CUSTOM_STAIR_PATH points with interpolated heights.
+    // Going 2nd→3rd: ascending order; 3rd→2nd: reversed (descending).
+    const stairOrderedPath = fromFloor === 3
+      ? CUSTOM_STAIR_PATH
+      : [...CUSTOM_STAIR_PATH].reverse();
+    const stairClimbPositions = stairOrderedPath.map((pt, i) => {
+      const h = stairPointHeight(i, stairOrderedPath.length, startAltitude, targetAltitude);
+      return Cesium.Cartesian3.fromDegrees(pt.lon, pt.lat, h + zLift);
+    });
 
-    // "To" floor path: starts at stair exit, continues through corridor to destination
-    const liftedHallwayB = [...part2, endDoorPosition].map((position) =>
+    // "From" floor path: corridor portion only (no stair positions — stair drawn separately)
+    const corridorToStair = [startDoorPosition, ...part1];
+    if (fromSelection.floor === 4 && normalizeRoomName(fromSelection.roomName) === "conference room") {
+      corridorToStair.unshift(THIRD_FLOOR_CONFERENCE_ROOM_INSIDE);
+    }
+    while (
+      corridorToStair.length > 1 &&
+      horizontalDistanceMeters(corridorToStair[corridorToStair.length - 1], stairClimbPositions[0]) < 0.5
+    ) {
+      corridorToStair.pop();
+    }
+    pathFloorA = corridorToStair.map((position) =>
       Cesium.Cartesian3.add(position, new Cesium.Cartesian3(0, 0, zLift), new Cesium.Cartesian3())
     );
-    pathFloorB = [stairPath3D[stairPath3D.length - 1], ...liftedHallwayB];
+
+    // "To" floor path: corridor portion only (stair exit node not included)
+    const corridorFromStair = [...part2, endDoorPosition];
+    if (toSelection.floor === 4 && normalizeRoomName(toSelection.roomName) === "conference room") {
+      corridorFromStair.push(THIRD_FLOOR_CONFERENCE_ROOM_INSIDE);
+    }
+    pathFloorB = corridorFromStair.map((position) =>
+      Cesium.Cartesian3.add(position, new Cesium.Cartesian3(0, 0, zLift), new Cesium.Cartesian3())
+    );
+
+    activeStairClimbPath = stairClimbPositions;
   }
 
   activeNavFromFloor = fromFloor;
   activeNavToFloor = toFloor;
   setNavigationAllowedFloors([...new Set([fromFloor, toFloor])]);
+  liveNavFloorSwitchDistance = null;
+  liveNavFloorSwitchTarget = null;
+  liveNavFloorSwitchDone = false;
+  liveNavFloorBreakIndex = null;
+  if (fromFloor !== toFloor && pathFloorA.length > 0 && pathFloorB.length > 0) {
+    // Floor switch happens after the full corridor + stair climb
+    liveNavFloorSwitchDistance = pathDistance([pathFloorA]) + pathDistance([activeStairClimbPath]);
+    liveNavFloorSwitchTarget = toFloor;
+    liveNavFloorBreakIndex = pathFloorA.length - 1 + activeStairClimbPath.length;
+  }
 
   // If navigation crosses floors, show loading spinner and ensure both floor models are loaded
   if (fromFloor !== toFloor) {
@@ -2506,35 +2555,29 @@ export async function startNavigation(): Promise<void> {
   }
 
   await Promise.resolve(navigationFloorSwitchHandler?.(fromFloor));
-  disableCameraControls();
 
-  const { pointsA, pointsB } = drawRoute(pathFloorA, pathFloorB);
-  const fullPath = [...pointsA, ...pointsB];
-  const stairRange = stairStartPosition && stairEndPosition
-    ? {
-        startIndex: Math.max(0, nearestPathIndex(fullPath, stairStartPosition) - 1),
-        endIndex: nearestPathIndex(fullPath, stairEndPosition) + 1
-      }
-    : undefined;
-  const fullPathFloors = [
-    ...pointsA.map((position) => floorForNavigationPosition(position, fromFloor)),
-    ...pointsB.map((position) => floorForNavigationPosition(position, toFloor)),
-  ];
-
+  drawRoute(pathFloorA, pathFloorB);
+  const fullPath = [...pathFloorA, ...activeStairClimbPath, ...pathFloorB];
   const totalDistance = Math.round(pathDistance([pathFloorA, pathFloorB]));
-  
-  // Generate turn-by-turn steps
+
+  // Generate turn-by-turn steps for the View Directions panel
   const allSteps: any[] = [];
+  let baseDistOffset = 0;
+
   if (pathFloorA.length > 0) {
     allSteps.push(...generateTurnSteps(pathFloorA));
+    baseDistOffset = pathDistance([pathFloorA]);
   }
   if (fromFloor !== toFloor) {
-    allSteps.push({ icon: "🪜", title: "Use stairs", primary: `Move to ${floorLabel(toFloor)}` });
+    const stairDirection = fromFloor < toFloor ? "Go upstairs" : "Go downstairs";
+    allSteps.push({ icon: "🪜", title: "Use stairs", primary: `${stairDirection}, then switch to ${floorLabel(toFloor)}`, startDist: baseDistOffset });
     if (pathFloorB.length > 0) {
-      allSteps.push(...generateTurnSteps(pathFloorB));
+      const stepsB = generateTurnSteps(pathFloorB);
+      allSteps.push(...stepsB.map((s) => ({ ...s, startDist: s.startDist + baseDistOffset })));
+      baseDistOffset += pathDistance([pathFloorB]);
     }
   }
-  allSteps.push({ icon: "🚩", title: "Arrive at destination", text: `You have reached ${toSelection.displayName}` });
+  allSteps.push({ icon: "🚩", title: "Arrive at destination", text: `You have reached ${toSelection.displayName}`, startDist: baseDistOffset });
 
   updateNavigationUI({
     fromName: fromSelection.displayName,
@@ -2544,22 +2587,31 @@ export async function startNavigation(): Promise<void> {
     list: allSteps
   });
 
-  startLiveNavigationMarker(
-    fullPath,
-    fullPathFloors,
-    toSelection.displayName,
-    toSelection.roomName,
-    toSelection.floor,
-    pointsA.length,
-    stairRange
-  );
-  setNavigationMessage(
-    fromFloor === toFloor
-      ? "Live navigation started. Follow the blue route."
-      : "Proceed to stairs, then switch floor to continue.",
-    false
-  );
-  viewer.scene.requestRender();
+  // Store path and steps so Preview Route can fly through and highlight directions
+  liveNavPath = fullPath;
+  liveNavSteps = allSteps.map((s: { startDist: number }) => ({ startDist: s.startDist }));
+  liveNavIndex = 0;
+
+  setNavigationMessage("Route drawn. Press Preview Route to walk through it.", false);
+
+  // Fly camera to show an overview of the full route
+  if (fullPath.length >= 2) {
+    const routeSphere = Cesium.BoundingSphere.fromPoints(fullPath);
+    const expandedRadius = Math.max(routeSphere.radius * 2.5, 15);
+    viewer.camera.flyToBoundingSphere(
+      new Cesium.BoundingSphere(routeSphere.center, expandedRadius),
+      {
+        duration: 1.2,
+        offset: new Cesium.HeadingPitchRange(
+          viewer.camera.heading,
+          Cesium.Math.toRadians(-55),
+          expandedRadius * 2
+        )
+      }
+    );
+  } else {
+    viewer.scene.requestRender();
+  }
 }
 
 export function getActiveNavigationStartFloor(): number | null {

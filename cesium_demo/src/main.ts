@@ -1,9 +1,9 @@
 import "./styles.css";
-import { Cesium, viewer } from "./viewer";
+import { Cesium, viewer, ALT_2ND, ALT_3RD } from "./viewer";
 import { loadModels } from "./models";
 import { getSelectedFloor, initSmartFloorCamera, openFloorProfessional, preloadFloor, showFloor } from "./floors";
 import { getNavigableRoomNames, loadRooms } from "./rooms";
-import { getNavigablePersonNames, chairNavPoints } from "./chairs";
+import { getNavigablePersonNames, chairNavPoints, loadChairsForFloor, thirdFloorChairs, secondFloorChairs } from "./chairs";
 import { initializeCalendar } from "./calendar";
 import {
   exitNavigation,
@@ -11,6 +11,7 @@ import {
   installIntermediatePointDebug,
   installStairPathDebug,
   startNavigation,
+  flyRoutePreview,
   setNavigationFloorSwitchHandler,
   showStairDebugUI,
   hideStairDebugUI,
@@ -29,6 +30,12 @@ import {
   deleteChairViewPreset,
   getAllChairViewPresets,
   getChairViewPresetsCode,
+  setCorridorDrawNodeMode,
+  setCorridorConnectMode,
+  stopCorridorDrawTool,
+  undoCorridorDraw,
+  clearCorridorDrawTool,
+  getCorridorDrawGeoJSON,
 } from "./navigation";
 import { clearCctvViewshed } from "./cameraShed/cctvViewshed";
 import {
@@ -38,6 +45,7 @@ import {
   populateRoomDropdowns,
   setNavigationMessage,
   openBookingPanel,
+  showRoomInfoCard,
   closeBookingPanel,
   getBookingPanelRoom,
   getBookingTimes,
@@ -48,7 +56,10 @@ import {
   installSeatViewDebug,
   installArrivalViewTuner,
 } from "./ui";
-import { createBooking, getCurrentEvents, showToast } from "./booking";
+import { createBooking, getCurrentEvents, showToast, fetchGlobalEvents, matchRoomName } from "./booking";
+import { initAssistant, handleAssistantQuery, type MarkerPoint } from "./assistant";
+import { initAmenities } from "./amenities/index";
+import { highlightBuildingAt } from "./gis/buildingHighlight";
 
 // Guard: if WebGL context is lost (GPU OOM, driver reset), show spinner and reload
 // instead of letting Cesium freeze with "Rendering has stopped."
@@ -65,6 +76,9 @@ async function playOnboardingSplash(): Promise<void> {
   const splash = document.getElementById("onboardingSplash");
   if (!splash) return;
 
+  await new Promise<void>((resolve) => setTimeout(resolve, 7200));
+  splash.classList.add("splash-hidden");
+  await new Promise<void>((resolve) => setTimeout(resolve, 600));
   splash.remove();
 }
 
@@ -124,6 +138,18 @@ async function bootstrap(): Promise<void> {
   });
   bindCctvPanel();
   installMapDirectionsControl();
+
+
+  document.getElementById("flyPreviewBtn")?.addEventListener("click", async () => {
+    showFloorSpinner("Preparing route...");
+    try {
+      clearCctvViewshed();
+      await startNavigation();
+    } finally {
+      hideFloorSpinner();
+    }
+    flyRoutePreview();
+  });
   setNavigationMessage("Loading building data...");
 
   const applySelectedFloor = (): void => showFloor(getSelectedFloor());
@@ -132,8 +158,13 @@ async function bootstrap(): Promise<void> {
 
   await playOnboardingSplash();
 
+  const isMobile = window.innerWidth < 768;
   viewer.camera.flyTo({
-    destination: Cesium.Cartesian3.fromDegrees(77.133783, 28.670903, 81.51),
+    destination: Cesium.Cartesian3.fromDegrees(
+      isMobile ? 77.133683 : 77.133783,
+      28.670903,
+      isMobile ? 95.0 : 81.51
+    ),
     orientation: {
       heading: Cesium.Math.toRadians(342.04),
       pitch: Cesium.Math.toRadians(-84.94),
@@ -152,8 +183,11 @@ async function bootstrap(): Promise<void> {
   preloadHeavyFloorsInBackground();
 
   installSceneInteractions(getSelectedFloor, {
-    onRoomClick: (roomName) => {
-      openBookingPanel(roomName, getCurrentEvents());
+    onRoomClick: (roomName, rawName) => {
+      showRoomInfoCard(rawName ?? roomName, getCurrentEvents());
+    },
+    onMapClick: (lat, lon) => {
+      void highlightBuildingAt(lat, lon);
     },
   });
 
@@ -188,6 +222,8 @@ async function bootstrap(): Promise<void> {
   });
 
   void initializeCalendar();
+  installAssistant();
+  initAmenities();
   setNavigationMessage("Choose rooms to start navigation.");
 
   // ── Arrival view tuner (enable with ?arrivalViewDebug=1 in URL) ──
@@ -406,6 +442,428 @@ async function bootstrap(): Promise<void> {
     stairCopyBtn.textContent = "✓ Copied!";
     window.setTimeout(() => { stairCopyBtn.textContent = prev; }, 1800);
   });
+
+  // ── Corridor Draw Tool Panel ───────────────────────────────────────────────
+  const corridorPanel      = document.getElementById("corridorDebugPanel") as HTMLElement | null;
+  const corridorOpenBtn    = document.getElementById("corridorDebugOpenBtn") as HTMLButtonElement | null;
+  const corridorCloseBtn   = document.getElementById("corridorDebugCloseBtn") as HTMLButtonElement | null;
+  const corridorAddBtn     = document.getElementById("corridorAddNodeBtn") as HTMLButtonElement | null;
+  const corridorConnBtn    = document.getElementById("corridorConnectBtn") as HTMLButtonElement | null;
+  const corridorUndoBtn    = document.getElementById("corridorUndoBtn") as HTMLButtonElement | null;
+  const corridorClearBtn   = document.getElementById("corridorClearBtn") as HTMLButtonElement | null;
+  const corridorCopyBtn  = document.getElementById("corridorCopyGeoJSONBtn") as HTMLButtonElement | null;
+  const corridorStatus   = document.getElementById("corridorDebugStatus") as HTMLElement | null;
+
+  type CDrawMode = "node" | "connect" | null;
+  let cDrawMode: CDrawMode = null;
+
+  function setCDrawStatus(msg: string): void {
+    if (corridorStatus) corridorStatus.textContent = msg;
+  }
+
+  function setCDrawMode(mode: CDrawMode): void {
+    cDrawMode = mode;
+    if (corridorAddBtn) corridorAddBtn.classList.toggle("active", mode === "node");
+    if (corridorConnBtn) corridorConnBtn.classList.toggle("active", mode === "connect");
+    if (mode === "node") {
+      setCorridorDrawNodeMode();
+      setCDrawStatus("Click on the floor to place nodes");
+    } else if (mode === "connect") {
+      setCorridorConnectMode();
+      setCDrawStatus("Click node 1, then node 2 to connect them");
+    } else {
+      stopCorridorDrawTool();
+      setCDrawStatus("Paused — choose Add Node or Connect");
+    }
+  }
+
+  corridorOpenBtn?.addEventListener("click", () => {
+    if (corridorPanel) corridorPanel.hidden = false;
+    setCDrawStatus("Click '+ Node' to start placing corridor points");
+  });
+
+  corridorCloseBtn?.addEventListener("click", () => {
+    if (corridorPanel) corridorPanel.hidden = true;
+    setCDrawMode(null);
+  });
+
+  corridorAddBtn?.addEventListener("click", () => {
+    setCDrawMode(cDrawMode === "node" ? null : "node");
+  });
+
+  corridorConnBtn?.addEventListener("click", () => {
+    setCDrawMode(cDrawMode === "connect" ? null : "connect");
+  });
+
+  corridorUndoBtn?.addEventListener("click", () => {
+    undoCorridorDraw();
+    setCDrawStatus("Undone last action");
+  });
+
+  corridorClearBtn?.addEventListener("click", () => {
+    clearCorridorDrawTool();
+    setCDrawMode(null);
+    setCDrawStatus("Cleared — start fresh");
+  });
+
+  corridorCopyBtn?.addEventListener("click", () => {
+    const json = getCorridorDrawGeoJSON();
+    navigator.clipboard.writeText(json).then(() => {
+      const prev = corridorCopyBtn!.textContent;
+      corridorCopyBtn!.textContent = "✓ Copied!";
+      window.setTimeout(() => { corridorCopyBtn!.textContent = prev; }, 2000);
+    });
+    console.info("Corridor GeoJSON:\n", json);
+  });
+}
+
+function findClosestOption(select: HTMLSelectElement, query: string): string | null {
+  const q = query.toLowerCase().trim();
+  const options = Array.from(select.options);
+  const exact = options.find((o) => o.value.toLowerCase() === q);
+  if (exact) return exact.value;
+  const partial = options.find((o) => o.value.toLowerCase().includes(q) || q.includes(o.value.toLowerCase().replace(/\[person\]\s*/i, "")));
+  return partial?.value ?? null;
+}
+
+function installAssistant(): void {
+  const fab = document.getElementById("assistantFab") as HTMLButtonElement | null;
+  const panel = document.getElementById("assistantPanel") as HTMLElement | null;
+  const closeBtn = document.getElementById("assistantCloseBtn") as HTMLButtonElement | null;
+  const input = document.getElementById("assistantInput") as HTMLInputElement | null;
+  const sendBtn = document.getElementById("assistantSendBtn") as HTMLButtonElement | null;
+  const voiceBtn = document.getElementById("assistantVoiceBtn") as HTMLButtonElement | null;
+  const messages = document.getElementById("assistantMessages") as HTMLElement | null;
+  const suggestions = document.getElementById("assistantSuggestions") as HTMLElement | null;
+
+  if (!fab || !panel || !input || !sendBtn || !messages) return;
+
+  initAssistant({
+    navigateToRoom: async (from, to) => {
+      const fromSel = document.getElementById("fromRoom") as HTMLSelectElement;
+      const toSel = document.getElementById("toRoom") as HTMLSelectElement;
+      // Try to find the from room; if not found fall back to the first option ("current position")
+      const fromVal = findClosestOption(fromSel, from) ?? (fromSel.options[0]?.value ?? null);
+      const toVal = findClosestOption(toSel, to);
+      if (!toVal) throw new Error(`Could not find destination room: "${to}"`);
+      if (fromVal) fromSel.value = fromVal;
+      toSel.value = toVal;
+      clearCctvViewshed();
+      showFloorSpinner("Preparing navigation...");
+      try { await startNavigation(); } finally { hideFloorSpinner(); }
+    },
+
+    navigateToPerson: async (name) => {
+      const toSel = document.getElementById("toRoom") as HTMLSelectElement;
+      const fromSel = document.getElementById("fromRoom") as HTMLSelectElement;
+      const q = name.toLowerCase().trim();
+      const options = Array.from(toSel.options);
+      const match = options.find((o) => {
+        const cleaned = o.value.toLowerCase().replace(/\[person\]\s*/i, "").replace(/\s*\(.*?\)/, "");
+        return cleaned.includes(q) || q.includes(cleaned);
+      });
+      if (!match) throw new Error(`Could not find person: "${name}"`);
+      toSel.value = match.value;
+      if (fromSel.options.length > 0) fromSel.value = fromSel.options[0].value;
+      clearCctvViewshed();
+      showFloorSpinner("Preparing navigation...");
+      try { await startNavigation(); } finally { hideFloorSpinner(); }
+    },
+
+    checkAvailability: async (room) => {
+      const matched = matchRoomName(room);
+      if (!matched) return `I don't know a room called "${room}".`;
+      const events = await fetchGlobalEvents();
+      const now = new Date();
+      const active = events.find((e) => e.room === matched && e.start <= now && e.end >= now);
+      if (active) {
+        const end = active.end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        return `${matched} is currently occupied until ${end} (${active.title}).`;
+      }
+      const next = events.find((e) => e.room === matched && e.start > now);
+      if (next) {
+        const start = next.start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        return `${matched} is free right now. Next booking at ${start}.`;
+      }
+      return `${matched} is free for the rest of the day.`;
+    },
+
+    openBooking: (room) => {
+      openBookingPanel(room, getCurrentEvents());
+    },
+
+    showFloor: (floor) => {
+      void openFloorProfessional(floor);
+    },
+
+    showMarkers: (points: MarkerPoint[], floor: number) => {
+      const alt = (floor === 4 ? ALT_3RD : ALT_2ND) + 0.4;
+      for (const pt of points) {
+        viewer.entities.add({
+          name: pt.label ?? "marker",
+          position: Cesium.Cartesian3.fromDegrees(pt.lon, pt.lat, alt),
+          point: {
+            pixelSize: 14,
+            color: Cesium.Color.RED,
+            outlineColor: Cesium.Color.WHITE,
+            outlineWidth: 2,
+            heightReference: Cesium.HeightReference.NONE,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          } as any,
+          label: pt.label ? {
+            text: pt.label,
+            font: "11px sans-serif",
+            fillColor: Cesium.Color.WHITE,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            outlineWidth: 2,
+            outlineColor: Cesium.Color.BLACK,
+            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+            pixelOffset: new Cesium.Cartesian2(0, -18),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            heightReference: Cesium.HeightReference.NONE,
+          } as any : undefined,
+        });
+      }
+      viewer.scene.requestRender();
+    },
+
+    clearMarkers: () => {
+      viewer.entities.removeAll();
+      viewer.scene.requestRender();
+    },
+
+    blinkChairs: (indices: number[], floor: number, color: "red" | "green" = "red") => {
+      const blinkColor = color === "green" ? Cesium.Color.LIME : Cesium.Color.RED;
+      const chairs = floor === 4 ? thirdFloorChairs : secondFloorChairs;
+      const targets = chairs.filter((c) => c.chairIndex !== undefined && indices.includes(c.chairIndex));
+
+      void loadChairsForFloor(floor).then(() => {
+        const loaded = (floor === 4 ? thirdFloorChairs : secondFloorChairs)
+          .filter((c) => c.chairIndex !== undefined && indices.includes(c.chairIndex));
+        const all = [...new Set([...targets, ...loaded])];
+
+        let blinkOn = true;
+        const interval = setInterval(() => {
+          for (const chair of all) {
+            chair.color = blinkOn ? blinkColor : Cesium.Color.WHITE;
+          }
+          viewer.scene.requestRender();
+          blinkOn = !blinkOn;
+        }, 500);
+
+        setTimeout(() => {
+          clearInterval(interval);
+          for (const chair of all) { chair.color = Cesium.Color.WHITE; }
+          viewer.scene.requestRender();
+        }, 10000);
+      });
+    },
+
+    triggerOutdoorNav: (origin: string, _destination: string) => {
+      const panel = document.getElementById("mapDirectionsPanel") as HTMLElement | null;
+      const originInput = document.getElementById("mapOriginInput") as HTMLInputElement | null;
+      const destInput = document.getElementById("mapDestinationInput") as HTMLInputElement | null;
+      const routeBtn = document.getElementById("showGoogleRouteBtn") as HTMLButtonElement | null;
+      if (panel) panel.hidden = false;
+      if (originInput) originInput.value = origin;
+      if (destInput) destInput.value = "FloData Analytics, Shivaji Marg, Delhi";
+      if (routeBtn) setTimeout(() => routeBtn.click(), 300);
+    },
+
+    startPreviewRoute: () => {
+      const btn = document.getElementById("flyPreviewBtn") as HTMLButtonElement | null;
+      if (btn && !btn.hidden) {
+        btn.click();
+      } else {
+        // If no route is set yet, start navigation first then preview
+        showFloorSpinner("Preparing preview...");
+        void startNavigation().then(() => {
+          hideFloorSpinner();
+          setTimeout(() => {
+            document.getElementById("flyPreviewBtn")?.click();
+          }, 500);
+        }).catch(() => hideFloorSpinner());
+      }
+    },
+
+    getRoomNames: () => getNavigableRoomNames(),
+    getPersonNames: () => getNavigablePersonNames(),
+  });
+
+  function addMessage(text: string, role: "user" | "bot" | "thinking" | "error"): HTMLElement {
+    const div = document.createElement("div");
+    div.className = `assistant-msg assistant-msg--${role}`;
+    const span = document.createElement("span");
+    if (role === "thinking") {
+      span.innerHTML = '<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+    } else {
+      span.textContent = text;
+    }
+    div.appendChild(span);
+    messages!.appendChild(div);
+    messages!.scrollTop = messages!.scrollHeight;
+    return div;
+  }
+
+  async function send(text: string): Promise<void> {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    if (input) input.value = "";
+    if (sendBtn) sendBtn.disabled = true;
+    if (suggestions) suggestions.style.display = "none";
+
+    addMessage(trimmed, "user");
+    const thinking = addMessage("", "thinking");
+
+    try {
+      const reply = await handleAssistantQuery(trimmed);
+      thinking.remove();
+      addMessage(reply, "bot");
+    } catch (err) {
+      thinking.remove();
+      addMessage(`Error: ${err instanceof Error ? err.message : String(err)}`, "error");
+    } finally {
+      if (sendBtn) sendBtn.disabled = false;
+      if (input) input.focus();
+    }
+  }
+
+  fab.addEventListener("click", () => {
+    const isHidden = panel.hidden;
+    if (isHidden) {
+      panel.hidden = false;
+      panel.classList.remove("assistant-panel-hide");
+      panel.classList.add("assistant-panel-show");
+      fab.classList.add("active");
+      if (input) input.focus();
+    } else {
+      panel.classList.remove("assistant-panel-show");
+      panel.classList.add("assistant-panel-hide");
+      fab.classList.remove("active");
+      setTimeout(() => {
+        if (panel.classList.contains("assistant-panel-hide")) {
+          panel.hidden = true;
+        }
+      }, 350);
+    }
+  });
+
+  closeBtn?.addEventListener("click", () => {
+    panel.classList.remove("assistant-panel-show");
+    panel.classList.add("assistant-panel-hide");
+    fab.classList.remove("active");
+    setTimeout(() => {
+      if (panel.classList.contains("assistant-panel-hide")) {
+        panel.hidden = true;
+      }
+    }, 350);
+  });
+
+  sendBtn.addEventListener("click", () => void send(input?.value ?? ""));
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void send(input.value);
+    }
+  });
+
+  suggestions?.querySelectorAll(".assistant-chip").forEach((chip) => {
+    chip.addEventListener("click", () => void send((chip as HTMLElement).textContent ?? ""));
+  });
+
+  const SpeechRecognitionCtor = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
+  if (SpeechRecognitionCtor && voiceBtn) {
+    const recognition = new SpeechRecognitionCtor() as any;
+    recognition.lang = "en-IN";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.maxAlternatives = 1;
+
+    let isRecording = false;
+    let listeningMsgEl: HTMLElement | null = null;
+
+    const setRecording = (on: boolean) => {
+      isRecording = on;
+      voiceBtn.classList.toggle("recording", on);
+      voiceBtn.title = on ? "Stop listening" : "Voice input";
+    };
+
+    const showListeningMsg = () => {
+      listeningMsgEl = document.createElement("div");
+      listeningMsgEl.className = "assistant-msg assistant-msg--bot";
+      listeningMsgEl.textContent = "🎙️ Listening…";
+      messages!.appendChild(listeningMsgEl);
+      messages!.scrollTop = messages!.scrollHeight;
+    };
+
+    const removeListeningMsg = () => {
+      listeningMsgEl?.remove();
+      listeningMsgEl = null;
+    };
+
+    recognition.onstart = () => {
+      showListeningMsg();
+    };
+
+    recognition.onresult = (event: any) => {
+      let interim = "";
+      let final = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t: string = event.results[i][0].transcript;
+        if (event.results[i].isFinal) final += t;
+        else interim += t;
+      }
+      if (input) input.value = final || interim;
+      if (final) {
+        removeListeningMsg();
+        void send(final.trim());
+      }
+    };
+
+    recognition.onend = () => {
+      removeListeningMsg();
+      setRecording(false);
+      if (input && input.value.trim()) {
+        // fallback: if onresult fired but wasn't final, send whatever is in input
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      removeListeningMsg();
+      setRecording(false);
+      const errMap: Record<string, string> = {
+        "not-allowed": "Microphone access denied. Please allow microphone in your browser and reload.",
+        "no-speech": "No speech detected. Please try again.",
+        "audio-capture": "No microphone found. Please connect a microphone.",
+        "network": "Network error during voice recognition.",
+        "aborted": "",
+      };
+      const msg = errMap[event.error as string] ?? `Voice error: ${event.error as string}`;
+      if (msg) addMessage(msg, "bot");
+    };
+
+    voiceBtn.addEventListener("click", () => {
+      if (isRecording) {
+        recognition.stop();
+      } else {
+        if (input) input.value = "";
+        try {
+          recognition.start();
+          setRecording(true);
+        } catch {
+          addMessage("Could not start voice recognition. Please try again.", "bot");
+        }
+      }
+    });
+  } else if (voiceBtn) {
+    voiceBtn.title = "Voice not supported — use Chrome or Edge";
+    voiceBtn.style.opacity = "0.4";
+    voiceBtn.style.cursor = "not-allowed";
+    voiceBtn.addEventListener("click", () =>
+      addMessage("Voice input requires Chrome or Edge browser.", "bot")
+    );
+  }
 }
 
 bootstrap().catch((error) => {

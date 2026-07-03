@@ -1,7 +1,7 @@
 import { Cesium, viewer, ALT_2ND, ALT_3RD } from "./viewer";
 import { BUILDING_ENTRANCE, lookupRoomPOI, type RoomPOI } from "./buildingPOI";
-import outdoorNavigationPointsUrl from "../Outdoor_navigation_points.geojson?url";
-import { ChairModel, getPickedChair, highlightChair, findChairByName, chairNavPoints, getActualChairPosition } from "./chairs";
+import outdoorNavigationPointsUrl from "../geodata/Outdoor_navigation_points.geojson?url";
+import { ChairModel, getPickedChair, highlightChair, findChairByName, chairNavPoints, getActualChairPosition, loadChairsForFloor, extractAndCacheChairPositions } from "./chairs";
 import {
   CameraModel,
   getPickedCamera,
@@ -17,7 +17,7 @@ import {
   models,
 } from "./models";
 import { GlobalEvent, matchRoomName, showToast, cancelBooking, currentUserEmail } from "./booking";
-import { BOOKABLE_ROOMS } from "./rooms";
+import { floorPropertyToLabel, getRoomInventory } from "./roomInventory";
 import { FLOOR_CAMERAS } from "./config";
 import {
   clearCctvViewshed,
@@ -58,7 +58,8 @@ type UiCallbacks = {
 };
 
 type SceneCallbacks = {
-  onRoomClick?: (roomName: string) => void;
+  onRoomClick?: (roomName: string, rawName?: string, floorLabel?: string) => void;
+  onMapClick?: (lat: number, lon: number) => void;
 };
 
 let lastHoveredChair: ChairModel | null = null;
@@ -76,6 +77,15 @@ function element<T extends HTMLElement>(id: string): T {
 function setText(id: string, value: string): void {
   const node = optionalElement<HTMLElement>(id);
   if (node) node.innerText = value;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 type MapCoordinate = { lon: number; lat: number };
@@ -1102,13 +1112,22 @@ function isKnownDropdownRoom(value: string): boolean {
   );
 }
 
-function syncUserProfileToToolbar(toolbar: HTMLElement): void {
+function moveUserProfileIntoToolbar(toolbar: HTMLElement): void {
   const userProfile = document.getElementById("userProfile") as HTMLElement | null;
-  if (!userProfile) return;
-  const activeFloor = Number(document.body.dataset.activeFloor ?? "0");
-  const gap = (activeFloor === 3 || activeFloor === 4) ? 5 : 8;
-  const toolbarLeft = toolbar.getBoundingClientRect().left;
-  userProfile.style.right = `${window.innerWidth - toolbarLeft + gap}px`;
+  if (!userProfile || toolbar.contains(userProfile)) return;
+  toolbar.appendChild(userProfile);
+}
+
+function moveNearbyBtnIntoToolbar(toolbar: HTMLElement): void {
+  const btn = document.getElementById("nearbyNavBtn") as HTMLElement | null;
+  if (!btn || toolbar.contains(btn)) return;
+  const userProfile = document.getElementById("userProfile");
+  if (userProfile && toolbar.contains(userProfile)) {
+    toolbar.insertBefore(btn, userProfile);
+  } else {
+    toolbar.appendChild(btn);
+  }
+  btn.style.display = "";
 }
 
 function closeAllToolbarPanels(): void {
@@ -1125,12 +1144,12 @@ export function installMapDirectionsControl(): void {
   const panel = optionalElement<HTMLElement>("mapDirectionsPanel");
   if (!toolbar || !panel || document.getElementById("googleMapRouteBtn")) return;
 
+  moveUserProfileIntoToolbar(toolbar);
+  moveNearbyBtnIntoToolbar(toolbar);
+
   const button = createMapToolbarButton();
   toolbar.prepend(button);
 
-  syncUserProfileToToolbar(toolbar);
-  new ResizeObserver(() => syncUserProfileToToolbar(toolbar)).observe(toolbar);
-  window.addEventListener("resize", () => syncUserProfileToToolbar(toolbar));
 
   const originInput = element<HTMLInputElement>("mapOriginInput");
   const destinationInput = element<HTMLInputElement>("mapDestinationInput");
@@ -1185,6 +1204,8 @@ export function installMapDirectionsControl(): void {
     const toVal = destinationInput.value;
     originInput.value = toVal;
     destinationInput.value = fromVal;
+    // Sync the hidden fromRoom/toRoom selects so startNavigation() uses the swapped values
+    syncRoomSelectsFromInputs(toVal, fromVal);
     updateActionButtons();
   });
 
@@ -1330,12 +1351,77 @@ function toTimeInput(date: Date): string {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+export function showRoomInfoCard(roomName: string, events: GlobalEvent[], floorLabel?: string): void {
+  const card = optionalElement<HTMLElement>("roomDetailsCard");
+  const title = optionalElement<HTMLElement>("cardRoomName");
+  const cardContent = optionalElement<HTMLElement>("cardContent");
+  if (!card || !title || !cardContent) return;
+
+  const inventory = getRoomInventory(roomName, floorLabel);
+  if (inventory?.name === "Employee Area") {
+    card.style.display = "none";
+    return;
+  }
+
+  const displayName = inventory?.name ?? roomName;
+  const bookingRoomName = inventory?.bookingRoomName ?? matchRoomName(roomName);
+  const now = new Date();
+  const upcomingToday = bookingRoomName
+    ? events.filter((event) => event.room === bookingRoomName && event.end >= now)
+    : [];
+  const status = bookingRoomName
+    ? upcomingToday.length > 0 ? "Occupied / booked today" : "Available today"
+    : "Not bookable";
+
+  title.textContent = displayName;
+  cardContent.innerHTML = `
+    <div class="room-info-card">
+      <div class="room-info-row"><span>Floor</span><b>${escapeHtml(inventory?.floorLabel ?? floorLabel ?? "Unknown")}</b></div>
+      <div class="room-info-row"><span>Seats</span><b>${typeof inventory?.seats === "number" ? inventory.seats : "N/A"}</b></div>
+      <div class="room-info-row"><span>Status</span><b>${escapeHtml(status)}</b></div>
+      ${
+        inventory && inventory.items.length > 0
+          ? `<div class="room-info-assets">
+              <span>Room data</span>
+              <ul>
+                ${inventory.items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+              </ul>
+            </div>`
+          : ""
+      }
+      ${
+        bookingRoomName
+          ? `<button id="roomInfoBookingBtn" class="btn success room-info-book-btn" type="button">Booking</button>`
+          : `<p class="booking-empty">Booking is not enabled for this area.</p>`
+      }
+    </div>
+  `;
+
+  optionalElement<HTMLButtonElement>("roomInfoBookingBtn")?.addEventListener("click", () => {
+    if (bookingRoomName) openBookingPanel(bookingRoomName, events);
+  });
+
+  card.style.display = "block";
+}
+
 export function openBookingPanel(roomName: string, events: GlobalEvent[]): void {
   const panel = optionalElement<HTMLElement>("bookingPanel");
   if (!panel) return;
 
   panel.dataset.room = roomName;
   setText("roomTitle", roomName);
+  const inventory = getRoomInventory(roomName);
+  const metadataEl = optionalElement<HTMLElement>("bookingRoomMetadata");
+  if (metadataEl) {
+    metadataEl.innerHTML = inventory
+      ? `
+        <div class="booking-room-meta-grid">
+          <span>Seats</span><b>${typeof inventory.seats === "number" ? inventory.seats : "N/A"}</b>
+          <span>Room data</span><b>${inventory.items.map(escapeHtml).join(", ")}</b>
+        </div>
+      `
+      : "";
+  }
 
   const now = new Date();
   const upcomingToday = events.filter((e) => e.room === roomName && e.end >= now);
@@ -1416,6 +1502,11 @@ export function openBookingPanel(roomName: string, events: GlobalEvent[]): void 
 export function closeBookingPanel(): void {
   const panel = optionalElement<HTMLElement>("bookingPanel");
   if (panel) panel.style.display = "none";
+}
+
+export function closeRoomInfoCard(): void {
+  const card = optionalElement<HTMLElement>("roomDetailsCard");
+  if (card) card.style.display = "none";
 }
 
 export function getBookingPanelRoom(): string | null {
@@ -1513,7 +1604,7 @@ const collectedCoordPoints: CollectedPoint[] = [];
 const collectedCoordMarkerIds: string[] = [];
 
 type PathCoord = { lat: number; lon: number; alt: number };
-type DrawnPath = { coords: PathCoord[]; kind: "main" | "branch"; entityId: string };
+type DrawnPath = { coords: PathCoord[]; kind: "main" | "branch"; entityId: string; markerIds: string[] };
 let pathDrawMode: "off" | "main" | "branch" = "off";
 const drawnPaths: DrawnPath[] = [];
 let activeDrawPath: DrawnPath | null = null;
@@ -1580,7 +1671,13 @@ export function setNavigationAllowedFloors(floors: number[] | null): void {
   navigationAllowedFloors = floors ? new Set(floors) : null;
   const exitButton = optionalElement<HTMLButtonElement>("exitNavBtn");
   if (exitButton) exitButton.hidden = !floors;
+  // flyPreviewBtn visibility is managed separately via setRoutePreviewAvailable
   applyFloorButtonAvailability();
+}
+
+export function setRoutePreviewAvailable(available: boolean): void {
+  const flyPreviewButton = optionalElement<HTMLButtonElement>("flyPreviewBtn");
+  if (flyPreviewButton) flyPreviewButton.hidden = !available;
 }
 
 export function disableCameraControls(): void {
@@ -1729,8 +1826,13 @@ function flyToPromise(options: any): Promise<void> {
 }
 
 export function flyToDefaultFloorView(duration = 1.15): Promise<void> {
+  const isMobile = window.innerWidth < 768;
   return flyToPromise({
-    destination: Cesium.Cartesian3.fromDegrees(77.133674, 28.670812, 48.08),
+    destination: Cesium.Cartesian3.fromDegrees(
+      isMobile ? 77.133594 : 77.133674,
+      28.670812,
+      isMobile ? 55.0 : 48.08
+    ),
     orientation: {
       heading: Cesium.Math.toRadians(1.89),
       pitch: Cesium.Math.toRadians(-67.75),
@@ -1777,6 +1879,7 @@ async function performWindowAnimation(floor: number): Promise<void> {
 }
 
 export function bindUiControls(callbacks: UiCallbacks): void {
+  uiShowFloor = callbacks.showFloor;
   const floorButtons = getFloorButtons();
 
   floorButtons.forEach((button) => {
@@ -1794,7 +1897,7 @@ export function bindUiControls(callbacks: UiCallbacks): void {
 
       document.body.dataset.activeFloor = String(floor);
       const tb = document.querySelector<HTMLElement>(".cesium-viewer-toolbar");
-      if (tb) syncUserProfileToToolbar(tb);
+      if (tb) moveUserProfileIntoToolbar(tb);
 
       const floorName = button.textContent?.replace("Show ", "") ?? "floor";
       const label = floor === 0
@@ -1898,11 +2001,13 @@ export function bindUiControls(callbacks: UiCallbacks): void {
 
   optionalElement<HTMLButtonElement>("chairCloseBtn")?.addEventListener("click", closeChairPopup);
   optionalElement<HTMLButtonElement>("panelCloseBtn")?.addEventListener("click", closeBookingPanel);
+  optionalElement<HTMLButtonElement>("roomDetailsCloseBtn")?.addEventListener("click", closeRoomInfoCard);
 }
 
 let cachedRoomNames: string[] = [];
 let cachedIndoorRoomNames: string[] = [];
 let cachedPersonNames: string[] = [];
+let uiShowFloor: ((floor: number) => void | Promise<void>) | null = null;
 
 export function populateRoomDropdowns(names: string[], personNames: string[] = []): void {
   cachedIndoorRoomNames = names;
@@ -1928,7 +2033,7 @@ function escapeMapOption(value: string): string {
 }
 
 function renderMapOption(name: string): string {
-  return `<li role="option" tabindex="-1">${escapeMapOption(displayRouteOption(name))}</li>`;
+  return `<li role="option" tabindex="-1" data-raw-value="${escapeMapOption(name)}">${escapeMapOption(displayRouteOption(name))}</li>`;
 }
 
 async function fetchAddressSuggestions(query: string): Promise<string[]> {
@@ -2047,12 +2152,62 @@ function bindMapAutocomplete(
     dropdown.hidden = true;
   }
 
-  function selectItem(value: string): void {
+  function selectItem(displayValue: string, rawValue?: string): void {
     selecting = true;
-    input.value = value;
+    input.value = displayValue;
     closeDropdown();
     input.dispatchEvent(new Event("input", { bubbles: true }));
     selecting = false;
+    void handleSelectionPreview(rawValue ?? displayValue);
+  }
+
+  async function handleSelectionPreview(value: string): Promise<void> {
+    const personMatch = value.match(/^\[Person\]\s+(.+?)(?:\s+\((2nd|3rd) Floor\))?$/);
+    if (personMatch) {
+      const personName = personMatch[1];
+      const floorLabel = personMatch[2];
+      // Determine floor: check navPoints first to handle ambiguous names
+      const navPoint = chairNavPoints.find((p) =>
+        p.name === personName && (floorLabel == null || p.floor === (floorLabel === "3rd" ? 4 : 3))
+      ) ?? chairNavPoints.find((p) => p.name === personName);
+      const floor: 3 | 4 = navPoint ? (navPoint.floor as 3 | 4) : (floorLabel === "3rd" ? 4 : 3);
+
+      // Switch to the right floor first so the chair model is visible
+      if (uiShowFloor) await Promise.resolve(uiShowFloor(floor));
+
+      await loadChairsForFloor(floor);
+      viewer.scene.render();
+      extractAndCacheChairPositions(floor);
+
+      const actual = getActualChairPosition(personName, floor);
+      const alt = floor === 3 ? ALT_2ND : ALT_3RD;
+      const lon = actual?.lon ?? navPoint?.lon;
+      const lat = actual?.lat ?? navPoint?.lat;
+
+      if (lon != null && lat != null) {
+        viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(lon, lat, alt + 5),
+          orientation: { heading: 0, pitch: Cesium.Math.toRadians(-75), roll: 0 },
+          duration: 1.0,
+        });
+      }
+      showChairArrivalEffect(personName, floor);
+      return;
+    }
+
+    const poi = lookupRoomPOI(value);
+    if (!poi) return;
+
+    // Switch floor so the room is visible
+    if (uiShowFloor) await Promise.resolve(uiShowFloor(poi.floor));
+
+    const floorAlt = poi.floor === 3 ? ALT_2ND : ALT_3RD;
+    showRoomPreviewEffect(poi.doorLon, poi.doorLat, floorAlt, poi.name);
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(poi.doorLon, poi.doorLat, floorAlt + 6),
+      orientation: { heading: 0, pitch: Cesium.Math.toRadians(-80), roll: 0 },
+      duration: 1.0,
+    });
   }
 
   function triggerSearch(query: string): void {
@@ -2097,7 +2252,7 @@ function bindMapAutocomplete(
       renderCategoryDropdown(pickerKind);
       return;
     }
-    selectItem(li.textContent ?? "");
+    selectItem(li.textContent ?? "", li.dataset.rawValue);
   });
 
   // Keyboard navigation
@@ -2122,7 +2277,7 @@ function bindMapAutocomplete(
     } else if (e.key === "Enter") {
       if (current) {
         e.preventDefault();
-        selectItem(current.textContent ?? "");
+        selectItem(current.textContent ?? "", (current as HTMLElement).dataset.rawValue);
       }
     } else if (e.key === "Escape") {
       closeDropdown();
@@ -2136,20 +2291,40 @@ function bindMapAutocomplete(
   });
 }
 
+function navStepIconType(icon: string): string {
+  if (icon === "↑") return "start";
+  if (icon === "↰") return "left";
+  if (icon === "↱") return "right";
+  if (icon.includes("🪜")) return "stairs";
+  if (icon.includes("🚩")) return "arrive";
+  return "start";
+}
+
 export function updateNavigationUI(summary: NavigationSummary): void {
   setText("fromNameDisplay", summary.fromName);
   setText("toNameDisplay", summary.toName);
 
   const summaryEl = element<HTMLElement>("navSummary");
-  summaryEl.innerHTML = `Walk ${summary.totalDistance} m &nbsp; ${summary.totalTime} min`;
+  const fromShort = summary.fromName.length > 20 ? `${summary.fromName.slice(0, 20)}…` : summary.fromName;
+  const toShort = summary.toName.length > 20 ? `${summary.toName.slice(0, 20)}…` : summary.toName;
+  summaryEl.innerHTML = `
+    <div class="nav-summary-route">
+      <span class="nav-from-label">${fromShort}</span>
+      <span class="nav-summary-arrow">→</span>
+      <span class="nav-to-label">${toShort}</span>
+    </div>
+    <div class="nav-summary-meta">
+      <span class="nav-dist-badge">${summary.totalDistance} m</span>
+      <span class="nav-time-badge">${summary.totalTime} min</span>
+    </div>`;
   summaryEl.hidden = false;
 
   const stepsEl = element<HTMLElement>("navSteps");
   stepsEl.innerHTML = summary.list
     .map(
-      (step) => `
-        <div class="nav-step">
-          <div class="step-icon">${step.icon}</div>
+      (step, index) => `
+        <div class="nav-step" data-step-index="${index}">
+          <div class="step-icon" data-type="${navStepIconType(step.icon)}">${step.icon}</div>
           <div class="step-details">
             <div class="step-title">${step.title}</div>
             ${step.primary ? `<div class="step-box">${step.primary}</div>` : `<div class="step-text">${step.text ?? ""}</div>`}
@@ -2157,18 +2332,30 @@ export function updateNavigationUI(summary: NavigationSummary): void {
         </div>`
     )
     .join("");
-  stepsEl.hidden = true;
+  stepsEl.hidden = false;
 
   const toggleBtn = optionalElement<HTMLButtonElement>("toggleDirectionsBtn");
   if (toggleBtn) {
     toggleBtn.hidden = false;
-    toggleBtn.classList.remove("open");
+    toggleBtn.classList.add("open");
     toggleBtn.onclick = () => {
       const open = stepsEl.hidden === true;
       stepsEl.hidden = !open;
       toggleBtn.classList.toggle("open", open);
     };
   }
+}
+
+export function highlightNavStep(index: number): void {
+  const stepsEl = optionalElement<HTMLElement>("navSteps");
+  if (!stepsEl) return;
+  stepsEl.querySelectorAll<HTMLElement>(".nav-step").forEach((el, i) => {
+    const isActive = i === index;
+    el.classList.toggle("active", isActive);
+    if (isActive) {
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  });
 }
 
 export function setNavigationMessage(message: string, clearSteps = true): void {
@@ -2310,6 +2497,61 @@ export function showChairArrivalEffect(name: string, floor: 3 | 4): void {
   });
 
   viewer.scene.requestRender();
+}
+
+// ── Room preview glow effect ──────────────────────────────────────
+let roomPreviewEntity: Cesium.Entity | null = null;
+let roomPreviewAnimRemove: (() => void) | null = null;
+let roomInfoEl: HTMLElement | null = null;
+
+export function clearRoomPreviewEffect(): void {
+  if (roomPreviewAnimRemove) { roomPreviewAnimRemove(); roomPreviewAnimRemove = null; }
+  if (roomPreviewEntity) { viewer.entities.remove(roomPreviewEntity); roomPreviewEntity = null; }
+  if (roomInfoEl) { roomInfoEl.remove(); roomInfoEl = null; }
+}
+
+function showRoomPreviewEffect(lon: number, lat: number, floorAlt: number, roomName: string): void {
+  clearRoomPreviewEffect();
+
+  const basePos = Cesium.Cartesian3.fromDegrees(lon, lat, floorAlt + 0.3);
+  const upDir = Cesium.Cartesian3.normalize(Cesium.Cartesian3.clone(basePos), new Cesium.Cartesian3());
+
+  roomPreviewEntity = viewer.entities.add({
+    id: "roomPreviewGlow",
+    position: new Cesium.CallbackProperty(() => {
+      const bounce = 0.3 * Math.abs(Math.sin(performance.now() * 0.006));
+      const offset = Cesium.Cartesian3.multiplyByScalar(upDir, bounce, new Cesium.Cartesian3());
+      return Cesium.Cartesian3.add(basePos, offset, new Cesium.Cartesian3());
+    }, false) as unknown as Cesium.PositionProperty,
+    point: {
+      pixelSize: new Cesium.CallbackProperty(() => 22 + 8 * Math.abs(Math.sin(performance.now() * 0.004)), false) as unknown as number,
+      color: new Cesium.CallbackProperty(() => {
+        const alpha = 0.65 + 0.35 * Math.abs(Math.sin(performance.now() * 0.004));
+        return Cesium.Color.fromCssColorString("#FF4400").withAlpha(alpha);
+      }, false) as unknown as Cesium.Color,
+      outlineColor: Cesium.Color.WHITE,
+      outlineWidth: 4,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+    label: {
+      text: roomName,
+      font: "bold 14px sans-serif",
+      fillColor: Cesium.Color.WHITE,
+      outlineColor: Cesium.Color.fromCssColorString("#991B1B"),
+      outlineWidth: 2,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      pixelOffset: new Cesium.Cartesian2(0, -20),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+  });
+
+  roomPreviewAnimRemove = viewer.scene.postRender.addEventListener(() => {
+    viewer.scene.requestRender();
+  });
+
+  // Auto-clear after 6 seconds
+  window.setTimeout(() => clearRoomPreviewEffect(), 6000);
 }
 
 // ── CCTV panel ────────────────────────────────────────────────────
@@ -3201,11 +3443,26 @@ export function installSceneInteractions(
     const entity = picked?.id as Cesium.Entity | undefined;
     if (entity?.polygon) {
       const rawName = (entity.properties as any)?.room_name?.getValue?.() as string | undefined;
+      const rawFloor = (entity.properties as any)?.floor?.getValue?.() as string | undefined;
       if (rawName) {
-        const roomName = matchRoomName(rawName);
-        if (roomName && BOOKABLE_ROOMS.has(rawName.toLowerCase().trim())) {
-          sceneCallbacks.onRoomClick?.(roomName);
-        }
+        sceneCallbacks.onRoomClick?.(matchRoomName(rawName) ?? rawName, rawName, floorPropertyToLabel(rawFloor));
+        return;
+      }
+    }
+
+    // Outdoor map click → highlight building from PostGIS
+    if (sceneCallbacks.onMapClick) {
+      // pickPosition works in 3D scene; fall back to ellipsoid for flat/2D map tiles
+      let cartesian: Cesium.Cartesian3 | undefined = viewer.scene.pickPosition(click.position);
+      if (!cartesian || !Cesium.defined(cartesian)) {
+        cartesian = viewer.camera.pickEllipsoid(click.position, viewer.scene.globe.ellipsoid);
+      }
+      if (cartesian && Cesium.defined(cartesian)) {
+        const carto = Cesium.Cartographic.fromCartesian(cartesian);
+        sceneCallbacks.onMapClick(
+          Cesium.Math.toDegrees(carto.latitude),
+          Cesium.Math.toDegrees(carto.longitude)
+        );
       }
     }
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
@@ -3310,20 +3567,54 @@ export function installSceneInteractions(
 
   function syncPathEntity(path: DrawnPath): void {
     viewer.entities.removeById(path.entityId);
-    if (path.coords.length < 2) return;
-    viewer.entities.add({
-      id: path.entityId,
-      polyline: {
-        positions: path.coords.map((c) => Cesium.Cartesian3.fromDegrees(c.lon, c.lat, c.alt + 0.25)),
-        width: path.kind === "main" ? 5 : 3,
-        material: new Cesium.PolylineOutlineMaterialProperty({
-          color: pathColor(path.kind),
-          outlineColor: Cesium.Color.BLACK.withAlpha(0.55),
-          outlineWidth: 1.5,
-        }),
-        clampToGround: false,
-        depthFailMaterial: pathColor(path.kind).withAlpha(0.5),
-      },
+    // Remove old numbered markers
+    path.markerIds.splice(0).forEach((id) => viewer.entities.removeById(id));
+
+    const color = pathColor(path.kind);
+
+    if (path.coords.length >= 2) {
+      viewer.entities.add({
+        id: path.entityId,
+        polyline: {
+          positions: path.coords.map((c) => Cesium.Cartesian3.fromDegrees(c.lon, c.lat, c.alt + 0.25)),
+          width: path.kind === "main" ? 5 : 3,
+          material: new Cesium.PolylineOutlineMaterialProperty({
+            color,
+            outlineColor: Cesium.Color.BLACK.withAlpha(0.55),
+            outlineWidth: 1.5,
+          }),
+          clampToGround: false,
+          depthFailMaterial: color.withAlpha(0.5),
+        },
+      });
+    }
+
+    // Numbered point markers for every coord (even if only 1 point)
+    path.coords.forEach((c, i) => {
+      const markerId = `${path.entityId}-pt-${i}`;
+      viewer.entities.add({
+        id: markerId,
+        position: Cesium.Cartesian3.fromDegrees(c.lon, c.lat, c.alt + 0.35),
+        point: {
+          pixelSize: 10,
+          color,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 2,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+        label: {
+          text: String(i + 1),
+          font: "bold 11px sans-serif",
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 2,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          pixelOffset: new Cesium.Cartesian2(0, -16),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          scale: 0.9,
+        },
+      });
+      path.markerIds.push(markerId);
     });
   }
 
@@ -3370,7 +3661,7 @@ export function installSceneInteractions(
       if (coordCollectBtn) coordCollectBtn.textContent = "● Record";
       if (coordPointsSection) coordPointsSection.hidden = true;
     }
-    activeDrawPath = { coords: [], kind, entityId: `pathDraw-${kind}-${Date.now()}` };
+    activeDrawPath = { coords: [], kind, entityId: `pathDraw-${kind}-${Date.now()}`, markerIds: [] };
     pathDrawMode   = kind;
     pathDrawStopBtn && (pathDrawStopBtn.disabled = false);
     pathDrawMainBtn?.classList.toggle("active",   kind === "main");
@@ -3386,6 +3677,7 @@ export function installSceneInteractions(
         syncPathEntity(activeDrawPath);
       } else {
         viewer.entities.removeById(activeDrawPath.entityId);
+        activeDrawPath.markerIds.splice(0).forEach((id) => viewer.entities.removeById(id));
       }
       activeDrawPath = null;
     }
@@ -3414,6 +3706,7 @@ export function installSceneInteractions(
     // undo active line first, then last finished line
     if (activeDrawPath) {
       viewer.entities.removeById(activeDrawPath.entityId);
+      activeDrawPath.markerIds.splice(0).forEach((id) => viewer.entities.removeById(id));
       viewer.entities.removeById(PATH_PREVIEW_ID);
       activeDrawPath = null;
       pathDrawMode   = "off";
@@ -3423,15 +3716,23 @@ export function installSceneInteractions(
     } else if (drawnPaths.length > 0) {
       const last = drawnPaths.pop()!;
       viewer.entities.removeById(last.entityId);
+      last.markerIds.forEach((id) => viewer.entities.removeById(id));
     }
     viewer.scene.requestRender();
     refreshPathStatus();
   });
 
   pathDrawClearBtn?.addEventListener("click", () => {
-    if (activeDrawPath) { viewer.entities.removeById(activeDrawPath.entityId); activeDrawPath = null; }
+    if (activeDrawPath) {
+      viewer.entities.removeById(activeDrawPath.entityId);
+      activeDrawPath.markerIds.forEach((id) => viewer.entities.removeById(id));
+      activeDrawPath = null;
+    }
     viewer.entities.removeById(PATH_PREVIEW_ID);
-    drawnPaths.forEach((p) => viewer.entities.removeById(p.entityId));
+    drawnPaths.forEach((p) => {
+      viewer.entities.removeById(p.entityId);
+      p.markerIds.forEach((id) => viewer.entities.removeById(id));
+    });
     drawnPaths.length = 0;
     pathDrawMode = "off";
     pathDrawStopBtn && (pathDrawStopBtn.disabled = true);
@@ -3440,6 +3741,8 @@ export function installSceneInteractions(
     viewer.scene.requestRender();
     refreshPathStatus();
   });
+
+  const pathDrawCopyPointsBtn = document.getElementById("pathDrawCopyPoints") as HTMLButtonElement | null;
 
   pathDrawCopyBtn?.addEventListener("click", () => {
     const all = [...drawnPaths, ...(activeDrawPath && activeDrawPath.coords.length >= 2 ? [activeDrawPath] : [])];
@@ -3451,7 +3754,7 @@ export function installSceneInteractions(
         properties: { type: path.kind },
         geometry: {
           type: "LineString",
-          coordinates: path.coords.map((c) => [c.lon, c.lat, c.alt]),
+          coordinates: path.coords.map((c) => [c.lon, c.lat]),
         },
       })),
     };
@@ -3460,6 +3763,38 @@ export function installSceneInteractions(
       if (pathDrawCopyBtn) pathDrawCopyBtn.textContent = "✓ Copied!";
       setTimeout(() => { if (pathDrawCopyBtn) pathDrawCopyBtn.textContent = prev; }, 1800);
     });
+  });
+
+  pathDrawCopyPointsBtn?.addEventListener("click", () => {
+    const all = [...drawnPaths, ...(activeDrawPath && activeDrawPath.coords.length >= 1 ? [activeDrawPath] : [])];
+    if (all.length === 0) return;
+    let idCounter = 1;
+    const features: object[] = [];
+    for (const path of all) {
+      for (const c of path.coords) {
+        features.push({
+          type: "Feature",
+          properties: { id: idCounter, Latitude: c.lat, Longitude: c.lon, type: path.kind },
+          geometry: { type: "Point", coordinates: [c.lon, c.lat] },
+        });
+        idCounter++;
+      }
+    }
+    const geojson = { type: "FeatureCollection", name: "corridor", features };
+    void navigator.clipboard.writeText(JSON.stringify(geojson, null, 2)).then(() => {
+      const prev = pathDrawCopyPointsBtn.textContent ?? "";
+      pathDrawCopyPointsBtn.textContent = "✓ Copied!";
+      setTimeout(() => { pathDrawCopyPointsBtn.textContent = prev; }, 1800);
+    });
+  });
+
+  // ── Route draw card toggle ────────────────────────────────────────
+  const routeDrawCard = document.getElementById("coordDebugCard") as HTMLElement | null;
+  document.getElementById("routeDrawOpenBtn")?.addEventListener("click", () => {
+    if (routeDrawCard) routeDrawCard.hidden = false;
+  });
+  document.getElementById("coordDebugCloseBtn")?.addEventListener("click", () => {
+    if (routeDrawCard) routeDrawCard.hidden = true;
   });
 
   viewer.screenSpaceEventHandler.setInputAction((movement: { endPosition: Cesium.Cartesian2 }) => {

@@ -26,6 +26,28 @@ export const viewer = new Cesium.Viewer("cesiumContainer", {
   msaaSamples: 1  // 4→1: cuts framebuffer GPU memory by 4× (prevents context loss under load)
 } as Cesium.Viewer.ConstructorOptions);
 
+const DELHI_BUILDINGS_ION_ASSET_ID = 5013356;
+
+async function loadDelhiBuildingsAsset(): Promise<void> {
+  if (!ionToken) {
+    console.warn(
+      `Cesium ion asset ${DELHI_BUILDINGS_ION_ASSET_ID} needs VITE_CESIUM_ION_TOKEN in .env to load.`
+    );
+    return;
+  }
+
+  try {
+    const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(DELHI_BUILDINGS_ION_ASSET_ID);
+    tileset.maximumScreenSpaceError = 16;
+    viewer.scene.primitives.add(tileset);
+    viewer.scene.requestRender();
+  } catch (error) {
+    console.warn(`Failed to load Cesium ion asset ${DELHI_BUILDINGS_ION_ASSET_ID}:`, error);
+  }
+}
+
+void loadDelhiBuildingsAsset();
+
 viewer.scene.screenSpaceCameraController.minimumZoomDistance = 0.5;
 viewer.scene.screenSpaceCameraController.maximumZoomDistance = 20000.0;
 (viewer.scene.screenSpaceCameraController as any).minimumPitch = Cesium.Math.toRadians(-85);

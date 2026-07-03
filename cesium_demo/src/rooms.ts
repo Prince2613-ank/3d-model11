@@ -1,19 +1,20 @@
 import { Cesium, ALT_2ND, ALT_3RD, viewer } from "./viewer";
 import { GlobalEvent, matchRoomName } from "./booking";
-import corridor2Url from "../2nd_floor_corridor.geojson?url";
-import rooms2Url from "../2nd_floor_room1.geojson?url";
-import corridor3Url from "../3rd_floor_corridor.geojson?url";
-import rooms3Url from "../3rd_floor_room1.geojson?url";
-import door2Url from "../door_2nd.geojson?url";
-import door3Url from "../door_3rd.geojson?url";
+import { floorPropertyToLabel, getRoomInventory } from "./roomInventory";
+import corridor2Url from "../geodata/2nd_floor_corridor.geojson?url";
+import rooms2Url from "../geodata/2nd_floor_room1.geojson?url";
+import corridor3Url from "../geodata/3rd_floor_corridor.geojson?url";
+import rooms3Url from "../geodata/3rd_floor_room1.geojson?url";
+import door2Url from "../geodata/door_2nd.geojson?url";
+import door3Url from "../geodata/door_3rd.geojson?url";
 
 const geoJsonAssets: Record<string, string> = {
-  "../2nd_floor_corridor.geojson": corridor2Url,
-  "../2nd_floor_room1.geojson": rooms2Url,
-  "../3rd_floor_corridor.geojson": corridor3Url,
-  "../3rd_floor_room1.geojson": rooms3Url,
-  "../door_2nd.geojson": door2Url,
-  "../door_3rd.geojson": door3Url,
+  "2nd_floor_corridor.geojson": corridor2Url,
+  "2nd_floor_room1.geojson": rooms2Url,
+  "3rd_floor_corridor.geojson": corridor3Url,
+  "3rd_floor_room1.geojson": rooms3Url,
+  "door_2nd.geojson": door2Url,
+  "door_3rd.geojson": door3Url,
 };
 
 export const BOOKABLE_ROOMS = new Set([
@@ -24,7 +25,7 @@ export let geo2: Cesium.GeoJsonDataSource | null = null;
 export let geo3: Cesium.GeoJsonDataSource | null = null;
 
 export function geoJsonUrl(fileName: string): string {
-  const url = geoJsonAssets[`../${fileName}`];
+  const url = geoJsonAssets[fileName];
   if (!url) throw new Error(`Missing GeoJSON asset: ${fileName}`);
   return url;
 }
@@ -41,13 +42,18 @@ function propertyValue(entity: Cesium.Entity, key: string): string | undefined {
 function styleRoomEntity(entity: Cesium.Entity, altitude: number): void {
   const roomName = propertyValue(entity, "room_name") ?? propertyValue(entity, "name") ?? "Room";
   const normalized = normalizeRoomName(roomName);
+  const floorLabel = floorPropertyToLabel(propertyValue(entity, "floor"));
+  const inventory = getRoomInventory(roomName, floorLabel);
+  const inventoryHtml = inventory
+    ? `<br/><b>Seats:</b> ${inventory.seats ?? "N/A"}<br/><b>Assets:</b> ${inventory.items.join(", ")}`
+    : "";
   
   if (BOOKABLE_ROOMS.has(normalized)) {
     entity.description = new Cesium.ConstantProperty(
-      `<b>${roomName}</b><br/>Status: <span style="color:green">Available</span>`
+      `<b>${roomName}</b>${inventoryHtml}<br/>Status: <span style="color:green">Available</span>`
     );
   } else {
-    entity.description = new Cesium.ConstantProperty(`<b>${roomName}</b>`);
+    entity.description = new Cesium.ConstantProperty(`<b>${roomName}</b>${inventoryHtml}`);
   }
 
   if (entity.polygon) {

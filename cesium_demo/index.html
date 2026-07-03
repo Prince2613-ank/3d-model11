@@ -8,87 +8,187 @@
   <link rel="icon" type="image/png" href="/flodata-logo.png" />
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://apis.google.com/js/api.js" async defer></script>
+  <style>
+    /* Prevent Flash of Unstyled Content (FOUC) before styles.css loads */
+    #onboardingSplash {
+      position: fixed;
+      inset: 0;
+      z-index: 100000;
+      background: #e1edf7; /* Fallback matching the splash gradient */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    /* Hide unstyled sub-elements until CSS is ready */
+    .onboarding-grid,
+    .onboarding-data-visuals,
+    .onboarding-sweep,
+    .onboarding-orbit,
+    .onboarding-stage {
+      visibility: hidden;
+    }
+    .onboarding-data-visuals .office-panel,
+    .onboarding-data-visuals .building-blueprint,
+    .onboarding-data-visuals .onboarding-mini-stack,
+    .onboarding-data-visuals .onboarding-cube-3d {
+      display: none !important;
+    }
+  </style>
 </head>
 
 <body>
   <div id="onboardingSplash" aria-label="FloData Analytics loading">
-    <div class="onboarding-grid" aria-hidden="true"></div>
-    <div class="onboarding-data-visuals" aria-hidden="true">
-      <div class="onboarding-mini-stack mini-stack-left">
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
-      <div class="onboarding-mini-stack mini-stack-bottom">
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
-      <div class="onboarding-cube-3d">
-        <span class="cube-face cube-front"></span>
-        <span class="cube-face cube-top"></span>
-        <span class="cube-face cube-side"></span>
-      </div>
-      <div class="building-blueprint blueprint-left">
-        <span class="room room-a"></span>
-        <span class="room room-b"></span>
-        <span class="room room-c"></span>
-        <span class="room room-d"></span>
-        <span class="corridor"></span>
-        <span class="route-dot"></span>
-      </div>
-      <div class="building-blueprint blueprint-right">
-        <span class="room room-a"></span>
-        <span class="room room-b"></span>
-        <span class="room room-c"></span>
-        <span class="room room-d"></span>
-        <span class="corridor"></span>
-        <span class="route-dot"></span>
-      </div>
-      <div class="building-scan">
-        <span></span>
-      </div>
-      <div class="building-elevator">
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
-      <div class="office-panel office-left">
-        <div class="meeting-table"></div>
-        <span class="chair chair-a"></span>
-        <span class="chair chair-b"></span>
-        <span class="chair chair-c"></span>
-        <span class="chair chair-d"></span>
-        <span class="employee employee-a"></span>
-        <span class="employee employee-b"></span>
-        <span class="plant-pot plant-a"></span>
-        <span class="chat-bubble chat-a">Booked</span>
-        <span class="chat-bubble chat-b">Available</span>
-      </div>
-      <div class="office-panel office-right">
-        <div class="calendar-card">
-          <b>Today</b>
-          <span>10:30 Sync</span>
-          <span>14:00 Review</span>
+    <!-- Animated background layers -->
+    <div class="ob-grid" aria-hidden="true"></div>
+    <div class="ob-particles" aria-hidden="true">
+      <span class="ob-particle"></span><span class="ob-particle"></span>
+      <span class="ob-particle"></span><span class="ob-particle"></span>
+      <span class="ob-particle"></span><span class="ob-particle"></span>
+      <span class="ob-particle"></span><span class="ob-particle"></span>
+      <span class="ob-particle"></span><span class="ob-particle"></span>
+      <span class="ob-particle"></span><span class="ob-particle"></span>
+      <span class="ob-particle"></span><span class="ob-particle"></span>
+      <span class="ob-particle"></span><span class="ob-particle"></span>
+    </div>
+
+    <!-- Smart City Skyline -->
+    <div class="ob-skyline" aria-hidden="true">
+      <!-- Building 1 - tall -->
+      <div class="ob-building ob-b1">
+        <div class="ob-bwindows">
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
         </div>
-        <div class="ac-unit">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-        <div class="projector-screen">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-        <span class="plant-pot plant-b"></span>
+        <div class="ob-bantenna"></div>
       </div>
-      <div class="data-line">
-        <span></span>
+      <!-- Building 2 - medium with crane -->
+      <div class="ob-building ob-b2">
+        <div class="ob-crane">
+          <div class="ob-crane-arm"></div>
+          <div class="ob-crane-cable">
+            <div class="ob-crane-hook"></div>
+          </div>
+        </div>
+        <div class="ob-bwindows">
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+      <!-- Building 3 - target building (FloData) -->
+      <div class="ob-building ob-b3 ob-b-main">
+        <div class="ob-bwindows">
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+        </div>
+        <div class="ob-bsign">FloData</div>
+        <!-- Scan ring on main building -->
+        <div class="ob-scan-ring"></div>
+        <div class="ob-scan-ring ob-scan-ring-2"></div>
+        <!-- WiFi / Signal pulse from building -->
+        <div class="ob-wifi-rings">
+          <span></span><span></span><span></span>
+        </div>
+        <!-- Construction scaffold with material hoist -->
+        <div class="ob-scaffold">
+          <div class="ob-sc-pole ob-sc-pl"></div>
+          <div class="ob-sc-pole ob-sc-pr"></div>
+          <div class="ob-sc-beam ob-sc-b1"></div>
+          <div class="ob-sc-beam ob-sc-b2"></div>
+          <div class="ob-sc-beam ob-sc-b3"></div>
+          <!-- Hoist: rope shortens as crate rises -->
+          <div class="ob-hoist">
+            <div class="ob-hoist-rope"></div>
+            <div class="ob-hoist-crate"></div>
+          </div>
+          <!-- Welder on middle platform -->
+          <div class="ob-welder">
+            <div class="ob-weld-head"></div>
+            <div class="ob-weld-body"></div>
+          </div>
+          <!-- Welding sparks burst -->
+          <div class="ob-sparks">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+      <!-- Building 4 - short office -->
+      <div class="ob-building ob-b4">
+        <div class="ob-bwindows">
+          <span></span><span></span>
+          <span></span><span></span>
+          <span></span><span></span>
+        </div>
+      </div>
+      <!-- Building 5 - glass tower -->
+      <div class="ob-building ob-b5">
+        <div class="ob-bwindows">
+          <span></span><span></span><span></span>
+          <span></span><span></span><span></span>
+          <span></span><span></span><span></span>
+          <span></span><span></span><span></span>
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+      <!-- Ground / Road -->
+      <div class="ob-road">
+        <!-- Walking workers -->
+        <div class="ob-worker ob-worker-a">
+          <div class="ob-worker-head"></div>
+          <div class="ob-worker-body"></div>
+          <div class="ob-worker-legs">
+            <span class="ob-leg ob-leg-l"></span>
+            <span class="ob-leg ob-leg-r"></span>
+          </div>
+          <div class="ob-worker-bag"></div>
+        </div>
+        <div class="ob-worker ob-worker-b">
+          <div class="ob-worker-head"></div>
+          <div class="ob-worker-body"></div>
+          <div class="ob-worker-legs">
+            <span class="ob-leg ob-leg-l"></span>
+            <span class="ob-leg ob-leg-r"></span>
+          </div>
+        </div>
+        <!-- Delivery bot -->
+        <div class="ob-delivery-bot">
+          <div class="ob-bot-body"></div>
+          <div class="ob-bot-screen"></div>
+          <div class="ob-bot-wheels">
+            <span></span><span></span>
+          </div>
+          <div class="ob-bot-package"></div>
+        </div>
+        <!-- Concrete mixer truck -->
+        <div class="ob-mixer">
+          <div class="ob-mixer-cab"></div>
+          <div class="ob-mixer-body">
+            <div class="ob-mixer-drum"></div>
+          </div>
+          <div class="ob-mixer-wheels"><span></span><span></span><span></span></div>
+        </div>
+        <!-- Construction worker C — hard hat, orange vest, carries toolbox -->
+        <div class="ob-worker ob-worker-c">
+          <div class="ob-wc-head"></div>
+          <div class="ob-wc-body"></div>
+          <div class="ob-worker-legs">
+            <span class="ob-leg ob-leg-l"></span>
+            <span class="ob-leg ob-leg-r"></span>
+          </div>
+          <div class="ob-worker-toolbox"></div>
+        </div>
+        <!-- Data nodes on road -->
+        <div class="ob-data-node ob-dn1"><span></span></div>
+        <div class="ob-data-node ob-dn2"><span></span></div>
+        <div class="ob-data-node ob-dn3"><span></span></div>
+        <div class="ob-data-line ob-dl1"></div>
+        <div class="ob-data-line ob-dl2"></div>
       </div>
     </div>
-    <div class="onboarding-sweep" aria-hidden="true"></div>
-    <div class="onboarding-orbit" aria-hidden="true"></div>
+
+    <!-- Main Stage Content -->
     <div class="onboarding-stage">
       <div class="onboarding-brand-row">
         <div class="onboarding-logo-card">
@@ -281,6 +381,7 @@
       <button id="startNavBtn" class="map-route-btn" type="button">Navigate</button>
     </div>
     <button id="exitNavBtn" class="map-route-btn map-route-btn--danger" type="button" hidden>Exit Navigation</button>
+    <button id="flyPreviewBtn" class="map-route-btn" type="button" hidden style="background:#6a0dad; margin-top:4px;">&#9654; Preview Route</button>
     <button id="worldRouteIndoorNavBtn" class="map-route-btn" type="button" hidden style="background:#0055cc; margin-top:4px;">&#8594; Start Indoor Navigation</button>
 
     <div id="mapRouteSummary" class="map-route-summary" hidden></div>
@@ -301,6 +402,13 @@
     <span></span>
     <span></span>
     <span></span>
+  </button>
+
+  <button id="nearbyNavBtn" class="nearby-nav-btn" aria-label="Nearby Amenities" title="Explore Nearby" style="display:none">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="7"/>
+      <line x1="16.65" y1="16.65" x2="21" y2="21"/>
+    </svg>
   </button>
 
   <div id="userProfile" class="user-profile-header">
@@ -361,6 +469,7 @@
       <h3 id="roomTitle" style="margin:0;"></h3>
       <button id="panelCloseBtn" type="button" title="Close">✕</button>
     </div>
+    <div id="bookingRoomMetadata"></div>
     <p style="margin:0 0 6px;"><b>Status:</b> <span id="roomStatus">Unknown</span></p>
     <div id="roomBookingsList"></div>
     <hr class="panel-divider" />
@@ -379,7 +488,10 @@
   </section>
 
   <section id="roomDetailsCard" class="common-panel">
-    <h3 id="cardRoomName"></h3>
+    <div class="panel-header">
+      <h3 id="cardRoomName"></h3>
+      <button id="roomDetailsCloseBtn" type="button" class="panel-close-btn" title="Close">✕</button>
+    </div>
     <div id="cardContent"></div>
   </section>
 
@@ -394,7 +506,6 @@
       </div>
       <button class="btn" type="button" data-floor="0">Show All Floors</button>
     </section>
-    <button id="stairDebugOpenBtn" class="btn stair-debug-open-btn" type="button">🪜 Stair Debug</button>
   </div>
 
   <section id="stairDebugPanel" class="common-panel stair-debug-panel" hidden>
@@ -413,6 +524,23 @@
     </div>
     <div id="stairPointCards" class="stair-point-cards"></div>
     <button id="stairCopyBtn" class="btn stair-copy-btn" type="button" disabled>📋 Copy Path Code</button>
+  </section>
+
+  <section id="corridorDebugPanel" class="common-panel stair-debug-panel" hidden>
+    <div class="panel-header">
+      <h3>🛤 Corridor Draw</h3>
+      <button id="corridorDebugCloseBtn" type="button" title="Close">✕</button>
+    </div>
+    <div class="stair-debug-toolbar">
+      <button id="corridorAddNodeBtn" class="btn" type="button">+ Node</button>
+      <button id="corridorConnectBtn" class="btn" type="button">⤳ Connect</button>
+    </div>
+    <div id="corridorDebugStatus" class="coord-points-count" style="margin-top:6px; min-height:14px;">Click '+ Node' to start</div>
+    <div class="stair-debug-toolbar" style="margin-top:4px;">
+      <button id="corridorUndoBtn" class="coord-mini-btn" type="button">↩ Undo</button>
+      <button id="corridorClearBtn" class="coord-mini-btn coord-mini-danger" type="button">🗑 Clear</button>
+    </div>
+    <button id="corridorCopyGeoJSONBtn" class="btn stair-copy-btn" type="button">📋 Copy GeoJSON</button>
   </section>
 
   <div id="menuBackdrop" class="menu-backdrop"></div>
@@ -466,8 +594,64 @@
   <div id="tooltip" class="tooltip"></div>
   <div id="toastContainer" aria-live="assertive"></div>
 
-  <div id="coordDebugCard" class="coord-debug-card">
-    <div class="coord-debug-title">&#128204; Cursor Position</div>
+  <!-- AI Assistant -->
+  <button id="assistantFab" class="assistant-fab" title="Ask AI Assistant" aria-label="Open AI Assistant">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" fill="currentColor"/>
+      <path d="M9 8h2v8H9zm4 0h2v8h-2z" fill="none"/>
+      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5" fill="none"/>
+      <path d="M8 10c0-2.21 1.79-4 4-4s4 1.79 4 4c0 1.5-.83 2.81-2.05 3.5L13 16h-2l-.95-2.5C8.83 12.81 8 11.5 8 10z" fill="currentColor"/>
+      <circle cx="12" cy="18" r="1" fill="currentColor"/>
+    </svg>
+  </button>
+
+  <section id="assistantPanel" class="assistant-panel" hidden aria-label="AI Assistant">
+    <div class="assistant-header">
+      <div class="assistant-header-left">
+        <div class="assistant-avatar">AI</div>
+        <div>
+          <div class="assistant-title">Building Assistant</div>
+        </div>
+      </div>
+      <button id="assistantCloseBtn" class="assistant-close-btn" type="button" aria-label="Close assistant">✕</button>
+    </div>
+
+    <div id="assistantMessages" class="assistant-messages">
+      <div class="assistant-msg assistant-msg--bot">
+        <span>Hi! I can help you navigate the building, find people, check room availability, or book a room. Try asking me something!</span>
+      </div>
+    </div>
+
+    <div id="assistantSuggestions" class="assistant-suggestions">
+      <button class="assistant-chip" type="button">Take me to Dojo</button>
+      <button class="assistant-chip" type="button">Find Samata's desk</button>
+      <button class="assistant-chip" type="button">Is Eureka free?</button>
+      <button class="assistant-chip" type="button">Book Manthan</button>
+    </div>
+
+    <div class="assistant-input-row">
+      <button id="assistantVoiceBtn" class="assistant-voice-btn" type="button" title="Voice input" aria-label="Voice input">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="9" y="2" width="6" height="12" rx="3" fill="currentColor"/>
+          <path d="M5 11c0 3.87 3.13 7 7 7s7-3.13 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="12" y1="18" x2="12" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <input id="assistantInput" class="assistant-input" type="text" placeholder="Ask anything about the building…" autocomplete="off" />
+      <button id="assistantSendBtn" class="assistant-send-btn" type="button" aria-label="Send">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" fill="currentColor"/>
+        </svg>
+      </button>
+    </div>
+  </section>
+
+
+  <div id="coordDebugCard" class="coord-debug-card" hidden>
+    <div class="coord-debug-header">
+      <div class="coord-debug-title">&#128204; Route Path Draw</div>
+      <button id="coordDebugCloseBtn" class="coord-debug-close" type="button" title="Close">&#10005;</button>
+    </div>
     <div class="coord-debug-row"><span>Lat</span><strong id="coordDebugLat">—</strong></div>
     <div class="coord-debug-row"><span>Lon</span><strong id="coordDebugLon">—</strong></div>
     <div class="coord-debug-row"><span>Alt (m)</span><strong id="coordDebugAlt">—</strong></div>
@@ -498,7 +682,8 @@
       <button id="pathDrawClear" class="coord-mini-btn coord-mini-danger" type="button">&#128465; All</button>
     </div>
     <div id="pathDrawStatus" class="coord-points-count" style="margin-top:5px; min-height:14px;">No paths drawn</div>
-    <button id="pathDrawCopyGeoJSON" class="coord-debug-copy" style="margin-top:6px;" type="button">&#128203; Copy Path GeoJSON</button>
+    <button id="pathDrawCopyGeoJSON" class="coord-debug-copy" style="margin-top:6px;" type="button">&#128203; Copy Lines GeoJSON</button>
+    <button id="pathDrawCopyPoints" class="coord-debug-copy" style="margin-top:4px; background:rgba(20,60,130,0.5); border-color:rgba(80,140,255,0.4); color:#a0c8ff;" type="button">&#128203; Copy Points GeoJSON</button>
   </div>
 
   <script type="module" src="/src/main.ts"></script>

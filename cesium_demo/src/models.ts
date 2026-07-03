@@ -10,37 +10,37 @@ import {
   viewer
 } from "./viewer";
 import { FLOOR_CAMERAS } from "./config";
-import cameraUrl from "../3rd_cc1.glb?url";
-import camera2Url from "../3rd_cc2.glb?url";
-import camera3Url from "../3rd_cc3.glb?url";
-import camera4Url from "../3rd_cc4.glb?url";
-import camera5Url from "../3rd_cc5.glb?url";
-import camera6Url from "../3rd_cc6.glb?url";
-import conferenceRoomCamUrl from "../3rd_cc6 (1).glb?url";
-import camera8Url from "../3rd_cc8.glb?url";
-import meetingRoomUrl from "../3rd_cc_meeting_room.glb?url";
+import cameraUrl from "../models/3rd_cc1.glb?url";
+import camera2Url from "../models/3rd_cc2.glb?url";
+import camera3Url from "../models/3rd_cc3.glb?url";
+import camera4Url from "../models/3rd_cc4.glb?url";
+import camera5Url from "../models/3rd_cc5.glb?url";
+import camera6Url from "../models/3rd_cc6.glb?url";
+import conferenceRoomCamUrl from "../models/3rd_cc6 (1).glb?url";
+import camera8Url from "../models/3rd_cc8.glb?url";
+import meetingRoomUrl from "../models/3rd_cc_meeting_room.glb?url";
 
-import nd2dCam1Url from "../2nd_cc1.glb?url";
-import nd2dCam2Url from "../2nd_cc2.glb?url";
-import nd2dCam3Url from "../2nd_cc3.glb?url";
-import nd2dCam4Url from "../2nd_cc4.glb?url";
-import nd2dCam5Url from "../2nd_cc5.glb?url";
-import nd2dCam6Url from "../2nd_cc6.glb?url";
+import nd2dCam1Url from "../models/2nd_cc1.glb?url";
+import nd2dCam2Url from "../models/2nd_cc2.glb?url";
+import nd2dCam3Url from "../models/2nd_cc3.glb?url";
+import nd2dCam4Url from "../models/2nd_cc4.glb?url";
+import nd2dCam5Url from "../models/2nd_cc5.glb?url";
+import nd2dCam6Url from "../models/2nd_cc6.glb?url";
 
-import firstFloorUrl from "../1st_floor_up_final.glb?url";
-import secondFloorUrl from "../final_2nd_floor_without_chair_fast.glb?url";
-import fullBuildingUrl from "../full_building.glb?url";
-import groundFloorUrl from "../ground_floor_final.glb?url";
-import outdoorModelUrl from "../outdoor_model.glb?url";
-import thirdFloorUrl from "../3rd_floor_without_chairs.glb?url";
-import secondFloorLoadingBaseUrl from "../2nd_floor_base.glb?url";
-import secondFloorLoadingBaseWallUrl from "../2nd_floor_base_wall.glb?url";
-import thirdFloorLoadingBaseUrl from "../3rd_floor_base.glb?url";
-import thirdFloorLoadingBaseWallUrl from "../3rd_floor_base_wall.glb?url";
-import thirdFloorPillerUrl from "../3rd_floor_piller.glb?url";
+import firstFloorUrl from "../models/1st_floor_up_final.glb?url";
+import secondFloorUrl from "../models/final_2nd_floor_without_chair_fast.glb?url";
+import fullBuildingUrl from "../models/full_building.glb?url";
+import groundFloorUrl from "../models/ground_floor_final.glb?url";
+import outdoorModelUrl from "../models/outdoor_model.glb?url";
+import thirdFloorUrl from "../models/3rd_floor_without_chairs.glb?url";
+import secondFloorLoadingBaseUrl from "../models/2nd_floor_base.glb?url";
+import secondFloorLoadingBaseWallUrl from "../models/2nd_floor_base_wall.glb?url";
+import thirdFloorLoadingBaseUrl from "../models/3rd_floor_base.glb?url";
+import thirdFloorLoadingBaseWallUrl from "../models/3rd_floor_base_wall.glb?url";
+import thirdFloorPillerUrl from "../models/3rd_floor_piller.glb?url";
 
 const chairModelAssets = import.meta.glob<string>(
-  ["../[0-9].glb", "../[0-9][0-9].glb", "../final_2nd_floor_[0-9].glb", "../final_2nd_floor_[0-9][0-9].glb"],
+  ["../models/[0-9].glb", "../models/[0-9][0-9].glb", "../models/final_2nd_floor_[0-9].glb", "../models/final_2nd_floor_[0-9][0-9].glb"],
   {
     query: "?url",
     import: "default",
@@ -49,34 +49,34 @@ const chairModelAssets = import.meta.glob<string>(
 );
 
 const modelAssets: Record<string, string> = {
-  "../3rd_cc1.glb": cameraUrl,
-  "../3rd_cc2.glb": camera2Url,
-  "../3rd_cc3.glb": camera3Url,
-  "../3rd_cc4.glb": camera4Url,
-  "../3rd_cc5.glb": camera5Url,
-  "../3rd_cc6.glb": camera6Url,
-  "../3rd_cc6 (1).glb": conferenceRoomCamUrl,
-  "../3rd_cc8.glb": camera8Url,
-  "../3rd_cc_meeting_room.glb": meetingRoomUrl,
+  "../models/3rd_cc1.glb": cameraUrl,
+  "../models/3rd_cc2.glb": camera2Url,
+  "../models/3rd_cc3.glb": camera3Url,
+  "../models/3rd_cc4.glb": camera4Url,
+  "../models/3rd_cc5.glb": camera5Url,
+  "../models/3rd_cc6.glb": camera6Url,
+  "../models/3rd_cc6 (1).glb": conferenceRoomCamUrl,
+  "../models/3rd_cc8.glb": camera8Url,
+  "../models/3rd_cc_meeting_room.glb": meetingRoomUrl,
 
-  "../2nd_cc1.glb": nd2dCam1Url,
-  "../2nd_cc2.glb": nd2dCam2Url,
-  "../2nd_cc3.glb": nd2dCam3Url,
-  "../2nd_cc4.glb": nd2dCam4Url,
-  "../2nd_cc5.glb": nd2dCam5Url,
-  "../2nd_cc6.glb": nd2dCam6Url,
+  "../models/2nd_cc1.glb": nd2dCam1Url,
+  "../models/2nd_cc2.glb": nd2dCam2Url,
+  "../models/2nd_cc3.glb": nd2dCam3Url,
+  "../models/2nd_cc4.glb": nd2dCam4Url,
+  "../models/2nd_cc5.glb": nd2dCam5Url,
+  "../models/2nd_cc6.glb": nd2dCam6Url,
 
-  "../full_building_opt.glb": fullBuildingUrl,
-  "../ground_floor_final.glb": groundFloorUrl,
-  "../1st_floor_up_final.glb": firstFloorUrl,
-  "../final_2nd_floor_without_chair.glb": secondFloorUrl,
-  "../3rd_floor_without_chairs.glb": thirdFloorUrl,
-  "../2nd_floor_base.glb": secondFloorLoadingBaseUrl,
-  "../2nd_floor_base_wall.glb": secondFloorLoadingBaseWallUrl,
-  "../3rd_floor_base.glb": thirdFloorLoadingBaseUrl,
-  "../3rd_floor_base_wall.glb": thirdFloorLoadingBaseWallUrl,
-  "../3rd_floor_piller.glb": thirdFloorPillerUrl,
-  "../outdoor_model.glb": outdoorModelUrl,
+  "../models/full_building_opt.glb": fullBuildingUrl,
+  "../models/ground_floor_final.glb": groundFloorUrl,
+  "../models/1st_floor_up_final.glb": firstFloorUrl,
+  "../models/final_2nd_floor_without_chair.glb": secondFloorUrl,
+  "../models/3rd_floor_without_chairs.glb": thirdFloorUrl,
+  "../models/2nd_floor_base.glb": secondFloorLoadingBaseUrl,
+  "../models/2nd_floor_base_wall.glb": secondFloorLoadingBaseWallUrl,
+  "../models/3rd_floor_base.glb": thirdFloorLoadingBaseUrl,
+  "../models/3rd_floor_base_wall.glb": thirdFloorLoadingBaseWallUrl,
+  "../models/3rd_floor_piller.glb": thirdFloorPillerUrl,
+  "../models/outdoor_model.glb": outdoorModelUrl,
   ...chairModelAssets
 };
 
@@ -96,10 +96,10 @@ let thirdFloorLoadingBasePromise: Promise<Cesium.Model> | null = null;
 let thirdFloorLoadingBaseWallPromise: Promise<Cesium.Model> | null = null;
 
 export function modelUrl(fileName: string): string {
-  const url = modelAssets[`../${fileName}`];
+  const url = modelAssets[`../models/${fileName}`] ?? modelAssets[`../${fileName}`];
   if (!url) {
-    const known = Object.keys(modelAssets).map((key) => key.replace("../", "")).sort().join(", ");
-    throw new Error(`Missing model asset: ${fileName}. Known root GLBs: ${known}`);
+    const known = Object.keys(modelAssets).map((key) => key.replace("../models/", "").replace("../", "")).sort().join(", ");
+    throw new Error(`Missing model asset: ${fileName}. Known GLBs: ${known}`);
   }
   return url;
 }

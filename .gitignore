@@ -1,2 +1,28 @@
 *.zip
+
+# Build outputs
 .cesium_demo/
+cesium_demo/dist/
+backend/dist/
+
+# Dependencies — never commit these
+node_modules/
+cesium_demo/node_modules/
+backend/node_modules/
+
+# Environment files — contain secrets
+.env
+cesium_demo/.env
+backend/.env
+
+# Logs
+*.log
+cesium_demo/vite-dev.log
+cesium_demo/vite-dev.err.log
+cesium_demo/splash_log.txt
+cesium_demo/splash_log_utf8.txt
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/

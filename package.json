@@ -1,0 +1,25 @@
+{
+  "name": "3d-model11",
+  "version": "1.0.0",
+  "description": "This project has a Vite/Cesium frontend and a small Express backend for attendance tracking.",
+  "main": "import-buildings.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/samata-flodata/3D-Model.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/samata-flodata/3D-Model/issues"
+  },
+  "homepage": "https://github.com/samata-flodata/3D-Model#readme",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "pg": "^8.22.0"
+  }
+}
