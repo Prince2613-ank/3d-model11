@@ -132,8 +132,30 @@
           <span></span><span></span><span></span>
         </div>
       </div>
+      <!-- Building 6 - new compact tower -->
+      <div class="ob-building ob-b6">
+        <div class="ob-bwindows">
+          <span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+      </div>
       <!-- Ground / Road -->
       <div class="ob-road">
+        <!-- Cars and logistics traffic -->
+        <div class="ob-car ob-car-a">
+          <div class="ob-car-body"></div>
+          <div class="ob-car-wheels"><span></span><span></span></div>
+        </div>
+        <div class="ob-car ob-car-b">
+          <div class="ob-car-body"></div>
+          <div class="ob-car-wheels"><span></span><span></span></div>
+        </div>
+        <div class="ob-freight-truck">
+          <div class="ob-freight-cab"></div>
+          <div class="ob-freight-trailer"></div>
+          <div class="ob-freight-wheels"><span></span><span></span><span></span></div>
+        </div>
         <!-- Walking workers -->
         <div class="ob-worker ob-worker-a">
           <div class="ob-worker-head"></div>
@@ -404,10 +426,11 @@
     <span></span>
   </button>
 
-  <button id="nearbyNavBtn" class="nearby-nav-btn" aria-label="Nearby Amenities" title="Explore Nearby" style="display:none">
+  <button id="nearbyNavBtn" class="nearby-nav-btn" aria-label="Nearby Amenities" aria-pressed="false" title="Explore Nearby Amenities" style="display:none">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="11" cy="11" r="7"/>
-      <line x1="16.65" y1="16.65" x2="21" y2="21"/>
+      <circle cx="12" cy="12" r="9"/>
+      <path d="M15.5 8.5 13 13l-4.5 2.5L11 11z"/>
+      <circle cx="12" cy="12" r="1"/>
     </svg>
   </button>
 
@@ -551,6 +574,65 @@
     <p><b>Floor:</b> <span id="chairFloor"></span></p>
     <p><b>Status:</b> <span id="chairStatus"></span></p>
     <button id="chairCloseBtn" type="button">Close</button>
+  </section>
+
+  <section id="assetPopup" class="common-panel asset-popup" hidden>
+    <div class="panel-header">
+      <span id="assetPopupTitle">Object</span>
+      <button id="assetPopupCloseBtn" class="panel-close-btn" type="button" aria-label="Close">✕</button>
+    </div>
+    <img id="assetPopupImage" class="asset-popup-image" alt="" hidden />
+    <p class="asset-popup-status">
+      <span id="assetPopupStatusDot" class="asset-status-dot"></span>
+      <span id="assetPopupStatusText">Unknown</span>
+    </p>
+    <p id="assetPopupDescription" class="asset-popup-description"></p>
+    <p id="assetPopupUnregistered" class="asset-popup-unregistered" hidden>
+      This item isn't registered as a manageable asset yet — ask an admin to add it.
+    </p>
+    <div class="asset-popup-actions">
+      <button id="assetPopupNavigateBtn" class="btn" type="button">Navigate</button>
+      <button id="assetPopupComplaintBtn" class="btn btn-primary" type="button">Raise Complaint</button>
+    </div>
+  </section>
+
+  <section id="complaintFormPopup" class="common-panel complaint-form-popup" hidden>
+    <div class="panel-header">
+      <span>Raise Complaint</span>
+      <button id="complaintFormCloseBtn" class="panel-close-btn" type="button" aria-label="Close">✕</button>
+    </div>
+
+    <div id="complaintSignInPrompt" hidden>
+      <p>Sign in with Google to report an issue.</p>
+      <button id="complaintSignInBtn" class="btn btn-primary" type="button">Sign in with Google</button>
+    </div>
+
+    <form id="complaintForm">
+      <label for="complaintIssueType">Issue Type</label>
+      <input id="complaintIssueType" type="text" placeholder="e.g. Not working, Damaged, Missing" required />
+
+      <label for="complaintPriority">Priority</label>
+      <select id="complaintPriority">
+        <option value="low">Low</option>
+        <option value="medium" selected>Medium</option>
+        <option value="high">High</option>
+        <option value="critical">Critical</option>
+      </select>
+
+      <label for="complaintDescription">Description</label>
+      <textarea id="complaintDescription" rows="3" required></textarea>
+
+      <label for="complaintPhotos">Upload Images</label>
+      <input id="complaintPhotos" type="file" accept="image/*" multiple />
+
+      <p id="complaintFormError" class="complaint-form-error" hidden></p>
+      <p id="complaintFormSuccess" class="complaint-form-success" hidden>Complaint submitted. Thank you!</p>
+
+      <div class="complaint-form-actions">
+        <button id="complaintCancelBtn" type="button" class="btn">Cancel</button>
+        <button id="complaintSubmitBtn" type="submit" class="btn btn-primary">Submit</button>
+      </div>
+    </form>
   </section>
 
   <section id="cctvPanel">

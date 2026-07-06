@@ -1,6 +1,39 @@
 services:
   - type: web
     name: cesium-demo
+    runtime: static
+    buildCommand: cd cesium_demo && npm ci && npm run build
+    staticPublishPath: cesium_demo/dist
+    headers:
+      # Content-hashed bundles/models (dist/assets/*-<hash>.ext) — safe to cache forever
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      # CesiumJS static lib assets (Workers/ThirdParty/Assets/Widgets) — not content-hashed,
+      # so keep a shorter cache in case the Cesium version changes between deploys
+      - path: /cesium/*
+        name: Cache-Control
+        value: public, max-age=604800
+      # Never let the shell HTML go stale — it's what points at the latest hashed assets
+      - path: /index.html
+        name: Cache-Control
+        value: public, max-age=0, must-revalidate
+      - path: /
+        name: Cache-Control
+        value: public, max-age=0, must-revalidate
+
+  - type: web
+    name: gis-platform-backend
     runtime: node
-    buildCommand: cd cesium_demo && npm ci && npm run build && cd ../server && npm ci
-    startCommand: cd server && npm start
+    rootDir: backend
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: CORS_ORIGIN
+        sync: false
+      - key: DATABASE_URL
+        sync: false

@@ -1,0 +1,158 @@
+import { assetRepository } from "../repositories/assetRepository";
+import { assetHistoryRepository } from "../repositories/assetHistoryRepository";
+import { activityLogRepository } from "../repositories/activityLogRepository";
+import { Asset, AssetCategory, AuthenticatedUser } from "../types/domain";
+import { NotFoundError } from "../errors";
+
+
+export interface AssetInput {
+  objectKey: string;
+  name: string;
+  category: AssetCategory;
+  roomId?: string | null;
+  floorId: string;
+  description?: string | null;
+  imageUrl?: string | null;
+  purchaseDate?: string | null;
+  warrantyExpiry?: string | null;
+  maintenanceDate?: string | null;
+  attachments?: string[];
+}
+
+export const assetService = {
+  async listByFloor(floorId: string): Promise<Asset[]> {
+    return assetRepository.listByFloor(floorId);
+  },
+
+  async getById(id: string): Promise<Asset | null> {
+    return assetRepository.findById(id);
+  },
+
+  async getByObjectKey(objectKey: string): Promise<Asset | null> {
+    return assetRepository.findByObjectKey(objectKey);
+  },
+
+  async create(admin: AuthenticatedUser, input: AssetInput): Promise<Asset> {
+    const asset = await assetRepository.insert({
+      object_key: input.objectKey,
+      name: input.name,
+      category: input.category,
+      room_id: input.roomId ?? null,
+      floor_id: input.floorId,
+      description: input.description ?? null,
+      image_url: input.imageUrl ?? null,
+      purchase_date: input.purchaseDate ?? null,
+      warranty_expiry: input.warrantyExpiry ?? null,
+      maintenance_date: input.maintenanceDate ?? null,
+      attachments: JSON.stringify(input.attachments ?? []),
+      created_by: admin.id,
+      updated_by: admin.id
+    });
+
+    await Promise.all([
+      assetHistoryRepository.record({ assetId: asset.id, action: "created", changedBy: admin.id, newValues: asset }),
+      activityLogRepository.record({
+        actorId: admin.id,
+        actorRole: admin.role,
+        action: "asset_created",
+        entityType: "asset",
+        entityId: asset.id
+      })
+    ]);
+
+    return asset;
+  },
+
+  async update(admin: AuthenticatedUser, id: string, input: Partial<AssetInput>): Promise<Asset> {
+    const existing = await assetRepository.findById(id);
+    if (!existing) throw new NotFoundError("Asset", id);
+
+    const columns: Record<string, unknown> = { updated_by: admin.id };
+    if (input.name !== undefined) columns.name = input.name;
+    if (input.category !== undefined) columns.category = input.category;
+    if (input.description !== undefined) columns.description = input.description;
+    if (input.imageUrl !== undefined) columns.image_url = input.imageUrl;
+    if (input.purchaseDate !== undefined) columns.purchase_date = input.purchaseDate;
+    if (input.warrantyExpiry !== undefined) columns.warranty_expiry = input.warrantyExpiry;
+    if (input.maintenanceDate !== undefined) columns.maintenance_date = input.maintenanceDate;
+    if (input.attachments !== undefined) columns.attachments = JSON.stringify(input.attachments);
+
+    const updated = await assetRepository.update(id, columns);
+    if (!updated) throw new NotFoundError("Asset", id);
+
+    await Promise.all([
+      assetHistoryRepository.record({
+        assetId: id,
+        action: "updated",
+        changedBy: admin.id,
+        oldValues: existing,
+        newValues: updated
+      }),
+      activityLogRepository.record({
+        actorId: admin.id,
+        actorRole: admin.role,
+        action: "asset_updated",
+        entityType: "asset",
+        entityId: id,
+        metadata: input
+      })
+    ]);
+
+    return updated;
+  },
+
+  async move(admin: AuthenticatedUser, id: string, target: { floorId: string; roomId?: string | null }): Promise<Asset> {
+    const existing = await assetRepository.findById(id);
+    if (!existing) throw new NotFoundError("Asset", id);
+
+    const updated = await assetRepository.update(id, {
+      floor_id: target.floorId,
+      room_id: target.roomId ?? null,
+      updated_by: admin.id
+    });
+    if (!updated) throw new NotFoundError("Asset", id);
+
+    await Promise.all([
+      assetHistoryRepository.record({
+        assetId: id,
+        action: "moved",
+        changedBy: admin.id,
+        oldValues: { floor_id: existing.floor_id, room_id: existing.room_id },
+        newValues: { floor_id: target.floorId, room_id: target.roomId ?? null }
+      }),
+      activityLogRepository.record({
+        actorId: admin.id,
+        actorRole: admin.role,
+        action: "asset_moved",
+        entityType: "asset",
+        entityId: id,
+        metadata: target
+      })
+    ]);
+
+    return updated;
+  },
+
+  async remove(admin: AuthenticatedUser, id: string): Promise<Asset> {
+    const deleted = await assetRepository.softDelete(id);
+    if (!deleted) throw new NotFoundError("Asset", id);
+
+    await Promise.all([
+      assetHistoryRepository.record({ assetId: id, action: "deleted", changedBy: admin.id }),
+      activityLogRepository.record({
+        actorId: admin.id,
+        actorRole: admin.role,
+        action: "asset_deleted",
+        entityType: "asset",
+        entityId: id
+      })
+    ]);
+
+    return deleted;
+  },
+
+  async history(assetId: string) {
+    return assetHistoryRepository.listByAsset(assetId);
+  }
+};
+

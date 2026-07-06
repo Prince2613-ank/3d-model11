@@ -244,11 +244,13 @@ body {
 .ob-b3 { left:30%; width:130px; height:260px; background:linear-gradient(180deg,#1a57d6,#0a2d7a); animation-delay:0.05s; box-shadow:0 0 40px rgba(42,169,255,0.3); }
 .ob-b4 { right:20%; width:90px; height:130px; background:linear-gradient(180deg,#5b8ab2,#354f6e); animation-delay:0.2s; }
 .ob-b5 { right:4%; width:75px;  height:195px; background:linear-gradient(180deg,#2a7fc4,#124466); animation-delay:0.1s; }
+.ob-b6 { left:56%; width:86px; height:168px; background:linear-gradient(180deg,#5b89be,#2a4f78); animation-delay:0.26s; box-shadow:0 0 22px rgba(42,169,255,0.2); }
 @keyframes ob-building-rise { from{transform:scaleY(0);transform-origin:bottom} to{transform:scaleY(1);transform-origin:bottom} }
 
 .ob-bwindows { position:absolute; inset:14px 8px 8px; display:grid; grid-template-columns:repeat(4,1fr); gap:5px; }
 .ob-b4 .ob-bwindows { grid-template-columns:repeat(2,1fr); }
 .ob-b5 .ob-bwindows { grid-template-columns:repeat(3,1fr); }
+.ob-b6 .ob-bwindows { grid-template-columns:repeat(5,1fr); inset:12px 8px 8px; gap:4px; }
 .ob-bwindows span { border-radius:2px; background:rgba(255,255,255,0.15); animation:ob-window-blink 2.4s ease-in-out infinite; }
 .ob-bwindows span:nth-child(2n) { animation-delay:-0.4s; background:rgba(255,214,64,0.55); }
 .ob-bwindows span:nth-child(3n) { animation-delay:-0.9s; background:rgba(73,214,164,0.4); }
@@ -1167,11 +1169,7 @@ body {
 }
 
 .building-demo-shell {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 292px;
-  align-items: stretch;
-  gap: 22px;
-  min-height: 440px;
+  display: none;
 }
 
 .building-demo-viewport {
@@ -5853,9 +5851,21 @@ body.camera-view-active .hamburger-btn {
   flex-shrink: 0;
   margin: 0 !important;
 }
+.nearby-nav-btn::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #36d18e;
+  box-shadow: 0 0 0 0 rgba(54, 209, 142, 0.45);
+  animation: nearby-nav-pulse 1.8s ease-out infinite;
+}
 .nearby-nav-btn svg {
-  width: 17px;
-  height: 17px;
+  width: 21px;
+  height: 21px;
   stroke: #1a3ea8;
 }
 .nearby-nav-btn:hover {
@@ -5870,7 +5880,21 @@ body.camera-view-active .hamburger-btn {
   border-color: #1a57d6;
   box-shadow: 0 4px 14px rgba(26, 87, 214, 0.35);
 }
+.nearby-nav-btn--active::after {
+  background: #ffffff;
+  box-shadow: none;
+  animation: none;
+}
 .nearby-nav-btn--active svg { stroke: #fff; }
+
+@keyframes nearby-nav-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(54, 209, 142, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 8px rgba(54, 209, 142, 0);
+  }
+}
 
 /* Hide dot span — not needed in icon-only mode */
 .nearby-nav-label,
@@ -5888,6 +5912,7 @@ body.camera-view-active .nearby-nav-btn {
 
 @media (max-width: 768px) {
   .nearby-nav-btn { width: 30px !important; height: 30px !important; }
+  .nearby-nav-btn svg { width: 18px; height: 18px; }
 }
 
 /* Sidebar container for left-side panels */
@@ -7255,6 +7280,115 @@ body.camera-view-active .nearby-nav-btn {
   animation:ob-wheel-spin 0.35s linear infinite;
 }
 
+/* ── Added live traffic (cars + freight truck) ───────────────────────────── */
+.ob-car {
+  position:absolute;
+  left:-72px;
+  width:52px;
+  animation:ob-car-drive 17s linear infinite;
+  z-index:3;
+}
+.ob-car-a { bottom:4px; animation-delay:1.2s; }
+.ob-car-b { bottom:13px; animation-duration:20s; animation-delay:8.4s; opacity:0.9; }
+@keyframes ob-car-drive { from{left:-72px} to{left:108%} }
+
+.ob-car-body {
+  position:relative;
+  width:52px; height:14px;
+  border-radius:8px 10px 5px 5px;
+  background:linear-gradient(135deg,#2aa9ff,#1a57d6);
+  box-shadow:0 4px 10px rgba(0,0,0,0.28);
+}
+.ob-car-body::before {
+  content:'';
+  position:absolute;
+  top:-7px; left:10px;
+  width:24px; height:10px;
+  border-radius:7px 7px 2px 2px;
+  background:linear-gradient(135deg,rgba(185,235,255,0.95),rgba(115,180,230,0.78));
+}
+.ob-car-body::after {
+  content:'';
+  position:absolute;
+  right:-3px; top:5px;
+  width:4px; height:3px;
+  border-radius:2px;
+  background:#fff6a2;
+  box-shadow:0 0 8px rgba(255,240,130,0.8);
+}
+
+.ob-car-wheels {
+  position:absolute;
+  left:7px; right:7px;
+  top:10px;
+  display:flex;
+  justify-content:space-between;
+}
+.ob-car-wheels span {
+  width:8px; height:8px;
+  border-radius:50%;
+  background:#191919;
+  border:2px solid #525252;
+  animation:ob-wheel-spin 0.35s linear infinite;
+}
+
+.ob-freight-truck {
+  position:absolute;
+  right:-126px;
+  bottom:11px;
+  width:108px;
+  animation:ob-freight-drive 24s linear 4.2s infinite;
+  z-index:2;
+}
+@keyframes ob-freight-drive { from{right:-126px} to{right:108%} }
+
+.ob-freight-cab {
+  position:absolute;
+  left:0; bottom:9px;
+  width:26px; height:18px;
+  border-radius:3px 7px 0 0;
+  background:linear-gradient(135deg,#3ecf8e,#167a53);
+}
+.ob-freight-cab::before {
+  content:'';
+  position:absolute;
+  top:3px; left:5px;
+  width:15px; height:8px;
+  border-radius:2px;
+  background:rgba(190,236,255,0.74);
+}
+
+.ob-freight-trailer {
+  position:absolute;
+  left:22px; bottom:9px;
+  width:82px; height:22px;
+  border-radius:4px;
+  background:linear-gradient(135deg,#6ca2d2,#3f6f9e);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,0.2);
+}
+.ob-freight-trailer::before {
+  content:'';
+  position:absolute;
+  inset:4px;
+  border-radius:2px;
+  background:repeating-linear-gradient(90deg,rgba(255,255,255,0.22) 0 8px,rgba(20,58,98,0.14) 8px 16px);
+}
+
+.ob-freight-wheels {
+  position:absolute;
+  left:9px; right:10px;
+  bottom:0;
+  display:flex;
+  justify-content:space-between;
+}
+.ob-freight-wheels span {
+  width:9px; height:9px;
+  border-radius:50%;
+  background:#171717;
+  border:2px solid #555;
+  animation:ob-wheel-spin 0.35s linear infinite;
+}
+
 /* ── Worker C — hard hat, orange vest, walks opposite direction ───────────── */
 .ob-worker-c { animation-duration:14s; animation-delay:-6s; transform:scaleX(-1); }
 .ob-wc-head {
@@ -7294,5 +7428,132 @@ body.camera-view-active .nearby-nav-btn {
   width:5px; height:3px;
   border:1.5px solid #c8a060;
   border-radius:2px 2px 0 0;
+}
+
+/* ── Digital Twin: asset popup + complaint form ─────────────────────────── */
+.btn-primary {
+  background: #1a57d6 !important;
+  border-color: #1a57d6 !important;
+  color: #fff !important;
+  font-weight: 600;
+}
+.btn-primary:hover {
+  background: #123f9e !important;
+}
+
+.asset-popup {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1200;
+}
+
+.asset-popup-image {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+
+.asset-popup-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.asset-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #9aa0a6;
+  display: inline-block;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.04);
+}
+.asset-status-dot[data-status="ok"] { background: #2e7d32; }
+.asset-status-dot[data-status="pending"] { background: #c62828; }
+.asset-status-dot[data-status="assigned"] { background: #e08800; }
+.asset-status-dot[data-status="resolved"] { background: #2e7d32; }
+
+.asset-popup-description {
+  font-size: 13px;
+  color: #444;
+  margin: 0 0 10px;
+}
+
+.asset-popup-unregistered {
+  font-size: 12px;
+  color: #97640a;
+  background: rgba(224, 136, 0, 0.12);
+  border-radius: 8px;
+  padding: 8px;
+  margin: 0 0 10px;
+}
+
+.asset-popup-actions {
+  display: flex;
+  gap: 8px;
+}
+.asset-popup-actions .btn {
+  margin-bottom: 0;
+}
+
+.complaint-form-popup {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1300;
+  width: 320px !important;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.complaint-form-popup label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  margin: 8px 0 4px;
+}
+
+.complaint-form-popup textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.complaint-form-error {
+  font-size: 12px;
+  color: #c62828;
+  background: rgba(198, 40, 40, 0.08);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.complaint-form-success {
+  font-size: 12px;
+  color: #2e7d32;
+  background: rgba(46, 125, 50, 0.1);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.complaint-form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.complaint-form-actions .btn {
+  margin-bottom: 0;
 }
 

@@ -91,7 +91,13 @@ function injectHTML(): void {
 
 function wireEvents(): void {
   // Navbar toggle button (lives in index.html)
-  elNavBtn.addEventListener("click", () => (panelOpen ? closePanel() : openPanel()));
+  elNavBtn.addEventListener("click", () => {
+    if (panelOpen) {
+      closePanel();
+      return;
+    }
+    openPanel();
+  });
 
   // Close
   document.getElementById("amClose")!.addEventListener("click", closePanel);
@@ -173,12 +179,17 @@ function openPanel(): void {
   panelOpen = true;
   elPanel.classList.add("am-panel--open");
   elNavBtn.classList.add("nearby-nav-btn--active");
+  elNavBtn.setAttribute("aria-pressed", "true");
+  elNavBtn.setAttribute("title", "Close Nearby Amenities");
+  elSearch.focus();
   drawRadiusBorder(searchLat, searchLon, currentRadius);
 }
 function closePanel(): void {
   panelOpen = false;
   elPanel.classList.remove("am-panel--open");
   elNavBtn.classList.remove("nearby-nav-btn--active");
+  elNavBtn.setAttribute("aria-pressed", "false");
+  elNavBtn.setAttribute("title", "Explore Nearby Amenities");
   clearAmenityHighlights();
   clearRadiusBorder();
 }

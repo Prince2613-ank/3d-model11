@@ -15,6 +15,7 @@ export const viewer = new Cesium.Viewer("cesiumContainer", {
   homeButton: false,
   sceneModePicker: false,
   navigationHelpButton: false,
+  fullscreenButton: false,
   shadows: false,
   shouldAnimate: true,
   infoBox: false,

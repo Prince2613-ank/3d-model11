@@ -2,6 +2,8 @@ import { Cesium, viewer, ALT_2ND, ALT_3RD } from "./viewer";
 import { BUILDING_ENTRANCE, lookupRoomPOI, type RoomPOI } from "./buildingPOI";
 import outdoorNavigationPointsUrl from "../geodata/Outdoor_navigation_points.geojson?url";
 import { ChairModel, getPickedChair, highlightChair, findChairByName, chairNavPoints, getActualChairPosition, loadChairsForFloor, extractAndCacheChairPositions } from "./chairs";
+import { getChairBaseColor, getCachedChairStatus } from "./assetStatus";
+import { openAssetPopup } from "./assetPopup";
 import {
   CameraModel,
   getPickedCamera,
@@ -2433,7 +2435,7 @@ function closeChairPopup(): void {
   element<HTMLElement>("chairPopup").style.display = "none";
   stopArrivalBlink();
   if (arrivalHighlightedChair) {
-    highlightChair(arrivalHighlightedChair, Cesium.Color.WHITE);
+    highlightChair(arrivalHighlightedChair, getChairBaseColor(arrivalHighlightedChair));
     arrivalHighlightedChair = null;
   }
 }
@@ -2461,7 +2463,7 @@ function stopArrivalBlink(): void {
 export function showChairArrivalEffect(name: string, floor: 3 | 4): void {
   stopArrivalBlink();
   if (arrivalHighlightedChair) {
-    highlightChair(arrivalHighlightedChair, Cesium.Color.WHITE);
+    highlightChair(arrivalHighlightedChair, getChairBaseColor(arrivalHighlightedChair));
     arrivalHighlightedChair = null;
   }
   const chair = findChairByName(name, floor);
@@ -3434,7 +3436,8 @@ export function installSceneInteractions(
 
     const chair = getPickedChair(click.position);
     if (chair) {
-      showChairPopup(chair, getSelectedFloor());
+      const floor = getSelectedFloor();
+      if (floor === 3 || floor === 4) void openAssetPopup(chair, floor);
       return;
     }
 
@@ -3821,7 +3824,7 @@ export function installSceneInteractions(
     }
 
     if (lastHoveredChair) {
-      highlightChair(lastHoveredChair);
+      highlightChair(lastHoveredChair, getChairBaseColor(lastHoveredChair));
       lastHoveredChair = null;
     }
 
@@ -3832,7 +3835,16 @@ export function installSceneInteractions(
         lastHoveredChair = chair;
         highlightChair(chair, Cesium.Color.BLUE);
         viewer.scene.canvas.style.cursor = "pointer";
-        hideTooltip();
+        const cachedStatus = getCachedChairStatus(chair);
+        if (cachedStatus) {
+          showTooltip(
+            `<b>${chair.chairName ?? "Object"}</b><br/>Status: ${cachedStatus}`,
+            movement.endPosition.x,
+            movement.endPosition.y
+          );
+        } else {
+          hideTooltip();
+        }
         viewer.scene.requestRender();
         return;
       }

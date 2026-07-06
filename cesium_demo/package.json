@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@supabase/supabase-js": "^2.110.0",
     "cesium": "latest"
   },
   "devDependencies": {

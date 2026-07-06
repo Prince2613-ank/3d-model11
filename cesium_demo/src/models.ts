@@ -10,6 +10,7 @@ import {
   viewer
 } from "./viewer";
 import { FLOOR_CAMERAS } from "./config";
+import { isLowPowerDevice } from "./device";
 import cameraUrl from "../models/3rd_cc1.glb?url";
 import camera2Url from "../models/3rd_cc2.glb?url";
 import camera3Url from "../models/3rd_cc3.glb?url";
@@ -28,7 +29,8 @@ import nd2dCam5Url from "../models/2nd_cc5.glb?url";
 import nd2dCam6Url from "../models/2nd_cc6.glb?url";
 
 import firstFloorUrl from "../models/1st_floor_up_final.glb?url";
-import secondFloorUrl from "../models/final_2nd_floor_without_chair_fast.glb?url";
+import secondFloorFullUrl from "../models/final_2nd_floor_without_chair.glb?url";
+import secondFloorFastUrl from "../models/final_2nd_floor_without_chair_fast.glb?url";
 import fullBuildingUrl from "../models/full_building.glb?url";
 import groundFloorUrl from "../models/ground_floor_final.glb?url";
 import outdoorModelUrl from "../models/outdoor_model.glb?url";
@@ -69,7 +71,8 @@ const modelAssets: Record<string, string> = {
   "../models/full_building_opt.glb": fullBuildingUrl,
   "../models/ground_floor_final.glb": groundFloorUrl,
   "../models/1st_floor_up_final.glb": firstFloorUrl,
-  "../models/final_2nd_floor_without_chair.glb": secondFloorUrl,
+  "../models/final_2nd_floor_without_chair.glb": secondFloorFullUrl,
+  "../models/final_2nd_floor_without_chair_fast.glb": secondFloorFastUrl,
   "../models/3rd_floor_without_chairs.glb": thirdFloorUrl,
   "../models/2nd_floor_base.glb": secondFloorLoadingBaseUrl,
   "../models/2nd_floor_base_wall.glb": secondFloorLoadingBaseWallUrl,
@@ -402,7 +405,12 @@ function floorFileName(floor: number): string | null {
     case 2:
       return "1st_floor_up_final.glb";
     case 3:
-      return "final_2nd_floor_without_chair.glb";
+      // Only this floor has a genuinely lighter, same-fidelity variant
+      // (35 MB vs 55 MB). The 3rd-floor "_fast" file is mislabeled — it's
+      // actually larger than the default, so it's intentionally not used here.
+      return isLowPowerDevice()
+        ? "final_2nd_floor_without_chair_fast.glb"
+        : "final_2nd_floor_without_chair.glb";
     case 4:
       return "3rd_floor_without_chairs.glb";
     default:

@@ -38,6 +38,8 @@ import {
   getCorridorDrawGeoJSON,
 } from "./navigation";
 import { clearCctvViewshed } from "./cameraShed/cctvViewshed";
+import { initAssetPopup } from "./assetPopup";
+import { initComplaintForm } from "./complaintForm";
 import {
   bindCctvPanel,
   bindUiControls,
@@ -138,6 +140,8 @@ async function bootstrap(): Promise<void> {
   });
   bindCctvPanel();
   installMapDirectionsControl();
+  initAssetPopup();
+  initComplaintForm();
 
 
   document.getElementById("flyPreviewBtn")?.addEventListener("click", async () => {
@@ -156,10 +160,8 @@ async function bootstrap(): Promise<void> {
   const roomLoad = loadRooms().then(applySelectedFloor);
   const modelLoad = loadModels();
 
-  await playOnboardingSplash();
-
   const isMobile = window.innerWidth < 768;
-  viewer.camera.flyTo({
+  viewer.camera.setView({
     destination: Cesium.Cartesian3.fromDegrees(
       isMobile ? 77.133683 : 77.133783,
       28.670903,
@@ -170,8 +172,9 @@ async function bootstrap(): Promise<void> {
       pitch: Cesium.Math.toRadians(-84.94),
       roll: 0,
     },
-    duration: 1.5,
   });
+
+  await playOnboardingSplash();
 
   await Promise.all([modelLoad, roomLoad]);
   await installCorridorPointDebug();

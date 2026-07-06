@@ -9,6 +9,7 @@ import {
   viewer
 } from "./viewer";
 import { modelUrl } from "./models";
+import { applyChairStatusTint } from "./assetStatus";
 
 export interface ChairModel extends Cesium.Model {
   chairName?: string;
@@ -123,6 +124,7 @@ async function loadSecondFloorChairs(onChairLoaded?: (chair: ChairModel) => void
           );
           secondFloorChairs.push(model);
           onChairLoaded?.(model);
+          void applyChairStatusTint(model);
         } catch (error) {
           console.warn(`Missing 2nd floor chair file: final_2nd_floor_${index}.glb`, error);
         }
@@ -148,6 +150,7 @@ async function loadThirdFloorChairs(onChairLoaded?: (chair: ChairModel) => void)
           );
           thirdFloorChairs.push(model);
           onChairLoaded?.(model);
+          void applyChairStatusTint(model);
         } catch (error) {
           console.warn(`Missing 3rd floor chair file: ${index}.glb`, error);
         }
