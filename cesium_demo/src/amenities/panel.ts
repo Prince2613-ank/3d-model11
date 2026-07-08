@@ -373,13 +373,15 @@ function renderList(): void {
   elEmpty.hidden  = true;
   elCount.textContent = total > 0 ? `${total} found` : "";
 
-  // Highlight all result buildings on the Cesium map
-  const allAmenities: ParsedAmenity[] = [];
-  for (const items of results.values()) allAmenities.push(...items);
-  if (allAmenities.length > 0) {
-    // Use the first active category's color, or red
-    const firstDef = results.size > 0 ? AMENITY_DEF_MAP.get([...results.keys()][0]) : null;
-    void highlightAmenitySet(allAmenities, firstDef?.color ?? "#e05050");
+  // Highlight all result buildings on the Cesium map, each in its own category's color
+  const allEntries: { amenity: ParsedAmenity; color: string }[] = [];
+  for (const [cat, items] of results) {
+    const def = AMENITY_DEF_MAP.get(cat);
+    const color = def?.color ?? "#e05050";
+    for (const a of items) allEntries.push({ amenity: a, color });
+  }
+  if (allEntries.length > 0) {
+    void highlightAmenitySet(allEntries);
   } else {
     clearAmenityHighlights();
   }

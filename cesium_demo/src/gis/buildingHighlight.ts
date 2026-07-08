@@ -95,7 +95,6 @@ function renderSingleFootprint(fp: BuildingFootprint, label?: string): void {
       outlineWidth: 2,
       extrudedHeight: fp.height,
       height: 0,
-      classificationType: Cesium.ClassificationType.TERRAIN,
     },
   });
 
@@ -147,45 +146,49 @@ async function fetchFootprint(lat: number, lon: number): Promise<BuildingFootpri
   } catch { return null; }
 }
 
-/**
- * Highlight all buildings for a set of amenity results.
- * Called automatically when the Explore Nearby panel renders a category.
- */
-export async function highlightAmenitySet(
-  amenities: ParsedAmenity[],
-  color = "#e05050"
-): Promise<void> {
-  clearAmenityHighlights();
-  if (!amenities.length) return;
+export interface AmenityHighlightEntry {
+  amenity: ParsedAmenity;
+  color: string; // that amenity's own category color, e.g. AmenityDef.color
+}
 
-  // Limit to 40 to avoid overwhelming the DB
-  const batch = amenities.slice(0, 40);
+/**
+ * Highlight all buildings for a set of amenity results, each in its own
+ * category's color. Called automatically when the Explore Nearby panel
+ * renders a category.
+ */
+export async function highlightAmenitySet(entries: AmenityHighlightEntry[]): Promise<void> {
+  clearAmenityHighlights();
+  if (!entries.length) return;
+
+  // Safety ceiling only (real searches rarely exceed this) — was capped at 40,
+  // which silently dropped real-height rendering for anything beyond the
+  // first 40 results in a busy area.
+  const batch = entries.slice(0, 300);
 
   // Fetch all in parallel
   const footprints = await Promise.allSettled(
-    batch.map((a) => fetchFootprint(a.lat, a.lon))
+    batch.map((e) => fetchFootprint(e.amenity.lat, e.amenity.lon))
   );
-
-  const cesiumColor = Cesium.Color.fromCssColorString(color);
 
   footprints.forEach((result, i) => {
     if (result.status !== "fulfilled" || !result.value) return;
     const fp   = result.value;
-    const am   = batch[i];
+    const { amenity: am, color } = batch[i];
     const ring = getFirstRing(fp.geojson);
     if (!ring?.length) return;
+
+    const cesiumColor = Cesium.Color.fromCssColorString(color);
 
     const entity = viewer.entities.add({
       position: Cesium.Cartesian3.fromDegrees(am.lon, am.lat),
       polygon: {
         hierarchy: new Cesium.PolygonHierarchy(ringToCartesian(ring)),
-        material: cesiumColor.withAlpha(0.35),
+        material: cesiumColor,
         outline: true,
-        outlineColor: cesiumColor.withAlpha(0.9),
+        outlineColor: cesiumColor.brighten(0.4, new Cesium.Color()),
         outlineWidth: 2,
         extrudedHeight: fp.height,
         height: 0,
-        classificationType: Cesium.ClassificationType.TERRAIN,
       },
       label: {
         text: am.name || "Building",

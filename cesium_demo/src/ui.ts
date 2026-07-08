@@ -969,11 +969,10 @@ function createMapToolbarButton(): HTMLButtonElement {
   button.setAttribute("aria-label", "Google Maps route");
   button.innerHTML = `
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path fill="#4285F4" d="M12 2.2a6.8 6.8 0 0 1 6.8 6.8c0 4.7-6.8 12.8-6.8 12.8S5.2 13.7 5.2 9A6.8 6.8 0 0 1 12 2.2z"/>
-      <path fill="#34A853" d="M12 21.8s6.8-8.1 6.8-12.8c0-1.4-.4-2.8-1.2-3.9L8.3 18.7c1.8 2.1 3.7 3.1 3.7 3.1z"/>
-      <path fill="#FBBC05" d="M5.2 9c0 2.2 1.5 5.1 3.1 7.3l9.3-11.2A6.8 6.8 0 0 0 5.2 9z"/>
-      <path fill="#EA4335" d="M12 2.2A6.8 6.8 0 0 0 5.2 9c0 1.4.6 3.1 1.4 4.7l4.1-4.1A2.2 2.2 0 0 1 12 6.8c.7 0 1.3.3 1.7.7l3.9-2.4A6.8 6.8 0 0 0 12 2.2z"/>
-      <circle cx="12" cy="9" r="2.3" fill="#fff"/>
+      <path d="M5 18.5a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z" fill="currentColor"/>
+      <path d="M19 8a2.25 2.25 0 1 0 0-4.5A2.25 2.25 0 0 0 19 8Z" fill="currentColor"/>
+      <path d="M7.2 16.25h3.35a3.25 3.25 0 0 0 0-6.5H9.45a3.25 3.25 0 0 1 0-6.5H16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+      <path d="m14.35 1.8 2.35 1.45-2.35 1.45" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
   `;
   return button;

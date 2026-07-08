@@ -5,6 +5,7 @@ import helmet from "helmet";
 import compression from "compression";
 import buildingRouter from "./routes/building";
 import amenityRouter from "./routes/amenity";
+import solarRouter from "./routes/solar";
 import meRouter from "./routes/me";
 import dtBuildingsRouter from "./routes/dtBuildings";
 import floorsRouter from "./routes/floors";
@@ -42,6 +43,7 @@ app.get("/api/health", async (_req, res) => {
 // Existing GIS features
 app.use("/api/building", buildingRouter);
 app.use("/api/amenity",  amenityRouter);
+app.use("/api/solar",    solarRouter);
 
 // Digital Twin platform
 app.use("/api/me", meRouter);

@@ -1,0 +1,14 @@
+{
+  "last_release": "2026-06-17.0",
+  "last_run": "2026-07-06T10:09:29.558067+00:00",
+  "theme": "buildings",
+  "type": "building",
+  "bbox": {
+    "xmin": 77.128695,
+    "ymin": 28.665948,
+    "xmax": 77.138695,
+    "ymax": 28.675948
+  },
+  "backend": "geojson",
+  "output": "C:\\Users\\princ\\3d-model11\\data\\buildings\\overture-buildings.geojson"
+}

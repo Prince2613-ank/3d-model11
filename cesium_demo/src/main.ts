@@ -61,6 +61,7 @@ import {
 import { createBooking, getCurrentEvents, showToast, fetchGlobalEvents, matchRoomName } from "./booking";
 import { initAssistant, handleAssistantQuery, type MarkerPoint } from "./assistant";
 import { initAmenities } from "./amenities/index";
+import { mountSolarWorkspace } from "./solar-react/mount";
 import { highlightBuildingAt } from "./gis/buildingHighlight";
 
 // Guard: if WebGL context is lost (GPU OOM, driver reset), show spinner and reload
@@ -227,6 +228,7 @@ async function bootstrap(): Promise<void> {
   void initializeCalendar();
   installAssistant();
   initAmenities();
+  mountSolarWorkspace();
   setNavigationMessage("Choose rooms to start navigation.");
 
   // ── Arrival view tuner (enable with ?arrivalViewDebug=1 in URL) ──

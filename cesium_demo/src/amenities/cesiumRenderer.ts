@@ -59,17 +59,23 @@ export function renderAmenities(
         ? am.geom.coords.flatMap(([lon, lat]) => [lon, lat])
         : syntheticFootprint(am.lat, am.lon);
 
+    // Flat, ground-level category marker only — real building height comes
+    // from highlightAmenitySet() (buildingHighlight.ts), which fetches each
+    // amenity's actual building height from the backend and renders the real
+    // extruded 3D block on top of this. Faking a height here (the old
+    // per-category heightDefault, e.g. 25m for every hospital regardless of
+    // its real height) produced a wrong, uniform extrusion that fought with
+    // the real one, so this no longer extrudes at all.
     entities.push(
       viewer.entities.add({
         name: displayName,
         properties: props,
-        position: Cesium.Cartesian3.fromDegrees(am.lon, am.lat, am.height + 8),
+        position: Cesium.Cartesian3.fromDegrees(am.lon, am.lat),
         polygon: {
           hierarchy: new Cesium.PolygonHierarchy(
             Cesium.Cartesian3.fromDegreesArray(flat),
           ),
           height: 0,
-          extrudedHeight: am.height,
           material: fill,
           outline: true,
           outlineColor: outline,
