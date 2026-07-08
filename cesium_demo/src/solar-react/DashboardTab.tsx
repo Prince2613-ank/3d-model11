@@ -18,7 +18,7 @@ interface DashboardTabProps {
 }
 
 export function DashboardTab({
-  date, onDateChange, mode, onModeChange,
+  date, onDateChange,
   estimate, loading, error, onAnalyze, onClear,
 }: DashboardTabProps) {
   const co2 = estimate ? estimateCo2(estimate.summary.totalAnnualKwh) : null;
