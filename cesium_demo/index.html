@@ -51,6 +51,20 @@
       <span class="ob-particle"></span><span class="ob-particle"></span>
     </div>
 
+    <!-- Drifting sky layer -->
+    <div class="ob-sky" aria-hidden="true">
+      <div class="ob-cloud ob-cloud-a"><span></span><span></span><span></span></div>
+      <div class="ob-cloud ob-cloud-b"><span></span><span></span><span></span></div>
+      <div class="ob-cloud ob-cloud-c"><span></span><span></span></div>
+      <!-- Survey drone scanning the skyline (ties into the live building-intelligence theme) -->
+      <div class="ob-drone">
+        <div class="ob-drone-body"></div>
+        <div class="ob-drone-arm ob-drone-arm-l"><span></span></div>
+        <div class="ob-drone-arm ob-drone-arm-r"><span></span></div>
+        <div class="ob-drone-beam"></div>
+      </div>
+    </div>
+
     <!-- Smart City Skyline -->
     <div class="ob-skyline" aria-hidden="true">
       <!-- Building 1 - tall -->
@@ -62,14 +76,8 @@
         </div>
         <div class="ob-bantenna"></div>
       </div>
-      <!-- Building 2 - medium with crane -->
+      <!-- Building 2 - medium -->
       <div class="ob-building ob-b2">
-        <div class="ob-crane">
-          <div class="ob-crane-arm"></div>
-          <div class="ob-crane-cable">
-            <div class="ob-crane-hook"></div>
-          </div>
-        </div>
         <div class="ob-bwindows">
           <span></span><span></span><span></span><span></span>
           <span></span><span></span><span></span><span></span>
@@ -140,6 +148,23 @@
           <span></span><span></span><span></span><span></span><span></span>
         </div>
       </div>
+      <!-- Building 7 - low mid-block infill -->
+      <div class="ob-building ob-b7">
+        <div class="ob-bwindows">
+          <span></span><span></span><span></span>
+          <span></span><span></span><span></span>
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+      <!-- Building 8 - slim tower -->
+      <div class="ob-building ob-b8">
+        <div class="ob-bwindows">
+          <span></span><span></span>
+          <span></span><span></span>
+          <span></span><span></span>
+          <span></span><span></span>
+        </div>
+      </div>
       <!-- Ground / Road -->
       <div class="ob-road">
         <!-- Cars and logistics traffic -->
@@ -148,6 +173,14 @@
           <div class="ob-car-wheels"><span></span><span></span></div>
         </div>
         <div class="ob-car ob-car-b">
+          <div class="ob-car-body"></div>
+          <div class="ob-car-wheels"><span></span><span></span></div>
+        </div>
+        <div class="ob-car ob-car-d">
+          <div class="ob-car-body"></div>
+          <div class="ob-car-wheels"><span></span><span></span></div>
+        </div>
+        <div class="ob-car ob-car-reverse ob-car-c">
           <div class="ob-car-body"></div>
           <div class="ob-car-wheels"><span></span><span></span></div>
         </div>
@@ -341,6 +374,13 @@
           </ol>
           <div class="workflow-meter"><span></span></div>
         </aside>
+      </div>
+    </div>
+
+    <!-- Load progress — width animates 0→100% over the same 7.2s the splash is shown -->
+    <div class="ob-progress" aria-hidden="true">
+      <div class="ob-progress-track">
+        <div class="ob-progress-fill"></div>
       </div>
     </div>
   </div>
