@@ -42,7 +42,7 @@ export function DashboardTab({
         </div>
         <div className="sw-actions-row">
           <button className="sw-btn sw-btn--primary" disabled={loading} onClick={onAnalyze}>
-            {loading ? "Analyzing…" : "Analyze This View"}
+            {loading ? "Analyzing…" : "Analyze Punjabi Bagh"}
           </button>
           <button className="sw-btn" onClick={onClear} disabled={!estimate}>Clear</button>
         </div>

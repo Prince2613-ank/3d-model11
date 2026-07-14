@@ -3,27 +3,9 @@
 // lives here, just state management for the workspace UI.
 
 import { useCallback, useRef, useState } from "react";
-import { Cesium, viewer } from "../../viewer";
-import { SolarMode } from "../../solar/constants";
-import { fetchSolarEstimate, bboxAround, SolarAreaEstimate, BBox } from "../../solar/solarService";
+import { SolarMode, PUNJABI_BAGH_BBOX } from "../../solar/constants";
+import { fetchSolarEstimate, SolarAreaEstimate } from "../../solar/solarService";
 import { renderSolarEstimates, clearSolarEntities } from "../../solar/solarRenderer";
-import { SOLAR_CENTER_LAT, SOLAR_CENTER_LON, DEFAULT_ANALYSIS_RADIUS_M } from "../../solar/constants";
-
-function currentViewBbox(): BBox {
-  const rect = viewer.camera.computeViewRectangle();
-  if (rect) {
-    const toDeg = Cesium.Math.toDegrees;
-    const width = toDeg(rect.east) - toDeg(rect.west);
-    const height = toDeg(rect.north) - toDeg(rect.south);
-    // Only trust the camera rectangle when it's a tight neighborhood view —
-    // at far zoom levels it can span kilometres and blow up per-building
-    // analysis cost (especially the billed Google path).
-    if (width > 0 && width < 0.02 && height > 0 && height < 0.02) {
-      return { minLon: toDeg(rect.west), minLat: toDeg(rect.south), maxLon: toDeg(rect.east), maxLat: toDeg(rect.north) };
-    }
-  }
-  return bboxAround(SOLAR_CENTER_LAT, SOLAR_CENTER_LON, DEFAULT_ANALYSIS_RADIUS_M);
-}
 
 export interface UseSolarAnalysis {
   estimate: SolarAreaEstimate | null;
@@ -44,8 +26,7 @@ export function useSolarAnalysis(): UseSolarAnalysis {
     setLoading(true);
     setError(null);
     try {
-      const bbox = currentViewBbox();
-      const result = await fetchSolarEstimate(bbox, date, mode);
+      const result = await fetchSolarEstimate(PUNJABI_BAGH_BBOX, date, mode);
       if (thisRequest !== requestId.current) return; // a newer request superseded this one
       setEstimate(result);
       renderSolarEstimates(result.buildings);
