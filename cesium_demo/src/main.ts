@@ -62,7 +62,6 @@ import { createBooking, getCurrentEvents, showToast, fetchGlobalEvents, matchRoo
 import { initAssistant, handleAssistantQuery, type MarkerPoint } from "./assistant";
 import { initAmenities } from "./amenities/index";
 import { mountSolarWorkspace } from "./solar-react/mount";
-import { highlightBuildingAt } from "./gis/buildingHighlight";
 
 // Guard: if WebGL context is lost (GPU OOM, driver reset), show spinner and reload
 // instead of letting Cesium freeze with "Rendering has stopped."
@@ -189,9 +188,6 @@ async function bootstrap(): Promise<void> {
   installSceneInteractions(getSelectedFloor, {
     onRoomClick: (roomName, rawName) => {
       showRoomInfoCard(rawName ?? roomName, getCurrentEvents());
-    },
-    onMapClick: (lat, lon) => {
-      void highlightBuildingAt(lat, lon);
     },
   });
 

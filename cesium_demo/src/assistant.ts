@@ -146,7 +146,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "navigate_to_room",
-      description: "Navigate from one room to another. ONLY call this when user explicitly says 'take me to', 'navigate to', 'go to', 'directions to', 'how do I get to' a destination.",
+      description: "Navigate from one room to another. ONLY call this when the user names an explicit destination in this message, e.g. 'take me to X', 'navigate to X', 'go to X'. NEVER call this for a bare follow-up like 'navigate', 'go', or 'start' with no destination named — that means the route is already set and the user wants start_preview_route instead.",
       parameters: {
         type: "object",
         properties: {
@@ -161,7 +161,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "navigate_to_person",
-      description: "Navigate to a person's desk. ONLY call this when user explicitly says 'take me to', 'navigate to', 'go to', or 'show me the way to' a person. NOT for 'who sits next to X' or info questions.",
+      description: "Navigate to a person's desk. ONLY call this when the user names an explicit person in this message, e.g. 'take me to X', 'navigate to X', 'go to X', 'show me the way to X'. NOT for 'who sits next to X' or info questions. NEVER call this for a bare follow-up like 'navigate', 'go', or 'start' with no person named — that means the route is already set and the user wants start_preview_route instead.",
       parameters: {
         type: "object",
         properties: {
@@ -325,7 +325,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "start_preview_route",
-      description: "Start a cinematic camera fly-through preview of the current navigation route. ALWAYS call this when user says 'preview route', 'camera view', 'fly through', 'show route preview', 'start preview', 'camera fly', 'cinematic view', or any similar phrase about previewing/flying the route.",
+      description: "Start a cinematic camera fly-through preview of the current navigation route. ALWAYS call this when user says 'preview route', 'camera view', 'fly through', 'show route preview', 'start preview', 'camera fly', 'cinematic view', or any similar phrase about previewing/flying the route. ALSO call this for a bare go-ahead with no destination named, such as 'start', 'go', 'navigate', 'begin', or 'let's go' — these mean the route is already set up and the user wants to begin moving now.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -354,8 +354,10 @@ Do NOT attempt to answer general knowledge, math, coding, weather, news, jokes, 
 Map informal/shorthand phrases to the right action:
 
 NAVIGATION (use navigate_to_room / navigate_to_person):
-  "take me to", "go to", "I need to reach", "walk me to", "how do I get to", "directions to", "navigate to"
-  → navigate_to_room or navigate_to_person
+  "take me to X", "go to X", "I need to reach X", "walk me to X", "how do I get to X", "directions to X", "navigate to X"
+  → navigate_to_room or navigate_to_person. Requires an explicit destination in THIS message — never re-run
+  this from a bare word alone; a standalone "navigate"/"go"/"start" with no destination named means the
+  route is already set up and the user wants to begin moving, so use start_preview_route instead (see below).
 
 LOCATE / SHOW (use highlight_room / highlight_person_desk):
   "where is", "show me", "find", "point to", "locate", "mark", "highlight"
@@ -391,8 +393,9 @@ OUTDOOR → INDOOR (use outdoor_to_indoor_navigation):
   → outdoor_to_indoor_navigation
 
 PREVIEW ROUTE / CAMERA VIEW (use start_preview_route):
-  "preview route", "camera view", "fly through", "show route preview", "start preview", "cinematic", "camera fly"
-  → start_preview_route (ALWAYS call this tool, never describe it)
+  "preview route", "camera view", "fly through", "show route preview", "start preview", "cinematic", "camera fly",
+  and ALSO any bare go-ahead with no destination named — "start", "go", "navigate", "begin", "let's go", "start navigation"
+  → start_preview_route (ALWAYS call this tool, never describe it, never re-call navigate_to_room/navigate_to_person for these)
 
 ━━━ RESPONSE STYLE ━━━
 - Be concise and direct — 1-2 sentences max for informational answers.

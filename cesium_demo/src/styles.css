@@ -235,6 +235,43 @@ body {
   100% { bottom:105%; opacity:0; transform:translateX(calc((var(--dx,1) - 0.5) * 80px)) scale(1.2); }
 }
 
+/* ── Drifting sky layer: clouds + scanning survey drone ──────────────────── */
+.ob-sky { position:absolute; inset:0 0 48% 0; overflow:hidden; pointer-events:none; visibility:visible; }
+
+.ob-cloud { position:absolute; left:-160px; opacity:0.8; animation:ob-cloud-drift linear infinite; }
+.ob-cloud span { position:absolute; bottom:0; border-radius:50%; background:rgba(255,255,255,0.75); box-shadow:0 6px 18px rgba(94,140,180,0.15); }
+.ob-cloud-a { top:12%; animation-duration:52s; animation-delay:0s; }
+.ob-cloud-a span:nth-child(1) { left:0;   width:46px; height:30px; }
+.ob-cloud-a span:nth-child(2) { left:26px; width:64px; height:40px; }
+.ob-cloud-a span:nth-child(3) { left:62px; width:40px; height:26px; }
+.ob-cloud-b { top:26%; opacity:0.6; animation-duration:70s; animation-delay:-22s; }
+.ob-cloud-b span:nth-child(1) { left:0;   width:36px; height:22px; }
+.ob-cloud-b span:nth-child(2) { left:20px; width:50px; height:30px; }
+.ob-cloud-b span:nth-child(3) { left:48px; width:30px; height:20px; }
+.ob-cloud-c { top:6%; opacity:0.5; animation-duration:88s; animation-delay:-48s; }
+.ob-cloud-c span:nth-child(1) { left:0;    width:34px; height:20px; }
+.ob-cloud-c span:nth-child(2) { left:18px; width:44px; height:26px; }
+@keyframes ob-cloud-drift { from{left:-160px} to{left:110%} }
+
+.ob-drone { position:absolute; top:34%; left:-60px; width:44px; height:22px; animation:ob-drone-fly 9s ease-in-out 2.6s infinite; }
+@keyframes ob-drone-fly {
+  0%   { left:-60px; top:34%; }
+  48%  { left:104%;  top:20%; }
+  50%  { left:104%;  top:20%; opacity:0; }
+  50.1%{ left:-60px; top:44%; opacity:0; }
+  52%  { opacity:1; }
+  100% { left:104%;  top:34%; }
+}
+.ob-drone-body { position:absolute; left:14px; top:6px; width:16px; height:9px; border-radius:4px; background:linear-gradient(135deg,#f5f8fc,#c3d3e6); box-shadow:0 3px 8px rgba(15,40,80,0.25); }
+.ob-drone-body::after { content:''; position:absolute; top:2px; left:6px; width:4px; height:4px; border-radius:50%; background:#22c55e; box-shadow:0 0 5px #22c55e; }
+.ob-drone-arm { position:absolute; top:2px; width:14px; height:2px; background:#7b8ba1; }
+.ob-drone-arm-l { left:0; }
+.ob-drone-arm-r { right:0; }
+.ob-drone-arm span { position:absolute; top:-4px; left:2px; width:10px; height:10px; border-radius:50%; border:1.5px solid rgba(70,90,120,0.55); animation:ob-drone-rotor-spin 0.15s linear infinite; }
+@keyframes ob-drone-rotor-spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }
+.ob-drone-beam { position:absolute; top:16px; left:20px; width:2px; height:80px; background:linear-gradient(180deg,rgba(74,217,255,0.55),transparent); transform-origin:top center; animation:ob-drone-beam-sweep 2.4s ease-in-out infinite; }
+@keyframes ob-drone-beam-sweep { 0%,100%{transform:rotate(-8deg);opacity:0.5} 50%{transform:rotate(8deg);opacity:0.9} }
+
 .ob-skyline { position:absolute; bottom:0; left:0; right:0; height:52%; pointer-events:none; visibility:visible; }
 
 .ob-building { position:absolute; bottom:48px; border-radius:4px 4px 0 0; animation:ob-building-rise 1.2s cubic-bezier(0.22,1,0.36,1) both; }
@@ -245,12 +282,16 @@ body {
 .ob-b4 { right:20%; width:90px; height:130px; background:linear-gradient(180deg,#5b8ab2,#354f6e); animation-delay:0.2s; }
 .ob-b5 { right:4%; width:75px;  height:195px; background:linear-gradient(180deg,#2a7fc4,#124466); animation-delay:0.1s; }
 .ob-b6 { left:56%; width:86px; height:168px; background:linear-gradient(180deg,#5b89be,#2a4f78); animation-delay:0.26s; box-shadow:0 0 22px rgba(42,169,255,0.2); }
+.ob-b7 { left:45%; width:70px; height:120px; background:linear-gradient(180deg,#4a7fa8,#264a6e); animation-delay:0.18s; }
+.ob-b8 { right:33%; width:64px; height:150px; background:linear-gradient(180deg,#6f9ec9,#385f87); animation-delay:0.22s; }
 @keyframes ob-building-rise { from{transform:scaleY(0);transform-origin:bottom} to{transform:scaleY(1);transform-origin:bottom} }
 
 .ob-bwindows { position:absolute; inset:14px 8px 8px; display:grid; grid-template-columns:repeat(4,1fr); gap:5px; }
 .ob-b4 .ob-bwindows { grid-template-columns:repeat(2,1fr); }
 .ob-b5 .ob-bwindows { grid-template-columns:repeat(3,1fr); }
 .ob-b6 .ob-bwindows { grid-template-columns:repeat(5,1fr); inset:12px 8px 8px; gap:4px; }
+.ob-b7 .ob-bwindows { grid-template-columns:repeat(3,1fr); }
+.ob-b8 .ob-bwindows { grid-template-columns:repeat(2,1fr); }
 .ob-bwindows span { border-radius:2px; background:rgba(255,255,255,0.15); animation:ob-window-blink 2.4s ease-in-out infinite; }
 .ob-bwindows span:nth-child(2n) { animation-delay:-0.4s; background:rgba(255,214,64,0.55); }
 .ob-bwindows span:nth-child(3n) { animation-delay:-0.9s; background:rgba(73,214,164,0.4); }
@@ -277,13 +318,6 @@ body {
 .ob-wifi-rings span:nth-child(3){width:34px;height:18px;animation-delay:0.36s}
 @keyframes ob-wifi-pulse { 0%,100%{opacity:0.2} 50%{opacity:1;border-color:rgba(73,214,164,1)} }
 
-.ob-crane { position:absolute; top:-110px; right:-30px; width:110px; height:110px; transform-origin:bottom center; animation:ob-crane-sway 5s ease-in-out infinite; }
-@keyframes ob-crane-sway { 0%,100%{transform:rotate(-6deg)} 50%{transform:rotate(6deg)} }
-.ob-crane-arm { position:absolute; top:0; left:50%; width:100px; height:6px; background:linear-gradient(90deg,#f5a623,#e08800); transform:translateY(-3px); border-radius:3px; }
-.ob-crane-arm::before { content:''; position:absolute; left:0; top:-18px; width:3px; height:22px; background:#f5a623; }
-.ob-crane-cable { position:absolute; top:6px; left:calc(50% + 60px); width:2px; height:40px; background:rgba(255,180,50,0.8); transform-origin:top center; animation:ob-cable-swing 5s ease-in-out infinite; }
-@keyframes ob-cable-swing { 0%,100%{transform:rotate(-8deg);height:40px} 50%{transform:rotate(8deg);height:32px} }
-.ob-crane-hook { position:absolute; bottom:-10px; left:-5px; width:12px; height:10px; border:2px solid #f5a623; border-top:none; border-radius:0 0 8px 8px; }
 
 .ob-road { position:absolute; bottom:0; left:0; right:0; height:48px; background:linear-gradient(180deg,#3a4a5c,#2c3848); border-top:2px solid rgba(255,255,255,0.08); overflow:visible; }
 .ob-road::after { content:''; position:absolute; top:50%; left:0; right:0; height:3px; background:repeating-linear-gradient(90deg,rgba(255,230,100,0.7) 0px,rgba(255,230,100,0.7) 24px,transparent 24px,transparent 48px); animation:ob-road-marks 1.8s linear infinite; }
@@ -1170,6 +1204,37 @@ body {
 
 .building-demo-shell {
   display: none;
+}
+
+/* ── Load progress bar — fills once over the splash's own 7.2s lifetime ── */
+.ob-progress {
+  position: absolute;
+  left: 50%;
+  bottom: 34px;
+  transform: translateX(-50%);
+  width: min(360px, 70vw);
+  z-index: 3;
+  visibility: visible;
+}
+.ob-progress-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(8, 37, 103, 0.14);
+  overflow: hidden;
+}
+.ob-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #2aa9ff, #1a57d6);
+  box-shadow: 0 0 10px rgba(42, 169, 255, 0.6);
+  animation: ob-progress-fill 7.2s cubic-bezier(0.3, 0.1, 0.2, 1) forwards;
+}
+@keyframes ob-progress-fill {
+  0%   { width: 0%; }
+  70%  { width: 82%; }
+  100% { width: 100%; }
 }
 
 .building-demo-viewport {
@@ -3400,7 +3465,9 @@ body {
     text-align: center;
   }
 
-  .onboarding-logo-card {
+  /* Raised specificity so this wins over the wider ≤720px rule below,
+     which would otherwise clobber it via source order at ≤480px. */
+  body .onboarding-logo-card {
     width: 96px;
   }
 
@@ -3790,6 +3857,24 @@ body {
   margin: 0 !important;
   border-radius: 7px !important;
   box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .cesium-viewer-toolbar {
+    top: 10px !important;
+    right: 10px !important;
+    gap: 3px;
+  }
+  .cesium-geocoder-searchButton,
+  .cesium-toolbar-button,
+  .google-map-route-btn {
+    width: 30px !important;
+    height: 30px !important;
+  }
+  .google-map-route-btn svg {
+    width: 19px;
+    height: 19px;
+  }
 }
 
 .cesium-geocoder-searchButton {
@@ -6133,10 +6218,6 @@ body.camera-view-active .nearby-nav-btn {
   .step-details {
     font-size: 11px;
   }
-
-  .user-profile-header {
-    display: none;
-  }
 }
 
 @media (max-width: 480px) {
@@ -6180,17 +6261,14 @@ body.camera-view-active .nearby-nav-btn {
 @media (max-width: 768px) {
   .user-profile-header {
     display: flex;
-    top: 24px;
-    right: 128px;
-    left: auto;
-    width: 34px;
-    height: 34px;
+    width: 30px;
+    height: 30px;
     z-index: 10004;
   }
 
   .user-avatar {
-    width: 34px;
-    height: 34px;
+    width: 30px;
+    height: 30px;
   }
 
   .left-sidebar {
@@ -6970,14 +7048,9 @@ body.camera-view-active .nearby-nav-btn {
 
 .assistant-suggestions {
   display: flex;
-  flex-wrap: nowrap;
-  overflow-x: auto;
+  flex-direction: column;
   gap: 8px;
   padding: 8px 16px 12px;
-  scrollbar-width: none;
-}
-.assistant-suggestions::-webkit-scrollbar {
-  display: none;
 }
 .assistant-chip {
   background: rgba(37, 99, 235, 0.1);
@@ -6985,12 +7058,12 @@ body.camera-view-active .nearby-nav-btn {
   color: #93c5fd;
   font-size: 11px;
   font-weight: 500;
-  padding: 6px 14px;
-  border-radius: 20px;
+  padding: 8px 14px;
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
-  white-space: nowrap;
-  flex-shrink: 0;
+  text-align: left;
+  width: 100%;
 }
 .assistant-chip:hover {
   background: rgba(37, 99, 235, 0.25);
@@ -7301,7 +7374,21 @@ body.camera-view-active .nearby-nav-btn {
 }
 .ob-car-a { bottom:4px; animation-delay:1.2s; }
 .ob-car-b { bottom:13px; animation-duration:20s; animation-delay:8.4s; opacity:0.9; }
+.ob-car-d { bottom:4px; width:44px; animation-duration:15.5s; animation-delay:5.6s; opacity:0.95; }
 @keyframes ob-car-drive { from{left:-72px} to{left:108%} }
+
+/* Reverse-lane car — same body/wheel styling, driven right-to-left */
+.ob-car-reverse {
+  position:absolute;
+  left:auto;
+  right:-72px;
+  width:52px;
+  animation:ob-car-drive-reverse 18.5s linear infinite;
+  z-index:3;
+  transform:scaleX(-1);
+}
+.ob-car-c { bottom:22px; animation-delay:3s; opacity:0.9; }
+@keyframes ob-car-drive-reverse { from{right:-72px} to{right:108%} }
 
 .ob-car-body {
   position:relative;
