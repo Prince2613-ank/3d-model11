@@ -133,6 +133,13 @@ async function loadSecondFloorChairs(onChairLoaded?: (chair: ChairModel) => void
   }
 }
 
+// "unknown6" (chair 32) previously loaded a broken/misplaced asset. It now
+// loads a re-exported, already-correctly-positioned model file instead of
+// the original — no runtime position/rotation correction needed anymore.
+const THIRD_FLOOR_CHAIR_FILE_OVERRIDES: Record<number, string> = {
+  32: "32 copy.glb",
+};
+
 async function loadThirdFloorChairs(onChairLoaded?: (chair: ChairModel) => void): Promise<void> {
   const indexes = Array.from({ length: 34 }, (_, i) => i + 1);
   for (let start = 0; start < indexes.length; start += THIRD_FLOOR_CHAIR_BATCH_SIZE) {
@@ -141,8 +148,9 @@ async function loadThirdFloorChairs(onChairLoaded?: (chair: ChairModel) => void)
       batch.map(async (index) => {
         try {
           if (thirdFloorChairs.some((chair) => chair.chairIndex === index)) return;
+          const fileName = THIRD_FLOOR_CHAIR_FILE_OVERRIDES[index] ?? `${index}.glb`;
           const model = await loadChair(
-            `${index}.glb`,
+            fileName,
             ALT_3RD,
             thirdFloorChairNames[index] ?? `3F Chair ${index}`,
             index,
