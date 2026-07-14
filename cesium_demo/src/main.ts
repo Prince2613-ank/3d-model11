@@ -1,7 +1,7 @@
 import "./styles.css";
 import { Cesium, viewer, ALT_2ND, ALT_3RD } from "./viewer";
 import { loadModels } from "./models";
-import { getSelectedFloor, initSmartFloorCamera, openFloorProfessional, preloadFloor, showFloor } from "./floors";
+import { getInitialFloorFromUrl, getSelectedFloor, hasPersistedFloorState, initSmartFloorCamera, openFloorProfessional, preloadFloor, showFloor } from "./floors";
 import { getNavigableRoomNames, loadRooms } from "./rooms";
 import { getNavigablePersonNames, chairNavPoints, loadChairsForFloor, thirdFloorChairs, secondFloorChairs } from "./chairs";
 import { initializeCalendar } from "./calendar";
@@ -84,6 +84,14 @@ async function playOnboardingSplash(): Promise<void> {
   splash.remove();
 }
 
+const FLOOR_LABELS: Record<number, string> = {
+  0: "All Floors",
+  1: "Ground Floor",
+  2: "1st Floor",
+  3: "2nd Floor",
+  4: "3rd Floor",
+};
+
 function requestIdleWork(callback: () => void, timeout = 2000): void {
   const requestIdle = (window as Window & {
     requestIdleCallback?: (handler: () => void, options?: { timeout?: number }) => number;
@@ -156,8 +164,14 @@ async function bootstrap(): Promise<void> {
   });
   setNavigationMessage("Loading building data...");
 
+  // Resume the floor the user was on before a reload (persisted in the URL as ?floor=N,
+  // including 0 for the "all floors" dashboard) instead of always restarting on the
+  // default view with the full onboarding splash.
+  const initialFloor = getInitialFloorFromUrl();
+  const isResuming = hasPersistedFloorState();
+
   const applySelectedFloor = (): void => showFloor(getSelectedFloor());
-  const roomLoad = loadRooms().then(applySelectedFloor);
+  const roomLoad = loadRooms();
   const modelLoad = loadModels();
 
   const isMobile = window.innerWidth < 768;
@@ -174,12 +188,23 @@ async function bootstrap(): Promise<void> {
     },
   });
 
-  await playOnboardingSplash();
+  if (isResuming) {
+    document.getElementById("onboardingSplash")?.remove();
+    showFloorSpinner(`Loading ${FLOOR_LABELS[initialFloor] ?? "workspace"}…`);
+  } else {
+    await playOnboardingSplash();
+  }
 
   await Promise.all([modelLoad, roomLoad]);
   await installCorridorPointDebug();
   populateRoomDropdowns(getNavigableRoomNames(), getNavigablePersonNames());
-  applySelectedFloor();
+
+  if (initialFloor > 0) {
+    await openFloorProfessional(initialFloor);
+  } else {
+    applySelectedFloor();
+  }
+  if (isResuming) hideFloorSpinner();
   initSmartFloorCamera();
   installStairPathDebug();
   await installIntermediatePointDebug();

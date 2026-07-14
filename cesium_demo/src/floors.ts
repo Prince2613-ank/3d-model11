@@ -26,7 +26,37 @@ import { updateNavigationVisibility } from "./navigation";
 import { showToast } from "./booking";
 import { clearCctvViewshed } from "./cameraShed/cctvViewshed";
 
-let selectedFloor = 0;
+// Read the floor to resume on page load/reload from the URL (?floor=4), so a hard
+// refresh on e.g. the 3rd floor resumes there instead of always landing on floor 0.
+function readFloorFromUrl(): number {
+  const raw = new URLSearchParams(window.location.search).get("floor");
+  const parsed = raw !== null ? parseInt(raw, 10) : NaN;
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 4 ? parsed : 0;
+}
+
+export function getInitialFloorFromUrl(): number {
+  return readFloorFromUrl();
+}
+
+// True once the URL has a persisted floor (including the "all floors" dashboard,
+// floor 0) — distinguishes "resuming a prior view" from a genuinely fresh visit.
+export function hasPersistedFloorState(): boolean {
+  return new URLSearchParams(window.location.search).has("floor");
+}
+
+// Keep the URL in sync with the active floor — including floor 0 (all floors) —
+// so a reload always resumes the same view instead of only doing so for floors 1-4.
+function syncFloorToUrl(floor: number): void {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set("floor", String(floor));
+    window.history.replaceState(window.history.state, "", url);
+  } catch {
+    // ignore in non-browser environments
+  }
+}
+
+let selectedFloor = readFloorFromUrl();
 let autoIndoorEnabled = true;
 let mode: "OUTDOOR" | "INDOOR" = "OUTDOOR";
 let indoorFloor: number | null = null;
@@ -240,6 +270,7 @@ export function showFloor(floor: number): void {
 
   clearCctvViewshed();
   selectedFloor = floor;
+  syncFloorToUrl(floor);
   const token = ++floorSwitchToken;
   if (floor !== 3) {
     stopSecondFloorLoadingPreview();
@@ -285,6 +316,7 @@ export function openFloorProfessional(floorNumber: number): Promise<void> {
 
   autoIndoorEnabled = false;
   selectedFloor = floorNumber;
+  syncFloorToUrl(floorNumber);
   const token = ++floorSwitchToken;
   if (floorNumber !== 3) {
     stopSecondFloorLoadingPreview();
