@@ -40,6 +40,7 @@ import secondFloorLoadingBaseWallUrl from "../models/2nd_floor_base_wall.glb?url
 import thirdFloorLoadingBaseUrl from "../models/3rd_floor_base.glb?url";
 import thirdFloorLoadingBaseWallUrl from "../models/3rd_floor_base_wall.glb?url";
 import thirdFloorPillerUrl from "../models/3rd_floor_piller.glb?url";
+import chair32FixedUrl from "../models/32 copy.glb?url";
 
 const chairModelAssets = import.meta.glob<string>(
   ["../models/[0-9].glb", "../models/[0-9][0-9].glb", "../models/final_2nd_floor_[0-9].glb", "../models/final_2nd_floor_[0-9][0-9].glb"],
@@ -80,6 +81,7 @@ const modelAssets: Record<string, string> = {
   "../models/3rd_floor_base_wall.glb": thirdFloorLoadingBaseWallUrl,
   "../models/3rd_floor_piller.glb": thirdFloorPillerUrl,
   "../models/outdoor_model.glb": outdoorModelUrl,
+  "../models/32 copy.glb": chair32FixedUrl,
   ...chairModelAssets
 };
 
