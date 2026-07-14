@@ -9,6 +9,18 @@ export const SOLAR_CENTER_LON = 77.13370004110053;
 // This covers the nearby building cluster instead of only one roof.
 export const DEFAULT_ANALYSIS_RADIUS_M = 400;
 
+// Fixed bounding box covering the whole Punjabi Bagh locality (Rohtak Road
+// in the north, Ring Road in the east, past Road Number 41/52/57/61 and
+// Herbal Garden/Punjabi Bagh Club to the south, North Ave Road to the west).
+// "Analyze" always uses this — not the current camera view — so results are
+// consistent regardless of where the user has scrolled/zoomed to.
+export const PUNJABI_BAGH_BBOX = {
+  minLon: 77.116,
+  minLat: 28.657,
+  maxLon: 77.151,
+  maxLat: 28.678,
+};
+
 export type SolarMode = "free" | "google";
 
 export const SOLAR_MODE_LABELS: Record<SolarMode, { label: string; sub: string }> = {
