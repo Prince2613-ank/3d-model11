@@ -2,14 +2,21 @@ import { pool } from "../db/client";
 import { Asset } from "../types/domain";
 import { BaseRepository } from "./baseRepository";
 
+export type AssetWithAssignee = Asset & {
+  assigned_employee_name: string | null;
+};
+
 class AssetRepository extends BaseRepository<Asset> {
   constructor() {
     super("assets");
   }
 
-  async findByObjectKey(objectKey: string): Promise<Asset | null> {
-    const { rows } = await pool.query<Asset>(
-      "SELECT * FROM assets WHERE object_key = $1 AND deleted_at IS NULL",
+  async findByObjectKey(objectKey: string): Promise<AssetWithAssignee | null> {
+    const { rows } = await pool.query<AssetWithAssignee>(
+      `SELECT a.*, coalesce(p.display_name, p.email) AS assigned_employee_name
+       FROM assets a
+       LEFT JOIN profiles p ON p.id = a.assigned_to_profile_id
+       WHERE a.object_key = $1 AND a.deleted_at IS NULL`,
       [objectKey]
     );
     return rows[0] ?? null;
@@ -19,6 +26,14 @@ class AssetRepository extends BaseRepository<Asset> {
     const { rows } = await pool.query<Asset>(
       "SELECT * FROM assets WHERE floor_id = $1 AND deleted_at IS NULL ORDER BY name ASC",
       [floorId]
+    );
+    return rows;
+  }
+
+  async listByAssignedProfile(profileId: string): Promise<Asset[]> {
+    const { rows } = await pool.query<Asset>(
+      "SELECT * FROM assets WHERE assigned_to_profile_id = $1 AND deleted_at IS NULL ORDER BY name ASC",
+      [profileId]
     );
     return rows;
   }

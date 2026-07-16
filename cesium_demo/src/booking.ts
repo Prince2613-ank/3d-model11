@@ -300,10 +300,12 @@ export const forceRefreshBookings = async (): Promise<void> => {
 
   try {
     const events = await fetchGlobalEvents(true);
-    const hasNewBookings =
-      !isInitialLoad && previousEvents.length > 0
-        ? detectChanges(previousEvents, events)
-        : false;
+    // The first successful fetch establishes a silent baseline. Every later
+    // fetch is compared even when that baseline was empty, so the first newly
+    // created booking is not missed.
+    const hasNewBookings = !isInitialLoad
+      ? detectChanges(previousEvents, events)
+      : false;
     previousEvents = events;
     activeOnUpdate(events, { isInitialLoad, hasNewBookings });
     isInitialLoad = false;

@@ -1,4 +1,4 @@
-import { assetRepository } from "../repositories/assetRepository";
+import { assetRepository, AssetWithAssignee } from "../repositories/assetRepository";
 import { assetHistoryRepository } from "../repositories/assetHistoryRepository";
 import { activityLogRepository } from "../repositories/activityLogRepository";
 import { Asset, AssetCategory, AuthenticatedUser } from "../types/domain";
@@ -17,6 +17,7 @@ export interface AssetInput {
   warrantyExpiry?: string | null;
   maintenanceDate?: string | null;
   attachments?: string[];
+  assignedToProfileId?: string | null;
 }
 
 export const assetService = {
@@ -24,11 +25,15 @@ export const assetService = {
     return assetRepository.listByFloor(floorId);
   },
 
+  async listByAssignedProfile(profileId: string): Promise<Asset[]> {
+    return assetRepository.listByAssignedProfile(profileId);
+  },
+
   async getById(id: string): Promise<Asset | null> {
     return assetRepository.findById(id);
   },
 
-  async getByObjectKey(objectKey: string): Promise<Asset | null> {
+  async getByObjectKey(objectKey: string): Promise<AssetWithAssignee | null> {
     return assetRepository.findByObjectKey(objectKey);
   },
 
@@ -39,12 +44,13 @@ export const assetService = {
       category: input.category,
       room_id: input.roomId ?? null,
       floor_id: input.floorId,
-      description: input.description ?? null,
+      description: input.description ?? (input.category === "chair" ? `${input.name}'s chair (${input.objectKey})` : null),
       image_url: input.imageUrl ?? null,
       purchase_date: input.purchaseDate ?? null,
       warranty_expiry: input.warrantyExpiry ?? null,
       maintenance_date: input.maintenanceDate ?? null,
       attachments: JSON.stringify(input.attachments ?? []),
+      assigned_to_profile_id: input.assignedToProfileId ?? null,
       created_by: admin.id,
       updated_by: admin.id
     });
@@ -70,12 +76,20 @@ export const assetService = {
     const columns: Record<string, unknown> = { updated_by: admin.id };
     if (input.name !== undefined) columns.name = input.name;
     if (input.category !== undefined) columns.category = input.category;
-    if (input.description !== undefined) columns.description = input.description;
+    if (input.description !== undefined) {
+      columns.description = input.description;
+    } else {
+      const nextCategory = input.category ?? existing.category;
+      if (nextCategory === "chair" && (input.name !== undefined || input.category !== undefined)) {
+        columns.description = `${input.name ?? existing.name}'s chair (${existing.object_key})`;
+      }
+    }
     if (input.imageUrl !== undefined) columns.image_url = input.imageUrl;
     if (input.purchaseDate !== undefined) columns.purchase_date = input.purchaseDate;
     if (input.warrantyExpiry !== undefined) columns.warranty_expiry = input.warrantyExpiry;
     if (input.maintenanceDate !== undefined) columns.maintenance_date = input.maintenanceDate;
     if (input.attachments !== undefined) columns.attachments = JSON.stringify(input.attachments);
+    if (input.assignedToProfileId !== undefined) columns.assigned_to_profile_id = input.assignedToProfileId;
 
     const updated = await assetRepository.update(id, columns);
     if (!updated) throw new NotFoundError("Asset", id);

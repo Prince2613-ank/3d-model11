@@ -20,6 +20,10 @@ export const roomService = {
     return roomRepository.listByFloor(floorId, includeHidden);
   },
 
+  async listByFloorNumber(floorNumber: number, includeHidden: boolean): Promise<Room[]> {
+    return roomRepository.listByFloorNumber(floorNumber, includeHidden);
+  },
+
   async getById(id: string): Promise<Room | null> {
     return roomRepository.findById(id);
   },

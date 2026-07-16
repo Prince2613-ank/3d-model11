@@ -8,14 +8,19 @@ const VALID_STATUSES: ComplaintStatus[] = ["pending", "assigned", "resolved", "r
 
 export const complaintController = {
   async create(req: Request, res: Response): Promise<void> {
-    const { objectKey, issueType, priority, description, photoUrls, cameraPosition } = req.body;
-    if (!objectKey || !issueType || !description) {
-      throw new ValidationError("objectKey, issueType and description are required");
+    const { objectKey, targetType, roomId, roomName, floorNumber, issueType, priority, description, photoUrls, cameraPosition } = req.body;
+    const isRoom = targetType === "room";
+    if (!issueType || !description || (!isRoom && !objectKey) || (isRoom && !roomName)) {
+      throw new ValidationError("issueType, description and a valid asset or room target are required");
     }
     const resolvedPriority: ComplaintPriority = VALID_PRIORITIES.includes(priority) ? priority : "medium";
 
     const complaint = await complaintService.create(req.user!, {
       objectKey,
+      targetType: isRoom ? "room" : "asset",
+      roomId,
+      roomName,
+      floorNumber: Number.isFinite(Number(floorNumber)) ? Number(floorNumber) : undefined,
       issueType,
       priority: resolvedPriority,
       description,

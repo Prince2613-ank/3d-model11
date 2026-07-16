@@ -38,8 +38,11 @@ import {
   getCorridorDrawGeoJSON,
 } from "./navigation";
 import { clearCctvViewshed } from "./cameraShed/cctvViewshed";
+import { chairObjectKey } from "./assetStatus";
 import { initAssetPopup } from "./assetPopup";
 import { initComplaintForm } from "./complaintForm";
+import { isOAuthPopupCallback } from "./auth";
+import { initNotificationCenter } from "./notificationCenter";
 import {
   bindCctvPanel,
   bindUiControls,
@@ -62,6 +65,7 @@ import { createBooking, getCurrentEvents, showToast, fetchGlobalEvents, matchRoo
 import { initAssistant, handleAssistantQuery, type MarkerPoint } from "./assistant";
 import { initAmenities } from "./amenities/index";
 import { mountSolarWorkspace } from "./solar-react/mount";
+import { isKioskMode, getKioskTargetFromUrl, flyToKioskTarget, type KioskTarget } from "./kiosk";
 
 // Guard: if WebGL context is lost (GPU OOM, driver reset), show spinner and reload
 // instead of letting Cesium freeze with "Rendering has stopped."
@@ -126,7 +130,53 @@ function preloadHeavyFloorsInBackground(): void {
   requestIdleWork(() => { void preloadNext(); }, 1500);
 }
 
+/**
+ * Reuses the same indoor+outdoor route-drawing the assistant/map-directions panel
+ * already does (fromRoom/toRoom pickers -> startNavigation(), which handles stairs
+ * across floors on its own) so a QR scan lands on a fully drawn route, not just a
+ * camera fly-to. Returns false if the target can't be matched to a nav option,
+ * so the caller can fall back to a plain fly-to.
+ */
+async function autoNavigateToKioskTarget(target: KioskTarget): Promise<boolean> {
+  const fromSel = document.getElementById("fromRoom") as HTMLSelectElement | null;
+  const toSel = document.getElementById("toRoom") as HTMLSelectElement | null;
+  if (!fromSel || !toSel) return false;
+
+  let toValue: string | null = null;
+  if (target.type === "room") {
+    toValue = findClosestOption(toSel, target.value);
+  } else {
+    await loadChairsForFloor(target.floor);
+    const chairs = target.floor === 4 ? thirdFloorChairs : secondFloorChairs;
+    const chair = chairs.find((c) => chairObjectKey(c) === target.value);
+    if (chair?.chairName) toValue = findClosestOption(toSel, chair.chairName);
+  }
+  if (!toValue) return false;
+
+  toSel.value = toValue;
+  if (fromSel.options.length > 0) fromSel.value = fromSel.options[0].value;
+
+  // Show the Map Route panel (From/To, Navigate, Exit, Preview Route, turn-by-turn
+  // directions) — it starts hidden until the toolbar button is clicked, but a QR
+  // scan should land straight on a fully drawn route with no extra taps needed.
+  const mapPanel = document.getElementById("mapDirectionsPanel") as HTMLElement | null;
+  if (mapPanel) mapPanel.hidden = false;
+
+  clearCctvViewshed();
+  showFloorSpinner("Preparing navigation...");
+  try {
+    await startNavigation();
+  } finally {
+    hideFloorSpinner();
+  }
+  return true;
+}
+
 async function bootstrap(): Promise<void> {
+  const kioskMode = isKioskMode();
+  const kioskTarget = kioskMode ? getKioskTargetFromUrl() : null;
+  if (kioskMode) document.body.classList.add("kiosk-mode");
+
   installContextLossGuard();
   setNavigationFloorSwitchHandler(openFloorProfessional);
   setEnterBuildingFloorSwitchCallback(openFloorProfessional);
@@ -147,9 +197,13 @@ async function bootstrap(): Promise<void> {
     exitNavigation,
   });
   bindCctvPanel();
-  installMapDirectionsControl();
   initAssetPopup();
-  initComplaintForm();
+  installMapDirectionsControl();
+
+  if (!kioskMode) {
+    initComplaintForm();
+    initNotificationCenter();
+  }
 
 
   document.getElementById("flyPreviewBtn")?.addEventListener("click", async () => {
@@ -205,14 +259,22 @@ async function bootstrap(): Promise<void> {
     applySelectedFloor();
   }
   if (isResuming) hideFloorSpinner();
+
+  if (kioskMode && kioskTarget) {
+    const navigated = await autoNavigateToKioskTarget(kioskTarget);
+    if (!navigated) {
+      await flyToKioskTarget(kioskTarget);
+    }
+  }
+
   initSmartFloorCamera();
   installStairPathDebug();
   await installIntermediatePointDebug();
   preloadHeavyFloorsInBackground();
 
   installSceneInteractions(getSelectedFloor, {
-    onRoomClick: (roomName, rawName) => {
-      showRoomInfoCard(rawName ?? roomName, getCurrentEvents());
+    onRoomClick: (roomName, rawName, floorLabel) => {
+      showRoomInfoCard(rawName ?? roomName, getCurrentEvents(), floorLabel);
     },
   });
 
@@ -246,10 +308,12 @@ async function bootstrap(): Promise<void> {
     }
   });
 
-  void initializeCalendar();
-  installAssistant();
-  initAmenities();
-  mountSolarWorkspace();
+  if (!kioskMode) {
+    void initializeCalendar();
+    installAssistant();
+    initAmenities();
+    mountSolarWorkspace();
+  }
   setNavigationMessage("Choose rooms to start navigation.");
 
   // ── Arrival view tuner (enable with ?arrivalViewDebug=1 in URL) ──
@@ -892,7 +956,12 @@ function installAssistant(): void {
   }
 }
 
-bootstrap().catch((error) => {
-  console.error("Application startup failed:", error);
-  setNavigationMessage("Application startup failed. Check the console.");
-});
+if (isOAuthPopupCallback() && window.opener) {
+  document.documentElement.style.background = "#020617";
+  document.body.replaceChildren();
+} else {
+  bootstrap().catch((error) => {
+    console.error("Application startup failed:", error);
+    setNavigationMessage("Application startup failed. Check the console.");
+  });
+}

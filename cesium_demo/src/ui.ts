@@ -3,7 +3,7 @@ import { BUILDING_ENTRANCE, lookupRoomPOI, type RoomPOI } from "./buildingPOI";
 import outdoorNavigationPointsUrl from "../geodata/Outdoor_navigation_points.geojson?url";
 import { ChairModel, getPickedChair, highlightChair, findChairByName, chairNavPoints, getActualChairPosition, loadChairsForFloor, extractAndCacheChairPositions } from "./chairs";
 import { getChairBaseColor, getCachedChairStatus } from "./assetStatus";
-import { openAssetPopup } from "./assetPopup";
+import { isAssetPopupOpen, openAssetPopup } from "./assetPopup";
 import {
   CameraModel,
   getPickedCamera,
@@ -20,6 +20,8 @@ import {
 } from "./models";
 import { GlobalEvent, matchRoomName, showToast, cancelBooking, currentUserEmail } from "./booking";
 import { floorPropertyToLabel, getRoomInventory } from "./roomInventory";
+import { getLiveRoom } from "./rooms";
+import { openComplaintForm } from "./complaintForm";
 import { FLOOR_CAMERAS } from "./config";
 import {
   clearCctvViewshed,
@@ -1365,6 +1367,9 @@ export function showRoomInfoCard(roomName: string, events: GlobalEvent[], floorL
   }
 
   const displayName = inventory?.name ?? roomName;
+  const resolvedFloorLabel = inventory?.floorLabel ?? floorLabel ?? "Unknown";
+  const floorNumber: 3 | 4 = resolvedFloorLabel.toLowerCase().includes("3rd") ? 4 : 3;
+  const liveRoom = getLiveRoom(roomName, resolvedFloorLabel);
   const bookingRoomName = inventory?.bookingRoomName ?? matchRoomName(roomName);
   const now = new Date();
   const upcomingToday = bookingRoomName
@@ -1377,7 +1382,7 @@ export function showRoomInfoCard(roomName: string, events: GlobalEvent[], floorL
   title.textContent = displayName;
   cardContent.innerHTML = `
     <div class="room-info-card">
-      <div class="room-info-row"><span>Floor</span><b>${escapeHtml(inventory?.floorLabel ?? floorLabel ?? "Unknown")}</b></div>
+      <div class="room-info-row"><span>Floor</span><b>${escapeHtml(resolvedFloorLabel)}</b></div>
       <div class="room-info-row"><span>Seats</span><b>${typeof inventory?.seats === "number" ? inventory.seats : "N/A"}</b></div>
       <div class="room-info-row"><span>Status</span><b>${escapeHtml(status)}</b></div>
       ${
@@ -1390,16 +1395,18 @@ export function showRoomInfoCard(roomName: string, events: GlobalEvent[], floorL
             </div>`
           : ""
       }
-      ${
-        bookingRoomName
-          ? `<button id="roomInfoBookingBtn" class="btn success room-info-book-btn" type="button">Booking</button>`
-          : `<p class="booking-empty">Booking is not enabled for this area.</p>`
-      }
+      <div class="room-info-actions ${bookingRoomName ? "" : "room-info-actions-single"}">
+        ${bookingRoomName ? `<button id="roomInfoBookingBtn" class="btn room-info-book-btn" type="button">Book Room</button>` : ""}
+        <button id="roomInfoComplaintBtn" class="btn btn-primary room-info-complaint-btn" type="button">Raise Complaint</button>
+      </div>
     </div>
   `;
 
   optionalElement<HTMLButtonElement>("roomInfoBookingBtn")?.addEventListener("click", () => {
     if (bookingRoomName) openBookingPanel(bookingRoomName, events);
+  });
+  optionalElement<HTMLButtonElement>("roomInfoComplaintBtn")?.addEventListener("click", () => {
+    openComplaintForm({ targetType: "room", objectName: displayName, floor: floorNumber, roomId: liveRoom?.id });
   });
 
   card.style.display = "block";
@@ -2412,7 +2419,7 @@ export function hideTooltip(): void {
 
 // ── Chair popup ───────────────────────────────────────────────────
 function showChairPopup(chair: ChairModel, selectedFloor: number): void {
-  const rawName = chair.chairName || "Unknown";
+  const rawName = chair.chairDisplayName || chair.chairName || "Unknown";
   const isUnknown = rawName.toLowerCase().startsWith("unknown");
   setText("chairUser", rawName);
   setText("chairId", `CHAIR-${chair.chairIndex ?? "?"}`);
@@ -3835,9 +3842,11 @@ export function installSceneInteractions(
         highlightChair(chair, Cesium.Color.BLUE);
         viewer.scene.canvas.style.cursor = "pointer";
         const cachedStatus = getCachedChairStatus(chair);
-        if (cachedStatus) {
+        if (isAssetPopupOpen()) {
+          hideTooltip();
+        } else if (cachedStatus) {
           showTooltip(
-            `<b>${chair.chairName ?? "Object"}</b><br/>Status: ${cachedStatus}`,
+            `<b>${chair.chairDisplayName ?? chair.chairName ?? "Object"}</b><br/>Status: ${cachedStatus}`,
             movement.endPosition.x,
             movement.endPosition.y
           );

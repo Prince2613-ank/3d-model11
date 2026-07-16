@@ -58,4 +58,19 @@ export interface AssetDTO {
   description: string | null;
   image_url: string | null;
   live_status: "ok" | "pending" | "assigned" | "resolved";
+  assigned_to_profile_id: string | null;
+  assigned_employee_name: string | null;
+}
+
+export interface RoomDTO {
+  id: string;
+  floor_id: string;
+  name: string;
+  department: string | null;
+  capacity: number | null;
+  manager_name: string | null;
+  description: string | null;
+  images: string[];
+  color: string | null;
+  is_visible: boolean;
 }

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import type { Asset, AssetCategory } from "../types/domain";
+import type { Asset, AssetCategory, Profile } from "../types/domain";
 import { useAllFloors } from "../hooks/useAllFloors";
 import { DataTable } from "../components/ui/DataTable";
 import type { Column } from "../components/ui/DataTable";
@@ -9,6 +9,8 @@ import { StatusBadge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Input, Label, Select } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
+import { QrCodeModal } from "../components/ui/QrCodeModal";
+import { buildAssetKioskLink } from "../lib/kioskLink";
 
 const CATEGORIES: AssetCategory[] = [
   "chair", "ac", "projector", "door", "printer", "monitor",
@@ -20,6 +22,7 @@ export function AssetsPage() {
   const [floorId, setFloorId] = useState<string>("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
+  const [qrAsset, setQrAsset] = useState<Asset | null>(null);
   const queryClient = useQueryClient();
 
   const effectiveFloorId = floorId || floors?.[0]?.id || "";
@@ -39,7 +42,7 @@ export function AssetsPage() {
 
   const columns: Column<Asset>[] = [
     {
-      header: "Asset",
+      header: "Employee item",
       render: (a) => (
         <div className="flex items-center gap-3">
           {a.image_url ? (
@@ -64,6 +67,7 @@ export function AssetsPage() {
       render: (a) => (
         <div className="flex gap-1.5">
           <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => { setEditingAsset(a); setIsModalOpen(true); }}>Edit</Button>
+          <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => setQrAsset(a)}>QR</Button>
           <Button variant="danger" className="px-2 py-1 text-xs" onClick={() => deleteMutation.mutate(a.id)}>Delete</Button>
         </div>
       )
@@ -72,23 +76,32 @@ export function AssetsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Assets</h1>
-        <Button onClick={() => { setEditingAsset(null); setIsModalOpen(true); }} disabled={!effectiveFloorId}>
-          + New Asset
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="hidden text-xl font-semibold text-slate-900 dark:text-slate-100 sm:block">Employees</h1>
+        <Button className="w-full sm:w-auto" onClick={() => { setEditingAsset(null); setIsModalOpen(true); }} disabled={!effectiveFloorId}>
+          + New Employee Item
         </Button>
       </div>
 
-      <Select className="w-72" value={effectiveFloorId} onChange={(e) => setFloorId(e.target.value)}>
+      <Select className="w-full sm:w-72" value={effectiveFloorId} onChange={(e) => setFloorId(e.target.value)}>
         {(floors ?? []).map((f) => (
           <option key={f.id} value={f.id}>{f.building_name} — {f.name}</option>
         ))}
       </Select>
 
-      <DataTable columns={columns} rows={data?.assets ?? []} keyField={(a) => a.id} isLoading={isLoading} emptyMessage="No assets on this floor yet." />
+      <DataTable columns={columns} rows={data?.assets ?? []} keyField={(a) => a.id} isLoading={isLoading} emptyMessage="No employee items on this floor yet." />
 
       {isModalOpen && (
         <AssetFormModal floorId={effectiveFloorId} asset={editingAsset} onClose={() => setIsModalOpen(false)} onDone={invalidate} />
+      )}
+
+      {qrAsset && (
+        <QrCodeModal
+          title={`QR — ${qrAsset.name}`}
+          value={buildAssetKioskLink(qrAsset.object_key, floors?.find((f) => f.id === qrAsset.floor_id)?.floor_number ?? 0)}
+          fileName={`asset-${qrAsset.object_key}-qr`}
+          onClose={() => setQrAsset(null)}
+        />
       )}
     </div>
   );
@@ -102,6 +115,12 @@ function AssetFormModal({ floorId, asset, onClose, onDone }: { floorId: string; 
   const [purchaseDate, setPurchaseDate] = useState(asset?.purchase_date ?? "");
   const [warrantyExpiry, setWarrantyExpiry] = useState(asset?.warranty_expiry ?? "");
   const [maintenanceDate, setMaintenanceDate] = useState(asset?.maintenance_date ?? "");
+  const [assignedProfileId, setAssignedProfileId] = useState(asset?.assigned_to_profile_id ?? "");
+
+  const { data: usersData } = useQuery({
+    queryKey: ["users"],
+    queryFn: () => api.get<{ profiles: Profile[] }>("/users")
+  });
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -111,7 +130,8 @@ function AssetFormModal({ floorId, asset, onClose, onDone }: { floorId: string; 
         imageUrl: imageUrl || null,
         purchaseDate: purchaseDate || null,
         warrantyExpiry: warrantyExpiry || null,
-        maintenanceDate: maintenanceDate || null
+        maintenanceDate: maintenanceDate || null,
+        assignedToProfileId: assignedProfileId || null
       };
       return asset
         ? api.patch(`/assets/${asset.id}`, payload)
@@ -124,7 +144,7 @@ function AssetFormModal({ floorId, asset, onClose, onDone }: { floorId: string; 
     <Modal
       isOpen
       onClose={onClose}
-      title={asset ? "Edit Asset" : "New Asset"}
+      title={asset ? "Edit Employee Item" : "New Employee Item"}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
@@ -152,7 +172,16 @@ function AssetFormModal({ floorId, asset, onClose, onDone }: { floorId: string; 
         <Label>Image URL</Label>
         <Input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://…" />
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <div>
+        <Label>Assigned employee</Label>
+        <Select value={assignedProfileId} onChange={(e) => setAssignedProfileId(e.target.value)}>
+          <option value="">— Unassigned —</option>
+          {(usersData?.profiles ?? []).map((p) => (
+            <option key={p.id} value={p.id}>{p.display_name || p.email}</option>
+          ))}
+        </Select>
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <div>
           <Label>Purchased</Label>
           <Input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} />

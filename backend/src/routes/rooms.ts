@@ -6,6 +6,7 @@ import { roomController } from "../controllers/roomController";
 const router = Router();
 
 router.get("/floor/:floorId", asyncHandler(roomController.listByFloor));
+router.get("/by-floor-number/:floorNumber", asyncHandler(roomController.listByFloorNumber));
 router.get("/:id", asyncHandler(roomController.getById));
 router.post("/", requireAdmin, asyncHandler(roomController.create));
 router.patch("/:id", requireAdmin, asyncHandler(roomController.update));

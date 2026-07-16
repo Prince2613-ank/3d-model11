@@ -5099,6 +5099,32 @@ body.floor-loading-active #toastContainer {
   margin-top: 2px;
 }
 
+.room-info-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.room-info-actions-single {
+  grid-template-columns: 1fr;
+}
+
+.room-info-actions .btn {
+  width: 100%;
+  min-height: 42px;
+  margin: 0;
+  border-radius: 11px;
+  font-weight: 700;
+}
+
+.room-info-complaint-btn {
+  background: linear-gradient(135deg, #2563eb, #4f46e5) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+}
+
 #bookingRoomMetadata {
   margin-bottom: 8px;
 }
@@ -5805,12 +5831,18 @@ body.floor-loading-active #toastContainer {
   font-family: inherit;
   line-height: 1;
   text-transform: uppercase;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  box-sizing: border-box;
 }
 
 .user-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
+  border-radius: inherit;
 }
 
 .user-info {
@@ -6009,6 +6041,136 @@ body.camera-view-active .nearby-nav-btn {
 @media (max-width: 768px) {
   .nearby-nav-btn { width: 30px !important; height: 30px !important; }
   .nearby-nav-btn svg { width: 18px; height: 18px; }
+}
+
+/* ── Viewer notification center ─────────────────────────────────────────── */
+.notification-center-btn {
+  position: relative;
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  color: #475569 !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  border: 1px solid rgba(15, 23, 42, 0.14) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 9px rgba(15, 23, 42, 0.14) !important;
+  cursor: pointer;
+  transition: transform .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease;
+  box-sizing: border-box;
+}
+.notification-center-btn[hidden] { display: none !important; }
+.notification-center-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.notification-center-btn:hover,
+.notification-center-btn.is-active { color: #4f46e5 !important; border-color: rgba(79, 70, 229, .45) !important; box-shadow: 0 5px 16px rgba(79, 70, 229, .2) !important; transform: translateY(-1px); }
+.notification-center-btn.has-unread { color: #4f46e5 !important; }
+.notification-center-badge {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 2px solid #fff;
+  background: linear-gradient(135deg, #fb3d68, #e11d48);
+  color: #fff;
+  font: 800 9px/1 system-ui, sans-serif;
+  box-sizing: border-box;
+  box-shadow: 0 3px 10px rgba(225, 29, 72, .35);
+}
+.notification-center-badge[hidden] { display: none; }
+.notification-center-arrived { animation: notification-bell-arrived .65s ease both; }
+@keyframes notification-bell-arrived { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(12deg) scale(1.08); } 55% { transform: rotate(-10deg) scale(1.08); } 75% { transform: rotate(5deg); } }
+.cesium-viewer-toolbar .nearby-nav-btn { order: 1; }
+.cesium-viewer-toolbar .notification-center-btn { order: 2; }
+.cesium-viewer-toolbar .user-profile-header { order: 3; }
+
+.notification-center-panel {
+  position: fixed;
+  top: 68px;
+  right: 14px;
+  z-index: 10025;
+  width: min(390px, calc(100vw - 28px));
+  max-height: min(620px, calc(100vh - 88px));
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .72);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, .28), 0 3px 12px rgba(15, 23, 42, .08);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  color: #0f172a;
+  transform-origin: top right;
+  animation: notification-panel-in .2s ease both;
+}
+.notification-center-panel[hidden] { display: none; }
+@keyframes notification-panel-in { from { opacity: 0; transform: translateY(-8px) scale(.97); } to { opacity: 1; transform: none; } }
+.notification-center-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 18px 15px; color: #fff; background: radial-gradient(circle at 100% 0, rgba(34,211,238,.25), transparent 42%), linear-gradient(135deg, #111827, #312e81); }
+.notification-center-eyebrow { display: block; margin-bottom: 3px; color: #a5b4fc; font: 800 9px/1.2 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .18em; }
+.notification-center-header h3 { margin: 0; font: 800 19px/1.2 system-ui, sans-serif; letter-spacing: -.02em; }
+.notification-center-header button { padding: 7px 10px; border: 1px solid rgba(255,255,255,.2); border-radius: 9px; background: rgba(255,255,255,.1); color: #e0e7ff; font: 700 10px/1 system-ui, sans-serif; cursor: pointer; transition: background .15s; }
+.notification-center-header button:hover { background: rgba(255,255,255,.2); color: #fff; }
+.notification-center-status { margin: 12px; padding: 28px 18px; border: 1px dashed #cbd5e1; border-radius: 14px; background: #f8fafc; color: #64748b; text-align: center; font: 600 12px/1.65 system-ui, sans-serif; }
+.notification-center-list { max-height: min(510px, calc(100vh - 180px)); overflow-y: auto; padding: 8px; }
+.notification-center-item { position: relative; width: 100%; display: flex; align-items: flex-start; gap: 12px; padding: 12px; border: 0; border-radius: 14px; background: transparent; color: inherit; text-align: left; cursor: pointer; transition: background .15s, transform .15s; }
+.notification-center-item:hover { background: #f1f5f9; transform: translateX(2px); }
+.notification-center-item.is-read { opacity: .62; }
+.notification-center-item-icon { width: 36px; height: 36px; flex: 0 0 36px; display: grid; place-items: center; border-radius: 11px; background: #eef2ff; color: #4f46e5; font: 900 16px/1 system-ui, sans-serif; }
+.notification-center-item-icon.type-announcement { background: #fff7ed; color: #ea580c; }
+.notification-center-item-icon.type-complaint_resolved { background: #ecfdf5; color: #059669; }
+.notification-center-item-icon.type-complaint_rejected { background: #fff1f2; color: #e11d48; }
+.notification-center-item-icon.type-complaint_replied { background: #eff6ff; color: #2563eb; }
+.notification-center-item-content { min-width: 0; display: flex; flex: 1; flex-direction: column; }
+.notification-center-item-content strong { padding-right: 12px; color: #1e293b; font: 800 12.5px/1.35 system-ui, sans-serif; }
+.notification-center-item-body { display: -webkit-box; margin-top: 4px; overflow: hidden; color: #64748b; font: 500 11.5px/1.5 system-ui, sans-serif; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.notification-center-item-time { margin-top: 6px; color: #94a3b8; font: 700 9px/1.2 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .08em; }
+.notification-center-unread-dot { position: absolute; top: 15px; right: 13px; width: 7px; height: 7px; border-radius: 50%; background: #6366f1; box-shadow: 0 0 0 4px rgba(99,102,241,.1); }
+
+.notification-detail-modal { position: fixed; inset: 0; z-index: 12000; display: grid; place-items: center; padding: 20px; box-sizing: border-box; }
+.notification-detail-modal[hidden] { display: none; }
+.notification-detail-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: rgba(2, 6, 23, .58); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); cursor: default; }
+.notification-detail-card { position: relative; width: min(590px, 100%); max-height: min(760px, calc(100vh - 40px)); overflow: hidden; border: 1px solid rgba(255,255,255,.72); border-radius: 26px; background: #fff; box-shadow: 0 32px 100px rgba(2,6,23,.42); animation: notification-detail-in .22s ease both; }
+@keyframes notification-detail-in { from { opacity: 0; transform: translateY(14px) scale(.97); } to { opacity: 1; transform: none; } }
+.notification-detail-header { position: relative; display: grid; grid-template-columns: 48px 1fr auto; align-items: center; gap: 14px; padding: 22px 24px; color: #fff; background: radial-gradient(circle at 100% 0, rgba(34,211,238,.25), transparent 42%), linear-gradient(135deg, #0f172a, #312e81); }
+.notification-detail-icon { display: grid; width: 48px; height: 48px; place-items: center; border: 1px solid rgba(255,255,255,.18); border-radius: 15px; background: rgba(255,255,255,.12); font: 900 21px/1 system-ui, sans-serif; }
+.notification-detail-type { display: block; margin-bottom: 4px; color: #a5b4fc; font: 800 9px/1.2 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .16em; }
+.notification-detail-header h3 { margin: 0; font: 800 18px/1.3 system-ui, sans-serif; }
+.notification-detail-header time { display: block; margin-top: 5px; color: #c7d2fe; font: 600 10px/1.2 system-ui, sans-serif; }
+.notification-detail-close { align-self: start; width: 32px; height: 32px; padding: 0; border: 1px solid rgba(255,255,255,.16); border-radius: 10px; background: rgba(255,255,255,.08); color: #fff; cursor: pointer; }
+.notification-detail-close:hover { background: rgba(255,255,255,.18); }
+.notification-detail-content { max-height: calc(min(760px, 100vh - 40px) - 94px); overflow-y: auto; padding: 20px 24px 26px; color: #1e293b; }
+.notification-detail-section { margin-bottom: 14px; padding: 15px 16px; border: 1px solid #e2e8f0; border-radius: 15px; background: #f8fafc; }
+.notification-detail-section h4,
+.notification-detail-timeline h4 { margin: 0 0 7px; color: #475569; font: 800 10px/1.2 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .12em; }
+.notification-detail-section p { margin: 0; color: #334155; font: 500 13px/1.65 system-ui, sans-serif; white-space: pre-wrap; }
+.notification-detail-facts { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 9px; margin-bottom: 14px; }
+.notification-detail-row { display: flex; flex-direction: column; gap: 4px; padding: 11px 13px; border-radius: 12px; background: #eef2ff; }
+.notification-detail-row span { color: #818cf8; font: 800 9px/1.2 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .1em; }
+.notification-detail-row strong { color: #312e81; font: 800 12px/1.35 system-ui, sans-serif; text-transform: capitalize; }
+.notification-detail-loading { margin-top: 12px; padding: 20px; border-radius: 14px; background: #f8fafc; color: #64748b; text-align: center; font: 600 12px/1.4 system-ui, sans-serif; }
+.notification-detail-timeline { margin-top: 20px; }
+.notification-detail-timeline-event { position: relative; margin-left: 7px; padding: 0 0 17px 20px; border-left: 2px solid #e0e7ff; }
+.notification-detail-timeline-event::before { content: ""; position: absolute; top: 2px; left: -6px; width: 10px; height: 10px; border: 2px solid #fff; border-radius: 50%; background: #6366f1; box-shadow: 0 0 0 2px #c7d2fe; }
+.notification-detail-timeline-event strong { display: block; color: #334155; font: 800 12px/1.35 system-ui, sans-serif; text-transform: capitalize; }
+.notification-detail-timeline-event span { display: block; margin-top: 3px; color: #94a3b8; font: 600 9px/1.2 system-ui, sans-serif; }
+.notification-detail-timeline-event p { margin: 6px 0 0; color: #64748b; font: 500 11.5px/1.5 system-ui, sans-serif; }
+
+@media (max-width: 768px) {
+  .notification-center-btn { width: 30px !important; height: 30px !important; min-width: 30px !important; }
+  .notification-center-btn svg { width: 18px; height: 18px; }
+  .notification-center-panel { top: 52px; right: 8px; width: calc(100vw - 16px); max-height: calc(100vh - 64px); }
+  .notification-detail-modal { padding: 8px; }
+  .notification-detail-card { max-height: calc(100vh - 16px); border-radius: 20px; }
+  .notification-detail-header { grid-template-columns: 40px 1fr auto; gap: 10px; padding: 17px; }
+  .notification-detail-icon { width: 40px; height: 40px; border-radius: 12px; }
+  .notification-detail-content { max-height: calc(100vh - 98px); padding: 16px; }
+  .notification-detail-facts { grid-template-columns: 1fr; }
 }
 
 /* Sidebar container for left-side panels */
@@ -7583,6 +7745,40 @@ body.camera-view-active .nearby-nav-btn {
   margin: 0 0 10px;
 }
 
+.asset-popup-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 2px 0 12px;
+  padding: 10px;
+  border: 1px solid rgba(26, 87, 214, 0.14);
+  border-radius: 12px;
+  background: rgba(26, 87, 214, 0.055);
+}
+.asset-popup-details[hidden] { display: none; }
+.asset-popup-details > div {
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.7);
+}
+.asset-popup-details span {
+  display: block;
+  margin-bottom: 3px;
+  color: #718096;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.asset-popup-details strong {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #1a202c;
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
 .asset-popup-unregistered {
   font-size: 12px;
   color: #97640a;
@@ -7654,4 +7850,32 @@ body.camera-view-active .nearby-nav-btn {
 .complaint-form-actions .btn {
   margin-bottom: 0;
 }
+
+/* Kiosk mode (QR deep link): only the 3D model + fly-to camera are shown —
+   every other feature (login, booking, complaints, assistant, nav chrome) is hidden. */
+body.kiosk-mode #hamburgerMenu,
+body.kiosk-mode .left-sidebar,
+body.kiosk-mode #userProfile,
+body.kiosk-mode #nearbyNavBtn,
+body.kiosk-mode #notificationCenterBtn,
+body.kiosk-mode #notificationCenterPanel,
+body.kiosk-mode #notificationDetailModal,
+body.kiosk-mode #bookingPanel,
+body.kiosk-mode #roomDetailsCard,
+body.kiosk-mode #cameraPanel,
+body.kiosk-mode #cameraExitCard,
+body.kiosk-mode #assistantFab,
+body.kiosk-mode #assistantPanel,
+body.kiosk-mode #complaintFormPopup,
+body.kiosk-mode #cctvPanel,
+body.kiosk-mode #onboardingSplash,
+body.kiosk-mode #assetPopupComplaintBtn,
+body.kiosk-mode #cameraControlsToolbarBtn,
+body.kiosk-mode button:has(.cesium-baseLayerPicker-selected),
+body.kiosk-mode .cesium-baseLayerPicker-dropDown {
+  display: none !important;
+}
+
+/* Map Route / turn-by-turn navigation stays enabled in kiosk mode — it's the
+   one interactive feature meant to survive the QR deep link. */
 

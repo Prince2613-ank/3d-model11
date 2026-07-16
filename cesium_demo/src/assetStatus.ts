@@ -6,6 +6,7 @@ import { api, AssetDTO } from "./api";
 export interface StatusTintableChair {
   chairFloor?: 3 | 4;
   chairIndex?: number;
+  chairDisplayName?: string;
   color: Cesium.Color;
 }
 
@@ -43,6 +44,7 @@ export async function applyChairStatusTint(chair: StatusTintableChair): Promise<
   const key = chairObjectKey(chair);
   const asset = await fetchChairAsset(chair);
   statusCache.set(key, asset?.live_status ?? null);
+  if (asset?.name) chair.chairDisplayName = asset.name;
 
   const color = asset ? STATUS_COLORS[asset.live_status] : Cesium.Color.WHITE;
   baseColors.set(chair, color);

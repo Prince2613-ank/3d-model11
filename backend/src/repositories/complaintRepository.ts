@@ -53,9 +53,13 @@ class ComplaintRepository extends BaseRepository<Complaint> {
 
     const [rowsResult, countResult] = await Promise.all([
       pool.query<ComplaintWithAsset>(
-        `SELECT c.*, a.name AS asset_name, a.category AS asset_category, a.image_url AS asset_image_url
+        `SELECT c.*,
+                COALESCE(c.target_name, r.name, a.name, 'Unknown target') AS asset_name,
+                CASE WHEN c.target_type = 'room' THEN 'room' ELSE COALESCE(a.category::text, 'other') END AS asset_category,
+                CASE WHEN c.target_type = 'room' THEN NULL ELSE a.image_url END AS asset_image_url
          FROM complaints c
-         JOIN assets a ON a.id = c.asset_id
+         LEFT JOIN assets a ON a.id = c.asset_id
+         LEFT JOIN rooms r ON r.id = c.room_id
          WHERE ${where}
          ORDER BY c.created_at DESC
          LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,

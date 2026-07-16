@@ -7,6 +7,7 @@ const router = Router();
 
 router.get("/floor/:floorId", asyncHandler(assetController.listByFloor));
 router.get("/object-key/:objectKey", asyncHandler(assetController.getByObjectKey));
+router.get("/assigned/:profileId", asyncHandler(assetController.listByAssignedProfile));
 router.get("/:id/history", requireAdmin, asyncHandler(assetController.history));
 router.get("/:id", asyncHandler(assetController.getById));
 router.post("/", requireAdmin, asyncHandler(assetController.create));

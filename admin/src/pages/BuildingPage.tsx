@@ -93,20 +93,20 @@ export function BuildingPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Building</h1>
-        <Button onClick={() => { setEditingBuilding(null); setIsBuildingModalOpen(true); }}>+ New Building</Button>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="hidden text-xl font-semibold text-slate-900 dark:text-slate-100 sm:block">Building</h1>
+        <Button className="w-full sm:w-auto" onClick={() => { setEditingBuilding(null); setIsBuildingModalOpen(true); }}>+ New Building</Button>
       </div>
 
       <DataTable columns={buildingColumns} rows={buildingsData?.buildings ?? []} keyField={(b) => b.id} isLoading={isLoadingBuildings} emptyMessage="No buildings yet." />
 
       {selectedBuildingId && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
               Floors — {selectedBuilding?.name}
             </h2>
-            <Button onClick={() => { setEditingFloor(null); setIsFloorModalOpen(true); }}>+ Add Floor</Button>
+            <Button className="w-full sm:w-auto" onClick={() => { setEditingFloor(null); setIsFloorModalOpen(true); }}>+ Add Floor</Button>
           </div>
           <DataTable columns={floorColumns} rows={floorsData?.floors ?? []} keyField={(f) => f.id} isLoading={isLoadingFloors} emptyMessage="No floors yet." />
         </div>

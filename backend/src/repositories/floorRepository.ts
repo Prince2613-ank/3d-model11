@@ -17,6 +17,14 @@ class FloorRepository extends BaseRepository<Floor> {
     );
     return rows;
   }
+
+  async findByFloorNumber(floorNumber: number): Promise<Floor | null> {
+    const { rows } = await pool.query<Floor>(
+      `SELECT * FROM floors WHERE floor_number = $1 AND deleted_at IS NULL ORDER BY created_at LIMIT 1`,
+      [floorNumber]
+    );
+    return rows[0] ?? null;
+  }
 }
 
 export const floorRepository = new FloorRepository();

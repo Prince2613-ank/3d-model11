@@ -1,4 +1,6 @@
 import { assetRepository } from "../repositories/assetRepository";
+import { roomRepository } from "../repositories/roomRepository";
+import { floorRepository } from "../repositories/floorRepository";
 import { complaintHistoryRepository } from "../repositories/complaintHistoryRepository";
 import { complaintRepository, ComplaintFilters } from "../repositories/complaintRepository";
 import { notificationRepository } from "../repositories/notificationRepository";
@@ -7,7 +9,11 @@ import { AuthenticatedUser, Complaint, ComplaintPriority, CameraPosition } from 
 import { NotFoundError } from "../errors";
 
 export interface CreateComplaintInput {
-  objectKey: string;
+  objectKey?: string;
+  targetType: "asset" | "room";
+  roomId?: string;
+  roomName?: string;
+  floorNumber?: number;
   issueType: string;
   priority: ComplaintPriority;
   description: string;
@@ -18,11 +24,24 @@ export interface CreateComplaintInput {
 
 export const complaintService = {
   async create(reporter: AuthenticatedUser, input: CreateComplaintInput): Promise<Complaint> {
-    const asset = await assetRepository.findByObjectKey(input.objectKey);
-    if (!asset) throw new NotFoundError("Asset with object key", input.objectKey);
+    const isRoom = input.targetType === "room";
+    const asset = !isRoom && input.objectKey ? await assetRepository.findByObjectKey(input.objectKey) : null;
+    if (!isRoom && !asset) throw new NotFoundError("Asset with object key", input.objectKey ?? "");
+
+    const room = isRoom
+      ? input.roomId
+        ? await roomRepository.findById(input.roomId)
+        : input.roomName && input.floorNumber
+          ? await roomRepository.findByNameAndFloorNumber(input.roomName, input.floorNumber)
+          : null
+      : null;
+    const floor = isRoom && !room && input.floorNumber ? await floorRepository.findByFloorNumber(input.floorNumber) : null;
+    const targetName = isRoom ? input.roomName! : asset!.name;
 
     const complaint = await complaintRepository.insert({
-      asset_id: asset.id,
+      asset_id: asset?.id ?? null,
+      target_type: input.targetType,
+      target_name: targetName,
       reporter_id: reporter.id,
       reporter_name: reporter.displayName || reporter.email,
       reporter_email: reporter.email,
@@ -30,13 +49,13 @@ export const complaintService = {
       priority: input.priority,
       description: input.description,
       photo_urls: JSON.stringify(input.photoUrls),
-      room_id: asset.room_id,
-      floor_id: asset.floor_id,
+      room_id: room?.id ?? asset?.room_id ?? null,
+      floor_id: room?.floor_id ?? floor?.id ?? asset?.floor_id ?? null,
       camera_position: input.cameraPosition ? JSON.stringify(input.cameraPosition) : null
     });
 
     await Promise.all([
-      assetRepository.updateLiveStatus(asset.id, "pending"),
+      asset ? assetRepository.updateLiveStatus(asset.id, "pending") : Promise.resolve(null),
       complaintHistoryRepository.record({
         complaintId: complaint.id,
         actorId: reporter.id,
@@ -46,17 +65,10 @@ export const complaintService = {
         note: "Complaint created"
       }),
       notificationRepository.create({
-        isAdminBroadcast: true,
-        type: "new_complaint_admin",
-        title: `New complaint: ${asset.name}`,
+        isAdminBroadcast: reporter.role !== "admin",
+        type: reporter.role === "admin" ? "direct_message" : "new_complaint_admin",
+        title: `${reporter.role === "admin" ? "Admin reported" : "New complaint"}: ${targetName}`,
         body: input.description,
-        relatedComplaintId: complaint.id
-      }),
-      notificationRepository.create({
-        userId: reporter.id,
-        type: "complaint_created",
-        title: "Complaint submitted",
-        body: `Your report on "${asset.name}" was received.`,
         relatedComplaintId: complaint.id
       }),
       activityLogRepository.record({
@@ -65,7 +77,7 @@ export const complaintService = {
         action: "complaint_created",
         entityType: "complaint",
         entityId: complaint.id,
-        metadata: { assetId: asset.id, priority: input.priority }
+        metadata: { targetType: input.targetType, assetId: asset?.id, roomId: room?.id, targetName, priority: input.priority }
       })
     ]);
 
@@ -96,7 +108,7 @@ export const complaintService = {
     if (!updated) throw new NotFoundError("Complaint", complaintId);
 
     await Promise.all([
-      assetRepository.updateLiveStatus(existing.asset_id, "assigned"),
+      existing.asset_id ? assetRepository.updateLiveStatus(existing.asset_id, "assigned") : Promise.resolve(null),
       complaintHistoryRepository.record({
         complaintId,
         actorId: admin.id,
@@ -139,7 +151,7 @@ export const complaintService = {
     if (!updated) throw new NotFoundError("Complaint", complaintId);
 
     await Promise.all([
-      assetRepository.updateLiveStatus(existing.asset_id, "resolved"),
+      existing.asset_id ? assetRepository.updateLiveStatus(existing.asset_id, "ok") : Promise.resolve(null),
       complaintHistoryRepository.record({
         complaintId,
         actorId: admin.id,
@@ -177,7 +189,7 @@ export const complaintService = {
     if (!updated) throw new NotFoundError("Complaint", complaintId);
 
     await Promise.all([
-      assetRepository.updateLiveStatus(existing.asset_id, "ok"),
+      existing.asset_id ? assetRepository.updateLiveStatus(existing.asset_id, "ok") : Promise.resolve(null),
       complaintHistoryRepository.record({
         complaintId,
         actorId: admin.id,
@@ -209,16 +221,30 @@ export const complaintService = {
   },
 
   async reply(admin: AuthenticatedUser, complaintId: string, message: string): Promise<Complaint> {
+    const existing = await complaintRepository.findById(complaintId);
+    if (!existing) throw new NotFoundError("Complaint", complaintId);
+
     const updated = await complaintRepository.reply(complaintId, message);
     if (!updated) throw new NotFoundError("Complaint", complaintId);
 
-    await activityLogRepository.record({
-      actorId: admin.id,
-      actorRole: admin.role,
-      action: "complaint_replied",
-      entityType: "complaint",
-      entityId: complaintId
-    });
+    await Promise.all([
+      existing.reporter_id
+        ? notificationRepository.create({
+            userId: existing.reporter_id,
+            type: "complaint_replied",
+            title: "Admin replied to your complaint",
+            body: message,
+            relatedComplaintId: complaintId
+          })
+        : Promise.resolve(),
+      activityLogRepository.record({
+        actorId: admin.id,
+        actorRole: admin.role,
+        action: "complaint_replied",
+        entityType: "complaint",
+        entityId: complaintId
+      })
+    ]);
 
     return updated;
   },

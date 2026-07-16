@@ -9,7 +9,7 @@ export type ComplaintPriority = "low" | "medium" | "high" | "critical";
 export type ComplaintStatus = "pending" | "assigned" | "resolved" | "rejected";
 export type NotificationType =
   | "complaint_created" | "complaint_assigned" | "complaint_resolved"
-  | "complaint_rejected" | "new_complaint_admin" | "announcement";
+  | "complaint_rejected" | "complaint_replied" | "new_complaint_admin" | "announcement" | "direct_message";
 export type AnnouncementCategory = "power_shutdown" | "maintenance" | "fire_drill" | "holiday" | "other";
 
 export interface AuthenticatedUser {
@@ -84,6 +84,7 @@ export interface Asset {
   maintenance_date: string | null;
   attachments: string[];
   live_status: AssetLiveStatus;
+  assigned_to_profile_id: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -99,7 +100,9 @@ export interface CameraPosition {
 
 export interface Complaint {
   id: string;
-  asset_id: string;
+  asset_id: string | null;
+  target_type: "asset" | "room";
+  target_name: string | null;
   reporter_id: string | null;
   reporter_name: string;
   reporter_email: string;
