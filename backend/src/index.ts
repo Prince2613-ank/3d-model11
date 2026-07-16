@@ -25,8 +25,14 @@ import { errorHandler } from "./middleware/errorHandler";
 const app  = express();
 const PORT = parseInt(process.env.PORT ?? "4000");
 
+// CORS_ORIGIN is a comma-separated list (e.g. the viewer + admin panel origins)
+// so multiple deployed frontends can share one backend. "*" keeps the old
+// behavior of allowing any origin.
+const corsOrigin = process.env.CORS_ORIGIN ?? "*";
+const allowedOrigins = corsOrigin === "*" ? "*" : corsOrigin.split(",").map((o) => o.trim());
+
 app.use(helmet());
-app.use(cors({ origin: process.env.CORS_ORIGIN ?? "*" }));
+app.use(cors({ origin: allowedOrigins }));
 app.use(compression());
 app.use(express.json());
 app.use(attachUser);
