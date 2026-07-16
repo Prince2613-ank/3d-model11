@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import type { ComplaintPriority, ComplaintStatus, ComplaintWithAsset } from "../types/domain";
 import { DataTable } from "../components/ui/DataTable";
@@ -14,6 +15,7 @@ import {
   RejectComplaintModal,
   ReplyComplaintModal
 } from "../components/complaints/ComplaintActionModals";
+import { ComplaintDetailModal } from "../components/complaints/ComplaintDetailModal";
 
 interface Filters {
   status: ComplaintStatus | "";
@@ -24,9 +26,17 @@ interface Filters {
 type ActiveModal = { type: "assign" | "resolve" | "reject" | "reply" | "delete"; complaint: ComplaintWithAsset } | null;
 
 export function ComplaintsPage() {
-  const [filters, setFilters] = useState<Filters>({ status: "", priority: "", search: "" });
+  const [searchParams] = useSearchParams();
+  const initialStatus = searchParams.get("status");
+  const initialPriority = searchParams.get("priority");
+  const [filters, setFilters] = useState<Filters>({
+    status: (["pending", "assigned", "resolved", "rejected"].includes(initialStatus ?? "") ? initialStatus : "") as ComplaintStatus | "",
+    priority: (["low", "medium", "high", "critical"].includes(initialPriority ?? "") ? initialPriority : "") as ComplaintPriority | "",
+    search: searchParams.get("search") ?? ""
+  });
   const [page, setPage] = useState(1);
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
+  const [detailComplaint, setDetailComplaint] = useState<ComplaintWithAsset | null>(null);
   const queryClient = useQueryClient();
 
   const params = new URLSearchParams();
@@ -82,7 +92,7 @@ export function ComplaintsPage() {
     {
       header: "Actions",
       render: (c) => (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
           <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => setActiveModal({ type: "assign", complaint: c })}>
             Assign
           </Button>
@@ -106,12 +116,12 @@ export function ComplaintsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Complaints</h1>
+        <h1 className="hidden text-xl font-semibold text-slate-900 dark:text-slate-100 sm:block">Complaints</h1>
       </div>
 
       <div className="flex flex-wrap gap-3 rounded-2xl border border-slate-200 bg-white/70 p-4 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/60">
         <Select
-          className="w-40"
+          className="w-full sm:w-40"
           value={filters.status}
           onChange={(e) => { setFilters((f) => ({ ...f, status: e.target.value as ComplaintStatus | "" })); setPage(1); }}
         >
@@ -122,7 +132,7 @@ export function ComplaintsPage() {
           <option value="rejected">Rejected</option>
         </Select>
         <Select
-          className="w-40"
+          className="w-full sm:w-40"
           value={filters.priority}
           onChange={(e) => { setFilters((f) => ({ ...f, priority: e.target.value as ComplaintPriority | "" })); setPage(1); }}
         >
@@ -133,14 +143,14 @@ export function ComplaintsPage() {
           <option value="critical">Critical</option>
         </Select>
         <Input
-          className="w-64"
+          className="w-full sm:w-64"
           placeholder="Search reporter, description…"
           value={filters.search}
           onChange={(e) => { setFilters((f) => ({ ...f, search: e.target.value })); setPage(1); }}
         />
       </div>
 
-      <DataTable columns={columns} rows={data?.complaints ?? []} keyField={(c) => c.id} isLoading={isLoading} emptyMessage="No complaints match these filters." />
+      <DataTable columns={columns} rows={data?.complaints ?? []} keyField={(c) => c.id} isLoading={isLoading} emptyMessage="No complaints match these filters." onRowClick={setDetailComplaint} />
 
       {(data?.total ?? 0) > 20 && (
         <div className="flex items-center justify-between text-sm text-slate-500">
@@ -183,6 +193,7 @@ export function ComplaintsPage() {
           </p>
         </Modal>
       )}
+      {detailComplaint && <ComplaintDetailModal complaint={detailComplaint} onClose={() => setDetailComplaint(null)} />}
     </div>
   );
 }

@@ -5,9 +5,11 @@ import { applyChairStatusTint } from "./assetStatus";
 import { getActiveChairContext, closeAssetPopup } from "./assetPopup";
 
 interface ComplaintTarget {
-  objectKey: string;
+  targetType?: "asset" | "room";
+  objectKey?: string;
   objectName: string;
   floor: 3 | 4;
+  roomId?: string;
 }
 
 let target: ComplaintTarget | null = null;
@@ -88,7 +90,11 @@ async function handleSubmit(event: SubmitEvent): Promise<void> {
       : [];
 
     await api.post("/complaints", {
+      targetType: target.targetType ?? "asset",
       objectKey: target.objectKey,
+      roomId: target.roomId,
+      roomName: target.targetType === "room" ? target.objectName : undefined,
+      floorNumber: target.floor,
       issueType,
       priority,
       description,

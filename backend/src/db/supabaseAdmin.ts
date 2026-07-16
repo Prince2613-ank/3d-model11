@@ -2,13 +2,30 @@ import { createClient } from "@supabase/supabase-js";
 
 const url = process.env.SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const anonKey = process.env.SUPABASE_ANON_KEY;
 
-if (!url || !serviceRoleKey) {
+if (!url || (!serviceRoleKey && !anonKey)) {
   console.warn(
-    "[supabaseAdmin] SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set — " +
-    "service-role operations (storage, auth verification) will fail until configured."
+    "[supabase] SUPABASE_URL and an API key are required for auth verification."
   );
 }
+
+if (!serviceRoleKey) {
+  console.warn(
+    "[supabaseAdmin] SUPABASE_SERVICE_ROLE_KEY not set — " +
+    "admin/storage operations will fail until configured."
+  );
+}
+
+const clientOptions = { auth: { autoRefreshToken: false, persistSession: false } };
+
+// Verifying a caller's JWT does not require service-role privileges. This
+// client intentionally falls back to the anon key for local development.
+export const supabaseAuth = createClient(
+  url || "https://placeholder.supabase.co",
+  serviceRoleKey || anonKey || "placeholder-api-key",
+  clientOptions
+);
 
 // Service-role client: bypasses Row Level Security entirely. Server-side only —
 // never send this key or this client to the frontend.
@@ -18,5 +35,5 @@ if (!url || !serviceRoleKey) {
 export const supabaseAdmin = createClient(
   url || "https://placeholder.supabase.co",
   serviceRoleKey || "placeholder-service-role-key",
-  { auth: { autoRefreshToken: false, persistSession: false } }
+  clientOptions
 );

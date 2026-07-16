@@ -8,7 +8,7 @@ export function SettingsPage() {
 
   return (
     <div className="max-w-lg space-y-6">
-      <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Settings</h1>
+      <h1 className="hidden text-xl font-semibold text-slate-900 dark:text-slate-100 sm:block">Settings</h1>
 
       <div className="rounded-2xl border border-slate-200 bg-white/70 p-5 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/60">
         <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">Profile</h2>

@@ -475,6 +475,42 @@
     </svg>
   </button>
 
+  <button id="notificationCenterBtn" class="notification-center-btn" type="button" aria-label="Notifications" aria-expanded="false" title="Notifications" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/>
+      <path d="M10 21h4"/>
+    </svg>
+    <span id="notificationCenterBadge" class="notification-center-badge" hidden>0</span>
+  </button>
+
+  <section id="notificationCenterPanel" class="notification-center-panel" aria-label="Notifications" hidden>
+    <header class="notification-center-header">
+      <div>
+        <span class="notification-center-eyebrow">Live updates</span>
+        <h3>Notifications</h3>
+      </div>
+      <button id="notificationMarkAllBtn" type="button">Mark all read</button>
+    </header>
+    <div id="notificationCenterStatus" class="notification-center-status">Sign in to see announcements and complaint updates.</div>
+    <div id="notificationCenterList" class="notification-center-list"></div>
+  </section>
+
+  <div id="notificationDetailModal" class="notification-detail-modal" role="dialog" aria-modal="true" aria-labelledby="notificationDetailTitle" hidden>
+    <button id="notificationDetailBackdrop" class="notification-detail-backdrop" type="button" aria-label="Close notification details"></button>
+    <article class="notification-detail-card">
+      <header class="notification-detail-header">
+        <div id="notificationDetailIcon" class="notification-detail-icon">!</div>
+        <div>
+          <span id="notificationDetailType" class="notification-detail-type">Notification</span>
+          <h3 id="notificationDetailTitle">Notification details</h3>
+          <time id="notificationDetailTime"></time>
+        </div>
+        <button id="notificationDetailCloseBtn" class="notification-detail-close" type="button" aria-label="Close">&#10005;</button>
+      </header>
+      <div id="notificationDetailContent" class="notification-detail-content"></div>
+    </article>
+  </div>
+
   <div id="userProfile" class="user-profile-header">
     <div id="userAvatar" class="user-avatar google-avatar" title="Sign in with Google">
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -628,11 +664,19 @@
       <span id="assetPopupStatusText">Unknown</span>
     </p>
     <p id="assetPopupDescription" class="asset-popup-description"></p>
+    <div id="assetPopupDetails" class="asset-popup-details" hidden>
+      <div><span>Employee</span><strong id="assetDetailEmployee">—</strong></div>
+      <div><span>Seat ID</span><strong id="assetDetailSeat">—</strong></div>
+      <div><span>Floor</span><strong id="assetDetailFloor">—</strong></div>
+      <div><span>Status</span><strong id="assetDetailStatus">—</strong></div>
+      <div><span>Category</span><strong id="assetDetailCategory">Chair</strong></div>
+      <div><span>Seat number</span><strong id="assetDetailNumber">—</strong></div>
+    </div>
     <p id="assetPopupUnregistered" class="asset-popup-unregistered" hidden>
       This item isn't registered as a manageable asset yet — ask an admin to add it.
     </p>
     <div class="asset-popup-actions">
-      <button id="assetPopupNavigateBtn" class="btn" type="button">Navigate</button>
+      <button id="assetPopupDetailsBtn" class="btn" type="button" aria-expanded="false">Details</button>
       <button id="assetPopupComplaintBtn" class="btn btn-primary" type="button">Raise Complaint</button>
     </div>
   </section>

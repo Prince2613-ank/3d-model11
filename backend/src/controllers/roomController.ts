@@ -9,6 +9,14 @@ export const roomController = {
     res.json({ rooms });
   },
 
+  async listByFloorNumber(req: Request, res: Response): Promise<void> {
+    const floorNumber = Number(req.params.floorNumber);
+    if (!Number.isInteger(floorNumber)) throw new ValidationError("floorNumber must be an integer");
+    const includeHidden = req.user?.role === "admin" && req.query.includeHidden === "true";
+    const rooms = await roomService.listByFloorNumber(floorNumber, includeHidden);
+    res.json({ rooms });
+  },
+
   async getById(req: Request, res: Response): Promise<void> {
     const room = await roomService.getById(req.params.id);
     if (!room) { res.status(404).json({ error: "Room not found" }); return; }

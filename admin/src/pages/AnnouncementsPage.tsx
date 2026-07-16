@@ -39,7 +39,7 @@ export function AnnouncementsPage() {
     {
       header: "Actions",
       render: (a) => (
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap justify-end gap-1.5">
           <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => { setEditing(a); setIsModalOpen(true); }}>Edit</Button>
           <Button
             variant="secondary"
@@ -56,9 +56,9 @@ export function AnnouncementsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Announcements</h1>
-        <Button onClick={() => { setEditing(null); setIsModalOpen(true); }}>+ New Announcement</Button>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="hidden text-xl font-semibold text-slate-900 dark:text-slate-100 sm:block">Announcements</h1>
+        <Button className="w-full sm:w-auto" onClick={() => { setEditing(null); setIsModalOpen(true); }}>+ New Announcement</Button>
       </div>
 
       <DataTable columns={columns} rows={data?.announcements ?? []} keyField={(a) => a.id} isLoading={isLoading} emptyMessage="No announcements yet." />
@@ -111,7 +111,7 @@ function AnnouncementFormModal({ announcement, onClose, onDone }: { announcement
         <Label>Body</Label>
         <Textarea rows={3} value={body} onChange={(e) => setBody(e.target.value)} />
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div>
           <Label>Starts</Label>
           <Input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />

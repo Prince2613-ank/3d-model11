@@ -8,6 +8,11 @@ export const assetController = {
     res.json({ assets });
   },
 
+  async listByAssignedProfile(req: Request, res: Response): Promise<void> {
+    const assets = await assetService.listByAssignedProfile(req.params.profileId);
+    res.json({ assets });
+  },
+
   async getById(req: Request, res: Response): Promise<void> {
     const asset = await assetService.getById(req.params.id);
     if (!asset) { res.status(404).json({ error: "Asset not found" }); return; }

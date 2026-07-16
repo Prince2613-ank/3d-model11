@@ -7,7 +7,16 @@ import App from './App.tsx'
 import { AuthProvider } from './contexts/AuthContext'
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, staleTime: 10_000 } }
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 60_000,
+      gcTime: 30 * 60_000,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: true,
+      placeholderData: (previousData: unknown) => previousData
+    }
+  }
 })
 
 createRoot(document.getElementById('root')!).render(

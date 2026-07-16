@@ -4,7 +4,7 @@ import type { Notification } from "../types/domain";
 
 // Polling for now — Phase 5 (Realtime) will replace this with a Supabase
 // Realtime subscription so updates arrive instantly instead of on an interval.
-const POLL_INTERVAL_MS = 20_000;
+const POLL_INTERVAL_MS = 12_000;
 
 export function useUnreadNotificationCount(enabled: boolean) {
   return useQuery({

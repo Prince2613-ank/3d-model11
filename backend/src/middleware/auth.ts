@@ -1,7 +1,8 @@
 import { NextFunction, Request, Response } from "express";
-import { supabaseAdmin } from "../db/supabaseAdmin";
+import { supabaseAuth } from "../db/supabaseAdmin";
 import { pool } from "../db/client";
 import { AuthenticatedUser, UserRole } from "../types/domain";
+import { ServiceUnavailableError } from "../errors";
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -29,15 +30,26 @@ export async function attachUser(req: Request, _res: Response, next: NextFunctio
   if (!token) { next(); return; }
 
   try {
-    const { data, error } = await supabaseAdmin.auth.getUser(token);
+    const { data, error } = await supabaseAuth.auth.getUser(token);
     if (error || !data.user) { next(); return; }
 
+    // The database trigger creates profiles for new auth users. Upserting here
+    // also backfills users who signed up before that trigger was installed.
+    // Existing roles and active/disabled state are deliberately left unchanged.
+    const metadata = data.user.user_metadata ?? {};
+    const displayName = metadata.full_name || metadata.name || null;
+    const avatarUrl = metadata.avatar_url || metadata.picture || null;
     const { rows } = await pool.query<{ role: UserRole; is_active: boolean; display_name: string | null }>(
-      "SELECT role, is_active, display_name FROM profiles WHERE id = $1",
-      [data.user.id]
+      `INSERT INTO profiles (id, email, display_name, avatar_url, last_login_at)
+       VALUES ($1, $2, $3, $4, now())
+       ON CONFLICT (id) DO UPDATE
+       SET email = EXCLUDED.email,
+           last_login_at = now()
+       RETURNING role, is_active, display_name`,
+      [data.user.id, data.user.email ?? "", displayName, avatarUrl]
     );
 
-    if (rows.length === 0 || !rows[0].is_active) { next(); return; }
+    if (!rows[0].is_active) { next(); return; }
 
     req.user = {
       id: data.user.id,
@@ -47,6 +59,8 @@ export async function attachUser(req: Request, _res: Response, next: NextFunctio
     };
   } catch (err) {
     console.error("[auth] token verification failed:", (err as Error).message);
+    next(new ServiceUnavailableError("Authentication service temporarily unavailable"));
+    return;
   }
   next();
 }

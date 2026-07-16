@@ -5,7 +5,7 @@ import {
   viewer
 } from "./viewer";
 import { geo2, geo3, geoJsonUrl, normalizeRoomName } from "./rooms";
-import { chairNavPoints, loadChairsForFloor, extractAndCacheChairPositions, getActualChairPosition } from "./chairs";
+import { chairNavPoints, loadChairsForFloor, extractAndCacheChairPositions, getActualChairPosition, findChairByName, type ChairModel } from "./chairs";
 import { setNavigationAllowedFloors, setRoutePreviewAvailable, setNavigationMessage, updateNavigationUI, highlightNavStep, flyToDefaultFloorView, disableCameraControls, enableCameraControls, showFloorSpinner, hideFloorSpinner, hideNavigationHud, clearRoomPreviewEffect } from "./ui";
 import { ensureFloorModelLoaded } from "./models";
 import intermediatePointUrl from "../geodata/intermidiate_point.geojson?url";
@@ -161,6 +161,7 @@ let liveNavFloorSwitchDistance: number | null = null;
 let liveNavFloorSwitchTarget: number | null = null;
 let liveNavFloorSwitchDone = false;
 let liveNavFloorBreakIndex: number | null = null;
+let activeDestinationPerson: { name: string; floor: 3 | 4 } | null = null;
 
 const MAX_CORRIDOR_EDGE_METERS = 3.5;
 const MAX_CORRIDOR_NEAREST_NEIGHBORS = 8;
@@ -384,6 +385,7 @@ export function exitNavigation(): void {
   activeNavFromFloor = null;
   activeNavToFloor = null;
   activeStairClimbPath = [];
+  activeDestinationPerson = null;
   setNavigationAllowedFloors(null);
   enableCameraControls();
   setNavigationMessage("Choose rooms to start navigation.");
@@ -400,6 +402,53 @@ export function startNavigationCameraView(): void {
 
 export function isNavigationCameraActive(): boolean {
   return liveNavCameraActive;
+}
+
+/**
+ * Bounces a chair vertically along true world-up (not the model's own local Z,
+ * whose axis is scrambled by the yaw/pitch/roll baked into computeMatrix()) so
+ * arriving at a seat destination gets a visible "you're here" cue, like a map
+ * pin bounce. Settles back to the chair's exact original transform when done.
+ */
+function bounceChair(chair: ChairModel, durationMs = 2200, amplitudeMeters = 0.18): void {
+  const originalMatrix = Cesium.Matrix4.clone(chair.modelMatrix);
+  const center = chair.boundingSphere?.center ?? Cesium.Matrix4.getTranslation(originalMatrix, new Cesium.Cartesian3());
+  const enu = Cesium.Transforms.eastNorthUpToFixedFrame(center);
+  const upColumn = Cesium.Matrix4.getColumn(enu, 2, new Cesium.Cartesian4());
+  const worldUp = new Cesium.Cartesian3(upColumn.x, upColumn.y, upColumn.z);
+
+  const start = performance.now();
+  const scratchTranslation = new Cesium.Cartesian3();
+  const scratchTranslationMatrix = new Cesium.Matrix4();
+
+  function tick(): void {
+    const elapsed = performance.now() - start;
+    if (elapsed >= durationMs) {
+      chair.modelMatrix = originalMatrix;
+      viewer.scene.requestRender();
+      return;
+    }
+
+    // Ease the bounce amplitude down over the duration so it settles rather than cutting off abruptly.
+    const decay = 1 - elapsed / durationMs;
+    const offset = amplitudeMeters * decay * Math.abs(Math.sin(elapsed / 140));
+    Cesium.Cartesian3.multiplyByScalar(worldUp, offset, scratchTranslation);
+    Cesium.Matrix4.fromTranslation(scratchTranslation, scratchTranslationMatrix);
+    Cesium.Matrix4.multiply(scratchTranslationMatrix, originalMatrix, chair.modelMatrix);
+    viewer.scene.requestRender();
+    requestAnimationFrame(tick);
+  }
+
+  requestAnimationFrame(tick);
+}
+
+/** Returns true if a seat was found and its bounce animation started. */
+function bounceDestinationChairIfSeat(): boolean {
+  if (!activeDestinationPerson) return false;
+  const chair = findChairByName(activeDestinationPerson.name, activeDestinationPerson.floor);
+  if (!chair) return false;
+  bounceChair(chair);
+  return true;
 }
 
 export function flyRoutePreview(): void {
@@ -497,7 +546,15 @@ export function flyRoutePreview(): void {
       previewAnimRemove = null;
       enableCameraControls();
       highlightNavStep(liveNavSteps.length - 1);
-      void flyToDefaultFloorView(1.4);
+      // If we just arrived at a seat, let the bounce play out at this close-up
+      // arrival view before pulling the camera back — flying out immediately
+      // made the small vertical hop invisible.
+      const bouncingSeat = bounceDestinationChairIfSeat();
+      if (bouncingSeat) {
+        window.setTimeout(() => { void flyToDefaultFloorView(1.4); }, 2300);
+      } else {
+        void flyToDefaultFloorView(1.4);
+      }
       return;
     }
 
@@ -2432,6 +2489,10 @@ export async function startNavigation(): Promise<void> {
     setNavigationMessage("Choose a start and destination.");
     return;
   }
+
+  activeDestinationPerson = toSelection.roomName.startsWith("person:")
+    ? { name: toSelection.roomName.split(":")[1], floor: toSelection.floor as 3 | 4 }
+    : null;
 
   const fromFloor = fromSelection.floor;
   const toFloor = toSelection.floor;
