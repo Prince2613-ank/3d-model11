@@ -7,11 +7,12 @@ export interface DashboardStats {
   assetsWithMostIssues: { asset_id: string; asset_name: string; complaint_count: number }[];
   topFloors: { floor_id: string; floor_name: string; complaint_count: number }[];
   monthlyTrends: { month: string; complaint_count: number }[];
+  dailyTrends: { day: string; complaint_count: number }[];
 }
 
 export const statsService = {
   async dashboard(): Promise<DashboardStats> {
-    const [openResult, resolvedTodayResult, avgResolutionResult, topAssetsResult, topFloorsResult, monthlyResult] = await Promise.all([
+    const [openResult, resolvedTodayResult, avgResolutionResult, topAssetsResult, topFloorsResult, monthlyResult, dailyResult] = await Promise.all([
       pool.query<{ count: string }>(
         `SELECT COUNT(*) FROM complaints WHERE deleted_at IS NULL AND status IN ('pending','assigned')`
       ),
@@ -48,6 +49,15 @@ export const statsService = {
          WHERE deleted_at IS NULL AND created_at >= now() - interval '12 months'
          GROUP BY 1
          ORDER BY 1 ASC`
+      ),
+      // Last 7 days including today — generate_series fills in days with zero
+      // complaints so the trend always shows a full week, not just days with data.
+      pool.query<{ day: string; complaint_count: string }>(
+        `SELECT to_char(d.day, 'YYYY-MM-DD') AS day, COUNT(c.id) AS complaint_count
+         FROM generate_series(date_trunc('day', now()) - interval '6 days', date_trunc('day', now()), interval '1 day') AS d(day)
+         LEFT JOIN complaints c ON date_trunc('day', c.created_at) = d.day AND c.deleted_at IS NULL
+         GROUP BY d.day
+         ORDER BY d.day ASC`
       )
     ]);
 
@@ -57,7 +67,8 @@ export const statsService = {
       avgResolutionHours: avgResolutionResult.rows[0].avg_hours ? parseFloat(avgResolutionResult.rows[0].avg_hours) : null,
       assetsWithMostIssues: topAssetsResult.rows.map((r) => ({ ...r, complaint_count: parseInt(r.complaint_count, 10) })),
       topFloors: topFloorsResult.rows.map((r) => ({ ...r, complaint_count: parseInt(r.complaint_count, 10) })),
-      monthlyTrends: monthlyResult.rows.map((r) => ({ ...r, complaint_count: parseInt(r.complaint_count, 10) }))
+      monthlyTrends: monthlyResult.rows.map((r) => ({ ...r, complaint_count: parseInt(r.complaint_count, 10) })),
+      dailyTrends: dailyResult.rows.map((r) => ({ ...r, complaint_count: parseInt(r.complaint_count, 10) }))
     };
   }
 };

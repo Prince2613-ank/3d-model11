@@ -42,7 +42,7 @@ export function LoginPage() {
 
           <div className="absolute left-4 top-4 z-10 flex items-center gap-2.5 sm:left-7 sm:top-6">
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/35"><span className="grid grid-cols-2 gap-1"><i className="h-1.5 w-1.5 rounded-sm bg-white"/><i className="h-1.5 w-1.5 rounded-sm bg-white/70"/><i className="h-1.5 w-1.5 rounded-sm bg-white/70"/><i className="h-1.5 w-1.5 rounded-sm bg-white"/></span></span>
-            <div><p className="text-sm font-extrabold">Digital Twin</p><p className="text-[9px] font-bold uppercase tracking-[.2em] text-cyan-300">Operations</p></div>
+            <div><p className="text-sm font-extrabold">Flodata Admin</p><p className="text-[9px] font-bold uppercase tracking-[.2em] text-cyan-300">Operations</p></div>
           </div>
 
           {hotspots.map((point, index) => <button key={index} onClick={() => setStep(index)} aria-label={`View ${steps[index].title}`} className={`absolute z-10 grid h-8 w-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border transition-all duration-300 ${step === index ? "scale-110 border-white/70 bg-indigo-500 shadow-[0_0_0_8px_rgba(99,102,241,.18),0_0_28px_rgba(99,102,241,.9)]" : "border-white/50 bg-slate-950/55 hover:scale-110 hover:bg-indigo-500"}`} style={point}><span className="h-1.5 w-1.5 rounded-full bg-white"/></button>)}

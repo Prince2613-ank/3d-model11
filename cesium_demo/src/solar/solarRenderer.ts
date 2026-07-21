@@ -42,6 +42,13 @@ export function clearSolarEntities(): void {
   viewer.scene.requestRender();
 }
 
+/** Solar footprints belong to the outdoor map and must never overlay indoor floors. */
+export function setSolarEntitiesVisible(visible: boolean): void {
+  for (const entity of _solarEntities) entity.show = visible;
+  for (const entity of _selectedSolarEntities) entity.show = visible;
+  viewer.scene.requestRender();
+}
+
 export function renderSolarEstimates(estimates: SolarBuildingEstimate[]): void {
   clearSolarEntities();
   const maxDailyKwh = Math.max(...estimates.map((est) => est.dailyKwh), 1);

@@ -43,7 +43,7 @@ export function ComplaintDetailModal({ complaint, onClose }: { complaint: Compla
           </DetailSection>
 
           <DetailSection title="Activity timeline">
-            {isLoading ? <Skeleton className="h-28" /> : (data?.history.length ?? 0) === 0 ? <p className="text-sm text-slate-400">No activity recorded yet.</p> : <div className="space-y-4 border-l-2 border-indigo-100 pl-5 dark:border-indigo-500/20">{data!.history.map((entry) => <div key={entry.id} className="relative"><span className="absolute -left-[26px] top-1 h-2.5 w-2.5 rounded-full bg-indigo-500 ring-4 ring-indigo-50 dark:ring-slate-900" /><p className="text-xs font-extrabold capitalize text-slate-700 dark:text-slate-200">{entry.to_status ? `${entry.from_status || "New"} → ${entry.to_status}` : "Complaint updated"}</p><p className="mt-1 text-[10px] text-slate-400">{new Date(entry.created_at).toLocaleString()}</p>{entry.note && <p className="mt-1 text-xs leading-5 text-slate-500">{entry.note}</p>}</div>)}</div>}
+            {isLoading ? <Skeleton className="h-28" /> : (data?.history.length ?? 0) === 0 ? <p className="text-sm text-slate-400">No activity recorded yet.</p> : <TimelineList history={dedupeHistory(data!.history)} />}
           </DetailSection>
         </div>
       </div>
@@ -53,3 +53,42 @@ export function ComplaintDetailModal({ complaint, onClose }: { complaint: Compla
 
 function DetailSection({ title, children }: { title: string; children: ReactNode }) { return <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-white/10 dark:bg-white/[.03]"><h4 className="mb-3 text-[10px] font-black uppercase tracking-[.14em] text-slate-400">{title}</h4>{children}</section>; }
 function Fact({ label, value }: { label: string; value: string }) { return <div className="flex items-start justify-between gap-4 border-b border-slate-200/70 py-2.5 last:border-0 dark:border-white/5"><span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</span><span className="max-w-[65%] break-words text-right text-xs font-bold text-slate-700 dark:text-slate-200">{value}</span></div>; }
+
+const TIMELINE_DOT_CLASS: Record<string, string> = {
+  pending: "bg-amber-500 ring-amber-50 dark:ring-amber-500/10",
+  assigned: "bg-sky-500 ring-sky-50 dark:ring-sky-500/10",
+  resolved: "bg-emerald-500 ring-emerald-50 dark:ring-emerald-500/10",
+  rejected: "bg-rose-500 ring-rose-50 dark:ring-rose-500/10",
+};
+
+// Older data (created before the backend guarded against re-resolving an
+// already-resolved complaint) can contain back-to-back rows for the same
+// transition — collapse those so the timeline reads as one event, not two.
+function dedupeHistory(history: ComplaintHistoryEntry[]): ComplaintHistoryEntry[] {
+  return history.filter((entry, index) => {
+    const prev = history[index - 1];
+    return !prev || prev.to_status !== entry.to_status || prev.note !== entry.note;
+  });
+}
+
+function TimelineList({ history }: { history: ComplaintHistoryEntry[] }) {
+  return (
+    <div className="space-y-5 border-l-2 border-indigo-100 pl-5 dark:border-indigo-500/20">
+      {history.map((entry, index) => {
+        const isLatest = index === history.length - 1;
+        const dotClass = (entry.to_status && TIMELINE_DOT_CLASS[entry.to_status]) || "bg-indigo-500 ring-indigo-50 dark:ring-slate-900";
+        return (
+          <div key={entry.id} className="relative">
+            <span className={`absolute -left-[26px] top-1 h-2.5 w-2.5 rounded-full ring-4 ${dotClass}`} />
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs font-extrabold capitalize text-slate-700 dark:text-slate-200">{entry.to_status ? `${entry.from_status || "New"} → ${entry.to_status}` : "Complaint updated"}</p>
+              {isLatest && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300">Latest</span>}
+            </div>
+            <p className="mt-1 text-[10px] font-semibold text-slate-400">{new Date(entry.created_at).toLocaleString()}</p>
+            {entry.note && <p className="mt-1.5 rounded-lg bg-slate-100/80 px-2.5 py-1.5 text-xs leading-5 text-slate-600 dark:bg-white/5 dark:text-slate-300">{entry.note}</p>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}

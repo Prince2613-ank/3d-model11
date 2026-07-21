@@ -14,6 +14,7 @@ import {
 } from "./cesiumRenderer";
 import { haversine, fmtDistance, fmtDuration } from "./routingService";
 import { startWatchingLocation, stopWatchingLocation } from "./locationService";
+import { getSelectedFloor, openFloorProfessional, onFloorChange } from "../floors";
 
 // ── UI state ──────────────────────────────────────────────────────────────────
 let panelOpen         = false;
@@ -53,14 +54,29 @@ export function initPanel(): void {
   injectCSS();
   injectHTML();
   wireEvents();
+  // Amenities are outdoor-only — if the floor changes away from 0 by any
+  // means (sidebar floor buttons, nav, auto indoor/outdoor detection), close
+  // the panel instead of leaving it open with nothing valid left to show.
+  onFloorChange((floor) => {
+    if (floor !== 0 && panelOpen) closePanel();
+  });
 }
 
 /** Called by the Cesium click handler when an amenity entity is clicked. */
 export function onAmenityEntityClick(amenityId: string): void {
   const found = findById(amenityId);
   if (!found) return;
+  ensureOutdoorFloor();
   showInfoCard(found.amenity, found.def);
   if (!panelOpen) openPanel();
+}
+
+// Amenities are outdoor OSM points — they only make sense (and are only
+// rendered; see setAmenitiesVisible in cesiumRenderer.ts) on the outdoor
+// all-floors view. Any interaction with the amenities feature should switch
+// back to floor 0 rather than leaving indoor floor content on screen.
+function ensureOutdoorFloor(): void {
+  if (getSelectedFloor() !== 0) void openFloorProfessional(0);
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
@@ -96,6 +112,7 @@ function wireEvents(): void {
       closePanel();
       return;
     }
+    ensureOutdoorFloor();
     openPanel();
   });
 
@@ -208,6 +225,7 @@ async function toggleCategory(cat: AmenityKey): Promise<void> {
     return;
   }
 
+  ensureOutdoorFloor();
   activeCategories.add(cat);
   btn?.classList.add("am-cat--on");
   loading.add(cat);
@@ -303,6 +321,7 @@ function hideSuggestions(): void {
 }
 
 async function pickLocation(p: GeoPlace): Promise<void> {
+  ensureOutdoorFloor();
   const lat  = parseFloat(p.lat);
   const lon  = parseFloat(p.lon);
   const a    = p.address ?? {};
@@ -428,6 +447,7 @@ function buildCard(am: ParsedAmenity & { _dist?: number }, def: AmenityDef): HTM
   // Click card → info card + fly + highlight this building's polygon
   card.addEventListener("click", (e) => {
     if ((e.target as HTMLElement).classList.contains("am-nav-btn")) return;
+    ensureOutdoorFloor();
     showInfoCard(am, def);
     flyToPoint(am.lat, am.lon, 200);
     void highlightAmenityCard(am);

@@ -7,7 +7,7 @@ import {
 } from "./booking";
 import type { GlobalEvent, UpdateContext } from "./booking";
 import { ALLOWED_DOMAIN } from "./config";
-import { onAuthChange, getGoogleAccessToken, signInWithGoogle, signOut, type CurrentUser } from "./auth";
+import { consumeFreshGoogleSignIn, onAuthChange, getGoogleAccessToken, signInWithGoogle, signOut, type CurrentUser } from "./auth";
 
 declare const gapi: any;
 
@@ -16,6 +16,8 @@ const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY ?? "";
 let isSignedIn = false;
 let controlsBound = false;
 let gapiReady: Promise<void> | null = null;
+let calendarUserId: string | null = null;
+let showLoginBookingSummary = false;
 
 let defaultAvatarHtml = "";
 
@@ -163,6 +165,18 @@ function bindCalendarControls(button: HTMLElement): void {
     }
   });
 
+  document.getElementById("reconnectCalendarBtn")?.addEventListener("click", async (event) => {
+    event.stopPropagation();
+    closeUserMenu();
+    // Forces a fresh Google OAuth round-trip to get a new Calendar provider_token —
+    // Supabase doesn't persist or refresh that token across reloads on its own.
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      console.error("Reconnecting Google Calendar failed:", error);
+    }
+  });
+
   document.getElementById("logoutBtn")?.addEventListener("click", (event) => {
     event.stopPropagation();
     void signOut();
@@ -175,9 +189,10 @@ function bindCalendarControls(button: HTMLElement): void {
 function onGlobalUpdate(events: GlobalEvent[], context: UpdateContext): void {
   updateRoomAvailability(events);
   refreshBookingPanelIfOpen(events);
-  // Initial calendar data is used for room availability without opening a
-  // distracting card. The card appears only when polling finds a new booking.
-  if (context.hasNewBookings) {
+  // The booking summary is a one-time sign-in experience. Polling continues to
+  // refresh room availability and any open booking panel without reopening it.
+  if (context.isInitialLoad && showLoginBookingSummary) {
+    showLoginBookingSummary = false;
     displayAllEventsInCard(events, isSignedIn);
   }
 }
@@ -190,30 +205,44 @@ async function handleSignedIn(user: CurrentUser): Promise<void> {
     return;
   }
 
+  // The Supabase session is the source of truth for "signed in" — it drives the
+  // avatar/menu/logout and complaint-form auth, and must not depend on the Google
+  // Calendar token below. Supabase doesn't persist provider_token across page
+  // reloads, so that token is routinely missing even on a perfectly valid,
+  // already-logged-in session; treating its absence as "not signed in" was
+  // forcing a fresh Google OAuth redirect on every reload instead of just
+  // showing the logout menu.
   showSignedInAvatar({ email, name: user.name, avatarUrl: user.avatarUrl });
+  isSignedIn = true;
+  setCurrentUser(email);
+  setButtonState("signed-in");
+  const isFreshGoogleSignIn = consumeFreshGoogleSignIn();
 
-  setButtonState("loading");
+  // Supabase can emit repeated auth notifications for the same session (for
+  // example after token refresh). Do not restart the calendar engine, because
+  // doing so turns the next poll into another initial load and reopens the card.
+  if (calendarUserId === user.id) return;
+  calendarUserId = user.id;
+  showLoginBookingSummary = isFreshGoogleSignIn;
 
   try {
     await ensureGapiReady();
   } catch (error) {
+    calendarUserId = null;
     console.error("Google Calendar setup failed:", error);
-    setButtonState("ready");
     return;
   }
 
+  // Reuse the cached provider token on refresh. Never start an automatic Google
+  // token request here because GIS may display its own OAuth popup.
   const googleToken = await getGoogleAccessToken();
   if (!googleToken) {
-    console.warn("[Calendar] No Google access token on this session; calendar features unavailable until next sign-in.");
-    setButtonState("ready");
+    calendarUserId = null;
+    console.warn("[Calendar] No Google access token available; calendar features unavailable until reconnect.");
     return;
   }
 
   gapi.client.setToken({ access_token: googleToken });
-  isSignedIn = true;
-  setCurrentUser(email);
-  setButtonState("signed-in");
-
   await initBookingEngine(onGlobalUpdate);
 }
 
@@ -221,6 +250,8 @@ function handleSignedOut(): void {
   stopPolling();
   setCurrentUser(null);
   isSignedIn = false;
+  calendarUserId = null;
+  showLoginBookingSummary = false;
 
   const card = document.getElementById("roomDetailsCard");
   if (card) card.style.display = "none";

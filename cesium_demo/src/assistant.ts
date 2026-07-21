@@ -11,6 +11,7 @@ export type AssistantCallbacks = {
   showMarkers: (points: MarkerPoint[], floor: number) => void;
   clearMarkers: () => void;
   blinkChairs: (indices: number[], floor: number, color?: "red" | "green") => void;
+  bounceSeat: (personName: string, floor: number) => void | Promise<void>;
   triggerOutdoorNav: (origin: string, destination: string) => void;
   startPreviewRoute?: () => void;
   getRoomNames: () => string[];
@@ -207,7 +208,7 @@ const TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          floor: { type: "string", enum: ["all", "ground", "1st", "2nd", "3rd"], description: "Floor name: 'all'=show full building/outdoor view (all floors), 'ground'=lobby, '1st'=CrossFit gym level, '2nd'=employee floor with Dojo/Manthan/Eureka, '3rd'=employee floor with Conference Room." },
+          floor: { type: "string", enum: ["all", "2nd", "3rd"], description: "Floor name: 'all'=show full building/outdoor view (all floors), '2nd'=employee floor with Dojo/Manthan/Eureka, '3rd'=employee floor with Conference Room." },
         },
         required: ["floor"],
       },
@@ -364,7 +365,7 @@ LOCATE / SHOW (use highlight_room / highlight_person_desk):
   → highlight_room or highlight_person_desk (NO navigation)
 
 FLOOR INFO (use show_floor):
-  "switch to 2nd floor", "show 3rd floor", "change floor", "go to ground"
+  "switch to 2nd floor", "show 3rd floor", "change floor"
   "show all floors", "full building", "outdoor view", "show whole building", "all floors"
   → show_floor (use 'all' for full-building/outdoor, otherwise the specific floor)
 
@@ -422,8 +423,6 @@ const BUILDING_OFF_TOPIC_REPLY =
 // ── Client-side floor shortcuts (bypass LLM scope filter) ─────────
 const FLOOR_SHORTCUTS: { pattern: RegExp; floor: number; label: string }[] = [
   { pattern: /\b(all floors?|full build|whole build|show all|all floor|all level|every floor|every level|outdoor view|outside view)\b/i, floor: 0, label: "All Floors (full building / outdoor view)" },
-  { pattern: /\b(ground floor|lobby|ground level|floor 0)\b/i, floor: 1, label: "Ground Floor" },
-  { pattern: /\b(1st floor|first floor|floor 1|crossfit|gym)\b/i, floor: 2, label: "1st Floor" },
   { pattern: /\b(2nd floor|second floor|floor 2|dojo|manthan|eureka)\b/i, floor: 3, label: "2nd Floor" },
   { pattern: /\b(3rd floor|third floor|floor 3|conference|library|lounge)\b/i, floor: 4, label: "3rd Floor" },
 ];
@@ -530,10 +529,10 @@ export async function handleAssistantQuery(userText: string): Promise<string> {
 
       } else if (name === "show_floor") {
         const raw = String(args.floor).toLowerCase().replace(/\s*(floor|fl)\.?/i, "").trim();
-        const floorMap: Record<string, number> = { all: 0, ground: 1, "1st": 2, "2nd": 3, "3rd": 4 };
+        const floorMap: Record<string, number> = { all: 0, "2nd": 3, "3rd": 4 };
         const floorNum = floorMap[raw] ?? 3;
         callbacks!.showFloor(floorNum);
-        const labels: Record<number, string> = { 0: "All Floors (full building / outdoor view)", 1: "Ground Floor", 2: "1st Floor", 3: "2nd Floor (employee)", 4: "3rd Floor (employee)" };
+        const labels: Record<number, string> = { 0: "All Floors (full building / outdoor view)", 3: "2nd Floor (employee)", 4: "3rd Floor (employee)" };
         result = `Switched to ${labels[floorNum]}.`;
 
       } else if (name === "highlight_room") {
@@ -576,12 +575,16 @@ export async function handleAssistantQuery(userText: string): Promise<string> {
 
       } else if (name === "highlight_person_desk") {
         const nameKey = (args.person_name as string).toLowerCase().trim();
-        const desk = Object.entries(PERSON_DESKS).find(([k]) => k.includes(nameKey) || nameKey.includes(k))?.[1];
-        if (desk) {
+        const match = Object.entries(PERSON_DESKS).find(([k]) => k.includes(nameKey) || nameKey.includes(k));
+        const desk = match?.[1];
+        if (desk && match) {
           callbacks!.showFloor(desk.floor);
-          callbacks!.showMarkers([{ lat: desk.lat, lon: desk.lon, label: args.person_name as string }], desk.floor);
+          // Use the matched canonical key (e.g. "samata"), not the raw LLM-extracted
+          // person_name — that can carry extra text ("Samata's desk") that fails an
+          // exact chair-name lookup even though it matched here via substring.
+          void callbacks!.bounceSeat(match[0], desk.floor);
           const floorLabel = desk.floor === 4 ? "3rd floor" : "2nd floor";
-          result = `Highlighted ${args.person_name}'s desk on ${floorLabel} with a red marker.`;
+          result = `${args.person_name}'s seat is on ${floorLabel} — watch it hop.`;
         } else {
           result = `Could not find desk for "${args.person_name}". They may not have an assigned seat in the system.`;
         }

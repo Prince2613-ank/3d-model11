@@ -10,7 +10,8 @@ export type ComplaintStatus = "pending" | "assigned" | "resolved" | "rejected";
 export type AnnouncementCategory = "power_shutdown" | "maintenance" | "fire_drill" | "holiday" | "other";
 export type NotificationType =
   | "complaint_created" | "complaint_assigned" | "complaint_resolved"
-  | "complaint_rejected" | "complaint_replied" | "new_complaint_admin" | "announcement" | "direct_message";
+  | "complaint_rejected" | "complaint_replied" | "new_complaint_admin" | "announcement" | "direct_message"
+  | "room_booked" | "room_booking_cancelled";
 
 export interface Profile {
   id: string;
@@ -176,4 +177,5 @@ export interface DashboardStats {
   assetsWithMostIssues: { asset_id: string; asset_name: string; complaint_count: number }[];
   topFloors: { floor_id: string; floor_name: string; complaint_count: number }[];
   monthlyTrends: { month: string; complaint_count: number }[];
+  dailyTrends: { day: string; complaint_count: number }[];
 }

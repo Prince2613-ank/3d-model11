@@ -17,7 +17,7 @@ export function MobileNav() {
   return (
     <>
       {moreOpen && (
-        <div className="fixed inset-0 z-40 md:hidden">
+        <div className="fixed inset-0 z-[55] md:hidden">
           <button className="absolute inset-0 bg-slate-950/45 backdrop-blur-sm" onClick={() => setMoreOpen(false)} aria-label="Close navigation" />
           <section className="absolute inset-x-2 bottom-[76px] rounded-[24px] border border-white/70 bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,.28)] dark:border-white/10 dark:bg-slate-900">
             <div className="mb-3 flex items-center justify-between"><div><p className="text-sm font-black text-slate-900 dark:text-white">More tools</p><p className="text-[11px] text-slate-400">Manage your workspace</p></div><button onClick={() => setMoreOpen(false)} className="grid h-8 w-8 place-items-center rounded-lg bg-slate-100 text-slate-500 dark:bg-white/5">✕</button></div>

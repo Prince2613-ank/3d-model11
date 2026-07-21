@@ -1,9 +1,7 @@
 import {
   Cesium,
-  ALT_1ST,
   ALT_2ND,
   ALT_3RD,
-  ALT_GROUND,
   BASE_ALT,
   MODEL_SCALE,
   computeMatrix,
@@ -28,11 +26,9 @@ import nd2dCam4Url from "../models/2nd_cc4.glb?url";
 import nd2dCam5Url from "../models/2nd_cc5.glb?url";
 import nd2dCam6Url from "../models/2nd_cc6.glb?url";
 
-import firstFloorUrl from "../models/1st_floor_up_final.glb?url";
 import secondFloorFullUrl from "../models/final_2nd_floor_without_chair.glb?url";
 import secondFloorFastUrl from "../models/final_2nd_floor_without_chair_fast.glb?url";
 import fullBuildingUrl from "../models/full_building.glb?url";
-import groundFloorUrl from "../models/ground_floor_final.glb?url";
 import outdoorModelUrl from "../models/outdoor_model.glb?url";
 import thirdFloorUrl from "../models/3rd_floor_without_chairs.glb?url";
 import secondFloorLoadingBaseUrl from "../models/2nd_floor_base.glb?url";
@@ -70,8 +66,6 @@ const modelAssets: Record<string, string> = {
   "../models/2nd_cc6.glb": nd2dCam6Url,
 
   "../models/full_building_opt.glb": fullBuildingUrl,
-  "../models/ground_floor_final.glb": groundFloorUrl,
-  "../models/1st_floor_up_final.glb": firstFloorUrl,
   "../models/final_2nd_floor_without_chair.glb": secondFloorFullUrl,
   "../models/final_2nd_floor_without_chair_fast.glb": secondFloorFastUrl,
   "../models/3rd_floor_without_chairs.glb": thirdFloorUrl,
@@ -162,8 +156,6 @@ export interface CameraModel extends Cesium.Model {
 
 export interface BuildingModels {
   fullBuilding: Cesium.Model | null;
-  ground: Cesium.Model | null;
-  first: Cesium.Model | null;
   second: Cesium.Model | null;
   third: Cesium.Model | null;
   cameras: CameraModel[];
@@ -178,8 +170,6 @@ export interface BuildingModels {
 
 export const models: BuildingModels = {
   fullBuilding: null,
-  ground: null,
-  first: null,
   second: null,
   third: null,
   cameras: [],
@@ -402,10 +392,6 @@ export async function showSecondFloorWallPreview(): Promise<void> {
 
 function floorFileName(floor: number): string | null {
   switch (floor) {
-    case 1:
-      return "ground_floor_final.glb";
-    case 2:
-      return "1st_floor_up_final.glb";
     case 3:
       // Only this floor has a genuinely lighter, same-fidelity variant
       // (35 MB vs 55 MB). The 3rd-floor "_fast" file is mislabeled — it's
@@ -422,10 +408,6 @@ function floorFileName(floor: number): string | null {
 
 function floorAltitude(floor: number): number {
   switch (floor) {
-    case 1:
-      return ALT_GROUND;
-    case 2:
-      return ALT_1ST;
     case 3:
       return ALT_2ND;
     case 4:
@@ -437,10 +419,6 @@ function floorAltitude(floor: number): number {
 
 export function getFloorModel(floor: number): Cesium.Model | null {
   switch (floor) {
-    case 1:
-      return models.ground;
-    case 2:
-      return models.first;
     case 3:
       return models.second;
     case 4:
@@ -452,12 +430,6 @@ export function getFloorModel(floor: number): Cesium.Model | null {
 
 function setFloorModel(floor: number, model: Cesium.Model): void {
   switch (floor) {
-    case 1:
-      models.ground = model;
-      break;
-    case 2:
-      models.first = model;
-      break;
     case 3:
       models.second = model;
       break;
@@ -598,7 +570,7 @@ export function isFloorModelLoaded(floor: number): boolean {
 }
 
 export function ensureFloorModelLoaded(floor: number): Promise<void> {
-  if (floor < 1 || floor > 4 || isFloorModelLoaded(floor)) return Promise.resolve();
+  if ((floor !== 3 && floor !== 4) || isFloorModelLoaded(floor)) return Promise.resolve();
 
   const cached = floorLoadPromises.get(floor);
   if (cached) return cached;

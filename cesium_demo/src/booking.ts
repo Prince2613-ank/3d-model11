@@ -1,4 +1,5 @@
 import { POLL_INTERVAL_MS, CACHE_TTL_MS, ROOM_CALENDARS } from "./config";
+import { api } from "./api";
 
 declare const gapi: any;
 
@@ -129,6 +130,19 @@ export function checkConflict(
   );
 }
 
+// ── Admin notification (best-effort side channel) ───────────────────
+/**
+ * Bookings live entirely in Google Calendar — this just tells the backend to
+ * raise an admin notification. Fire-and-forget: never block or fail the
+ * booking/cancellation itself on this, and never let a network hiccup here
+ * surface as a booking error to the user.
+ */
+function notifyBackend(path: string, payload: Record<string, unknown>): void {
+  void api.post(path, payload).catch((err) => {
+    console.warn(`[Booking] Failed to send admin notification (${path}):`, err);
+  });
+}
+
 // ── Create booking ────────────────────────────────────────────────
 /**
  * Inserts the event into the user's PRIMARY calendar with the room as an attendee (Method B).
@@ -137,6 +151,24 @@ export function checkConflict(
  * Google automatically handles the invitation and updates the room's calendar.
  * We then check if the room declined the invitation to detect double-bookings.
  */
+const RECONNECT_CALENDAR_ERROR = "Google Calendar isn't connected — open your profile menu and click \"Reconnect Calendar\", then try again.";
+
+/**
+ * currentUserEmail is set as soon as the Supabase session is valid, but the
+ * Google Calendar token behind gapi is a separate thing that Supabase doesn't
+ * persist across page reloads — so it's routinely missing even when the user
+ * is otherwise fully signed in. Calling the Calendar API without it fails with
+ * a cryptic Google 401 ("missing required authentication credential"), so
+ * check for it explicitly first and give a clear, actionable error instead.
+ */
+function hasGoogleCalendarAuth(): boolean {
+  try {
+    return Boolean(gapi?.client?.getToken?.());
+  } catch {
+    return false;
+  }
+}
+
 export async function createBooking(
   roomName: string,
   start: Date,
@@ -145,6 +177,9 @@ export async function createBooking(
 ): Promise<{ success: boolean; error?: string }> {
   if (!currentUserEmail) {
     return { success: false, error: "Not signed in" };
+  }
+  if (!hasGoogleCalendarAuth()) {
+    return { success: false, error: RECONNECT_CALENDAR_ERROR };
   }
 
   const roomCalId = ROOM_CALENDARS[roomName];
@@ -222,6 +257,7 @@ export async function createBooking(
     console.log(`[Booking] ✓ ${roomName} accepted/pending booking.`);
     invalidateCache();
     void forceRefreshBookings();
+    notifyBackend("/bookings/notify", { roomName, startTime: start.toISOString(), endTime: end.toISOString() });
     return { success: true };
   } catch (err: any) {
     const msg: string =
@@ -232,20 +268,24 @@ export async function createBooking(
 }
 
 // ── Cancel booking ────────────────────────────────────────────────
-export async function cancelBooking(eventId: string): Promise<{ success: boolean; error?: string }> {
+export async function cancelBooking(event: GlobalEvent): Promise<{ success: boolean; error?: string }> {
   if (!currentUserEmail) {
     return { success: false, error: "Not signed in" };
   }
+  if (!hasGoogleCalendarAuth()) {
+    return { success: false, error: RECONNECT_CALENDAR_ERROR };
+  }
 
   try {
-    console.log(`[Booking] Cancelling event ${eventId} in primary calendar...`);
+    console.log(`[Booking] Cancelling event ${event.id} in primary calendar...`);
     await gapi.client.calendar.events.delete({
       calendarId: "primary",
-      eventId: eventId,
+      eventId: event.id,
     });
     console.log(`[Booking] ✓ Event cancelled.`);
     invalidateCache();
     void forceRefreshBookings();
+    notifyBackend("/bookings/notify-cancel", { roomName: event.room, startTime: event.start.toISOString(), endTime: event.end.toISOString() });
     return { success: true };
   } catch (err: any) {
     const msg: string = err?.result?.error?.message ?? err?.message ?? "Cancellation failed";
@@ -268,26 +308,10 @@ export type UpdateCallback = (events: GlobalEvent[], context: UpdateContext) => 
 
 function detectChanges(prev: GlobalEvent[], next: GlobalEvent[]): boolean {
   const prevIds = new Set(prev.map((e) => e.id));
-  const nextIds = new Set(next.map((e) => e.id));
-  let hasNewBookings = false;
-
-  for (const event of next) {
-    if (!prevIds.has(event.id)) {
-      hasNewBookings = true;
-      const t = event.start.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      showToast(`${event.room} booked by ${event.organizer} at ${t}`, "info");
-    }
-  }
-  for (const event of prev) {
-    if (!nextIds.has(event.id)) {
-      showToast(`${event.room} is now available`, "success");
-    }
-  }
-
-  return hasNewBookings;
+  // Polling is intentionally silent after the initial sign-in summary. The
+  // change flag remains available to non-visual consumers without creating a
+  // toast or reopening the booking card.
+  return next.some((event) => !prevIds.has(event.id));
 }
 
 let activeOnUpdate: UpdateCallback | null = null;

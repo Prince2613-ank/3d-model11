@@ -1378,6 +1378,8 @@ export function showRoomInfoCard(roomName: string, events: GlobalEvent[], floorL
   const status = bookingRoomName
     ? upcomingToday.length > 0 ? "Occupied / booked today" : "Available today"
     : "Not bookable";
+  const myEmailPrefix = currentUserEmail?.split("@")[0] ?? "";
+  const myBooking = upcomingToday.find((event) => event.organizer === myEmailPrefix);
 
   title.textContent = displayName;
   cardContent.innerHTML = `
@@ -1395,8 +1397,9 @@ export function showRoomInfoCard(roomName: string, events: GlobalEvent[], floorL
             </div>`
           : ""
       }
-      <div class="room-info-actions ${bookingRoomName ? "" : "room-info-actions-single"}">
+      <div class="room-info-actions ${myBooking ? "room-info-actions-triple" : bookingRoomName ? "" : "room-info-actions-single"}">
         ${bookingRoomName ? `<button id="roomInfoBookingBtn" class="btn room-info-book-btn" type="button">Book Room</button>` : ""}
+        ${myBooking ? `<button id="roomInfoCancelBtn" class="btn room-info-cancel-btn" type="button">Cancel Booking</button>` : ""}
         <button id="roomInfoComplaintBtn" class="btn btn-primary room-info-complaint-btn" type="button">Raise Complaint</button>
       </div>
     </div>
@@ -1407,6 +1410,21 @@ export function showRoomInfoCard(roomName: string, events: GlobalEvent[], floorL
   });
   optionalElement<HTMLButtonElement>("roomInfoComplaintBtn")?.addEventListener("click", () => {
     openComplaintForm({ targetType: "room", objectName: displayName, floor: floorNumber, roomId: liveRoom?.id });
+  });
+  optionalElement<HTMLButtonElement>("roomInfoCancelBtn")?.addEventListener("click", async () => {
+    if (!myBooking) return;
+    const btn = optionalElement<HTMLButtonElement>("roomInfoCancelBtn");
+    if (btn) { btn.disabled = true; btn.textContent = "Cancelling…"; }
+    const res = await cancelBooking(myBooking);
+    if (res.success) {
+      showToast("Booking cancelled", "success");
+      // Re-render with the cancelled event removed so status/buttons update instantly,
+      // without waiting for the next poll cycle.
+      showRoomInfoCard(roomName, events.filter((event) => event.id !== myBooking.id), floorLabel);
+    } else {
+      showToast(res.error || "Failed to cancel", "error");
+      if (btn) { btn.disabled = false; btn.textContent = "Cancel Booking"; }
+    }
   });
 
   card.style.display = "block";
@@ -1465,7 +1483,7 @@ export function openBookingPanel(roomName: string, events: GlobalEvent[]): void 
           btn.addEventListener("click", async () => {
             btn.disabled = true;
             btn.textContent = "Cancelling...";
-            const res = await cancelBooking(e.id);
+            const res = await cancelBooking(e);
             if (res.success) {
               showToast("Booking cancelled", "success");
               div.remove(); // Instantly remove the booking from the UI

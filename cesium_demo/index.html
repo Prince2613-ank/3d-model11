@@ -475,6 +475,26 @@
     </svg>
   </button>
 
+  <button id="myComplaintsBtn" class="notification-center-btn my-complaints-btn" type="button" aria-label="My Complaints" aria-expanded="false" title="My Complaints" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="9"/>
+      <path d="M9.5 9a2.5 2.5 0 0 1 4.9.8c0 1.7-2.4 1.9-2.4 3.7"/>
+      <path d="M12 17h.01"/>
+    </svg>
+  </button>
+
+  <section id="myComplaintsPanel" class="notification-center-panel my-complaints-panel" aria-label="My Complaints" hidden>
+    <header class="notification-center-header">
+      <div>
+        <span class="notification-center-eyebrow">Help</span>
+        <h3>My Complaints</h3>
+      </div>
+    </header>
+    <div id="myComplaintsTabs" class="my-complaints-tabs"></div>
+    <div id="myComplaintsStatus" class="notification-center-status">Loading your complaints…</div>
+    <div id="myComplaintsList" class="notification-center-list my-complaints-list"></div>
+  </section>
+
   <button id="notificationCenterBtn" class="notification-center-btn" type="button" aria-label="Notifications" aria-expanded="false" title="Notifications" hidden>
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/>
@@ -526,6 +546,7 @@
     </div>
     <div class="user-dropdown-arrow">▼</div>
     <div id="userMenu" class="user-menu" hidden>
+      <button id="reconnectCalendarBtn" type="button">Reconnect Calendar</button>
       <button id="logoutBtn" type="button">Logout</button>
     </div>
   </div>
@@ -599,8 +620,6 @@
     <section class="panel common-panel" aria-label="Floor controls">
       <h3>Floor Controls</h3>
       <div id="floorButtons">
-        <button class="btn" type="button" data-floor="1">Show Ground Floor</button>
-        <button class="btn" type="button" data-floor="2">Show 1st Floor</button>
         <button class="btn" type="button" data-floor="3">Show 2nd Floor</button>
         <button class="btn" type="button" data-floor="4">Show 3rd Floor</button>
       </div>

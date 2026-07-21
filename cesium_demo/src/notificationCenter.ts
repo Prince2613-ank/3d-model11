@@ -1,10 +1,12 @@
 import { api } from "./api";
 import { onAuthChange, type CurrentUser } from "./auth";
 import { showToast } from "./booking";
+import { registerToolbarPanel, closeOtherToolbarPanels } from "./panelCoordination";
 
 type NotificationType =
   | "complaint_created" | "complaint_assigned" | "complaint_resolved"
-  | "complaint_rejected" | "complaint_replied" | "new_complaint_admin" | "announcement" | "direct_message";
+  | "complaint_rejected" | "complaint_replied" | "new_complaint_admin" | "announcement" | "direct_message"
+  | "room_booked" | "room_booking_cancelled";
 
 interface NotificationItem {
   id: string;
@@ -40,10 +42,27 @@ interface ComplaintHistoryEntry {
 }
 
 const POLL_INTERVAL_MS = 12_000;
+const NOTIFY_DEEP_LINK_PARAM = "notify";
 let pollTimer: number | null = null;
 let signedInUser: CurrentUser | null = null;
 let initializedFeed = false;
 let knownIds = new Set<string>();
+let consumedNotifyDeepLink = false;
+
+// Emails link here with ?notify=1 (see backend/src/lib/emailTemplates.ts) so
+// clicking "Open in User Panel" lands the reader straight on their
+// notification feed instead of just the bare 3D viewer.
+function shouldAutoOpenFromEmailLink(): boolean {
+  if (consumedNotifyDeepLink) return false;
+  return new URLSearchParams(window.location.search).get(NOTIFY_DEEP_LINK_PARAM) === "1";
+}
+
+function consumeNotifyDeepLink(): void {
+  consumedNotifyDeepLink = true;
+  const url = new URL(window.location.href);
+  url.searchParams.delete(NOTIFY_DEEP_LINK_PARAM);
+  window.history.replaceState({}, "", url.toString());
+}
 
 function element<T extends HTMLElement>(id: string): T {
   const found = document.getElementById(id);
@@ -67,6 +86,8 @@ function iconFor(type: NotificationType): string {
   if (type === "complaint_rejected") return "×";
   if (type === "complaint_replied") return "↩";
   if (type === "complaint_assigned") return "→";
+  if (type === "room_booked") return "📅";
+  if (type === "room_booking_cancelled") return "⊘";
   return "!";
 }
 
@@ -77,6 +98,8 @@ function detailLabel(type: NotificationType): string {
   if (type === "complaint_resolved") return "Complaint resolved";
   if (type === "complaint_rejected") return "Complaint rejected";
   if (type === "complaint_assigned") return "Complaint assigned";
+  if (type === "room_booked") return "Room booked";
+  if (type === "room_booking_cancelled") return "Booking cancelled";
   return "Complaint update";
 }
 
@@ -101,6 +124,94 @@ function detailSection(title: string, body: string): HTMLElement {
   paragraph.textContent = body;
   section.append(heading, paragraph);
   return section;
+}
+
+// Older data (created before the backend guarded against re-resolving an
+// already-resolved complaint) can contain back-to-back rows for the same
+// transition — collapse those so the timeline reads as one event, not two.
+function dedupeHistory(history: ComplaintHistoryEntry[]): ComplaintHistoryEntry[] {
+  return history.filter((entry, index) => {
+    const prev = history[index - 1];
+    return !prev || prev.to_status !== entry.to_status || prev.note !== entry.note;
+  });
+}
+
+// Complaints rarely change while the panel is open, so cache each fetch —
+// re-expanding a card shouldn't re-hit the network.
+const complaintDetailCache = new Map<string, ComplaintDetail | null>();
+
+// Picks the one field most relevant to *this* notification's type, so the
+// inline card stays short instead of dumping the whole complaint record.
+function shortComplaintMessage(item: NotificationItem, complaint: ComplaintDetail): string {
+  if (item.type === "complaint_resolved") return complaint.resolution_text || "Marked resolved.";
+  if (item.type === "complaint_rejected" || item.type === "complaint_replied") return complaint.admin_reply || "No message included.";
+  if (item.type === "complaint_assigned") return complaint.assigned_to_name ? `Assigned to ${complaint.assigned_to_name}.` : "Assigned for review.";
+  return complaint.description;
+}
+
+async function loadInlineComplaintDetail(item: NotificationItem, detailEl: HTMLElement): Promise<void> {
+  if (!item.related_complaint_id) return;
+  detailEl.dataset.loaded = "1";
+  detailEl.textContent = "Loading…";
+
+  try {
+    let complaint = complaintDetailCache.get(item.related_complaint_id);
+    if (complaint === undefined) {
+      const { complaint: fetched } = await api.get<{ complaint: ComplaintDetail }>(`/complaints/${item.related_complaint_id}`);
+      complaint = fetched;
+      complaintDetailCache.set(item.related_complaint_id, complaint);
+    }
+    if (!complaint) {
+      detailEl.textContent = "This complaint is no longer available.";
+      return;
+    }
+
+    detailEl.replaceChildren();
+
+    const facts = document.createElement("div");
+    facts.className = "notification-center-inline-detail-facts";
+    const statusFact = document.createElement("span");
+    statusFact.className = `notification-center-inline-fact status-${complaint.status}`;
+    statusFact.textContent = complaint.status.replaceAll("_", " ");
+    const issueFact = document.createElement("span");
+    issueFact.className = "notification-center-inline-fact";
+    issueFact.textContent = complaint.issue_type;
+    facts.append(statusFact, issueFact);
+    detailEl.appendChild(facts);
+
+    const message = document.createElement("p");
+    message.className = "notification-center-inline-detail-message";
+    message.textContent = shortComplaintMessage(item, complaint);
+    detailEl.appendChild(message);
+
+    const viewFull = document.createElement("button");
+    viewFull.type = "button";
+    viewFull.className = "notification-center-inline-detail-viewfull";
+    viewFull.textContent = "View full timeline →";
+    viewFull.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void openNotificationDetail(item);
+    });
+    detailEl.appendChild(viewFull);
+  } catch (error) {
+    detailEl.textContent = "Could not load complaint details.";
+    console.warn("[notifications] Failed to load inline complaint detail:", error);
+  }
+}
+
+function toggleInlineDetail(entry: HTMLElement, detailEl: HTMLElement, item: NotificationItem): void {
+  const isOpen = !detailEl.hidden;
+  if (isOpen) {
+    detailEl.hidden = true;
+    entry.classList.remove("is-expanded");
+    return;
+  }
+
+  detailEl.hidden = false;
+  entry.classList.add("is-expanded");
+  if (item.related_complaint_id && detailEl.dataset.loaded !== "1") {
+    void loadInlineComplaintDetail(item, detailEl);
+  }
 }
 
 function closeNotificationDetail(): void {
@@ -152,11 +263,18 @@ async function openNotificationDetail(item: NotificationItem): Promise<void> {
       const heading = document.createElement("h4");
       heading.textContent = "Activity timeline";
       timeline.appendChild(heading);
-      history.forEach((entry) => {
+      const dedupedHistory = dedupeHistory(history);
+      dedupedHistory.forEach((entry, index) => {
         const event = document.createElement("div");
-        event.className = "notification-detail-timeline-event";
+        event.className = `notification-detail-timeline-event${entry.to_status ? ` status-${entry.to_status}` : ""}`;
         const label = document.createElement("strong");
-        label.textContent = entry.to_status ? `Status changed to ${entry.to_status}` : "Complaint updated";
+        label.textContent = entry.to_status ? `${entry.from_status ?? "New"} → ${entry.to_status}` : "Complaint updated";
+        if (index === dedupedHistory.length - 1) {
+          const latestBadge = document.createElement("span");
+          latestBadge.className = "timeline-latest-badge";
+          latestBadge.textContent = "Latest";
+          label.appendChild(latestBadge);
+        }
         const meta = document.createElement("span");
         meta.textContent = new Date(entry.created_at).toLocaleString();
         event.append(label, meta);
@@ -175,6 +293,16 @@ async function openNotificationDetail(item: NotificationItem): Promise<void> {
   }
 }
 
+function decrementUnreadBadge(): void {
+  const badge = element<HTMLElement>("notificationCenterBadge");
+  const button = element<HTMLButtonElement>("notificationCenterBtn");
+  const current = parseInt(badge.textContent || "0", 10) || 0;
+  const next = Math.max(0, current - 1);
+  badge.textContent = next > 99 ? "99+" : String(next);
+  badge.hidden = next === 0;
+  button.classList.toggle("has-unread", next > 0);
+}
+
 function renderNotifications(items: NotificationItem[]): void {
   const list = element<HTMLElement>("notificationCenterList");
   const status = element<HTMLElement>("notificationCenterStatus");
@@ -188,6 +316,9 @@ function renderNotifications(items: NotificationItem[]): void {
   status.hidden = true;
 
   for (const item of items) {
+    const entry = document.createElement("div");
+    entry.className = "notification-center-entry";
+
     const button = document.createElement("button");
     button.type = "button";
     button.className = `notification-center-item${item.is_read ? " is-read" : " is-unread"}`;
@@ -219,15 +350,37 @@ function renderNotifications(items: NotificationItem[]): void {
     }
 
     button.append(icon, content);
+
+    // Complaint-linked notifications (raised/assigned/resolved/rejected/replied)
+    // expand in place to show a short status summary — no separate modal needed
+    // for the common case. Non-complaint notifications (announcements, direct
+    // messages) have nothing further to fetch, so they don't get a caret.
+    let detail: HTMLElement | null = null;
+    if (item.related_complaint_id) {
+      const caret = document.createElement("span");
+      caret.className = "notification-center-expand-caret";
+      caret.textContent = "▶";
+      button.appendChild(caret);
+
+      detail = document.createElement("div");
+      detail.className = "notification-center-inline-detail";
+      detail.hidden = true;
+    }
+
     button.addEventListener("click", async () => {
-      void openNotificationDetail(item);
+      if (detail) toggleInlineDetail(entry, detail, item);
       if (!item.is_read) {
         await api.patch(`/notifications/${item.id}/read`);
         item.is_read = true;
-        await refreshNotifications(false);
+        button.classList.remove("is-unread");
+        button.classList.add("is-read");
+        decrementUnreadBadge();
       }
     });
-    list.appendChild(button);
+
+    entry.appendChild(button);
+    if (detail) entry.appendChild(detail);
+    list.appendChild(entry);
   }
 }
 
@@ -272,7 +425,10 @@ function setPanelOpen(open: boolean): void {
   panel.hidden = !open;
   button.setAttribute("aria-expanded", String(open));
   button.classList.toggle("is-active", open);
-  if (open && signedInUser) void refreshNotifications(false);
+  if (open) {
+    closeOtherToolbarPanels("notifications");
+    if (signedInUser) void refreshNotifications(false);
+  }
 }
 
 function stopPolling(): void {
@@ -299,7 +455,12 @@ function handleAuthChange(user: CurrentUser | null): void {
     return;
   }
 
-  void refreshNotifications(false);
+  void refreshNotifications(false).then(() => {
+    if (shouldAutoOpenFromEmailLink()) {
+      consumeNotifyDeepLink();
+      setPanelOpen(true);
+    }
+  });
   pollTimer = window.setInterval(() => void refreshNotifications(), POLL_INTERVAL_MS);
 }
 
@@ -330,5 +491,6 @@ export function initNotificationCenter(): void {
     if (event.key === "Escape") closeNotificationDetail();
   });
 
+  registerToolbarPanel("notifications", () => setPanelOpen(false));
   onAuthChange(handleAuthChange);
 }

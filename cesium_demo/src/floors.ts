@@ -6,6 +6,7 @@ import {
 } from "./viewer";
 import {
   ensureFloorModelLoaded,
+  exitCctvMode,
   getActiveCctvModel,
   isSecondFloorLoadingPreviewActive,
   isThirdFloorLoadingPreviewActive,
@@ -21,17 +22,23 @@ import {
 } from "./models";
 import { geo2, geo3 } from "./rooms";
 import { loadChairsForFloor, secondFloorChairs, thirdFloorChairs, type ChairModel } from "./chairs";
-import { renderCameraControls } from "./ui";
+import { hideCctvPanel, renderCameraControls } from "./ui";
 import { updateNavigationVisibility } from "./navigation";
 import { showToast } from "./booking";
 import { clearCctvViewshed } from "./cameraShed/cctvViewshed";
+import { PUNJABI_BAGH_BBOX } from "./solar/constants";
+import { setSolarEntitiesVisible } from "./solar/solarRenderer";
+import { setAmenitiesVisible } from "./amenities/cesiumRenderer";
+import { setBuildingHighlightsVisible } from "./gis/buildingHighlight";
 
 // Read the floor to resume on page load/reload from the URL (?floor=4), so a hard
 // refresh on e.g. the 3rd floor resumes there instead of always landing on floor 0.
+// Ground Floor (1) and 1st Floor (2) were removed — only 0 (all floors),
+// 3 (2nd Floor), and 4 (3rd Floor) are valid.
 function readFloorFromUrl(): number {
   const raw = new URLSearchParams(window.location.search).get("floor");
   const parsed = raw !== null ? parseInt(raw, 10) : NaN;
-  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 4 ? parsed : 0;
+  return parsed === 3 || parsed === 4 ? parsed : 0;
 }
 
 export function getInitialFloorFromUrl(): number {
@@ -57,6 +64,7 @@ function syncFloorToUrl(floor: number): void {
 }
 
 let selectedFloor = readFloorFromUrl();
+let solarWorkspaceActive = false;
 let autoIndoorEnabled = true;
 let mode: "OUTDOOR" | "INDOOR" = "OUTDOOR";
 let indoorFloor: number | null = null;
@@ -80,6 +88,17 @@ function setShow(target: { show: boolean } | null | undefined, show: boolean): v
   }
 }
 
+// The Explore Nearby (amenities) and Rooftop Solar toolbar buttons only make
+// sense on the outdoor/all-floors view — same reasoning as setAmenitiesVisible
+// and setSolarEntitiesVisible, just for their toolbar toggle buttons instead
+// of the 3D entities.
+function setOutdoorOnlyButtonsVisible(visible: boolean): void {
+  const nearbyBtn = document.getElementById("nearbyNavBtn");
+  if (nearbyBtn) nearbyBtn.style.display = visible ? "" : "none";
+  const solarBtn = document.getElementById("solarToolbarBtn");
+  if (solarBtn) solarBtn.style.display = visible ? "" : "none";
+}
+
 function showLoadedChairIfSelected(chair: ChairModel): void {
   const shouldShow = chair.chairFloor === selectedFloor
     && !(chair.chairFloor === 3 && isSecondFloorLoadingPreviewActive())
@@ -93,6 +112,10 @@ function showLoadedChairIfSelected(chair: ChairModel): void {
 // Pure visibility-only update — no async triggers, no DOM rebuilds.
 // Used by async callbacks so they don't re-enter showFloor and cause render storms.
 function applyVisibility(floor: number): void {
+  // Expose the active floor to CSS as a durable UI guard. Some toolbar controls
+  // are mounted asynchronously and may otherwise overwrite an earlier inline
+  // display state after the floor has already changed.
+  document.body.dataset.activeFloor = String(floor);
   const secondFloorPreviewActive = floor === 3 && isSecondFloorLoadingPreviewActive();
   const thirdFloorPreviewActive = floor === 4 && isThirdFloorLoadingPreviewActive();
   const ambientLight = secondFloorPreviewActive ? DEFAULT_AMBIENT_LIGHT : floor === 3 ? SECOND_FLOOR_COOL_AMBIENT_LIGHT : DEFAULT_AMBIENT_LIGHT;
@@ -112,7 +135,7 @@ function applyVisibility(floor: number): void {
   }
 
   // Hide globe (map tiles) for indoor floors — shows clean black background
-  const isIndoor = floor >= 2;
+  const isIndoor = floor >= 3;
   viewer.scene.globe.show = !isIndoor;
   viewer.scene.backgroundColor = isIndoor
     ? Cesium.Color.BLACK
@@ -120,8 +143,6 @@ function applyVisibility(floor: number): void {
 
   setShow(models.fullBuilding, floor === 0);
   setShow(models.outdoor, floor === 0);
-  setShow(models.ground, floor === 1);
-  setShow(models.first, floor === 2);
   setShow(models.second, floor === 3 && !secondFloorPreviewActive);
   setShow(models.third, floor === 4 && !thirdFloorPreviewActive);
   setShow(models.meetingRoom, floor === 4 && !thirdFloorPreviewActive);
@@ -148,8 +169,24 @@ function applyVisibility(floor: number): void {
 
   setShow(geo2, floor === 3 && !secondFloorPreviewActive);
   setShow(geo3, floor === 4 && !thirdFloorPreviewActive);
+  setSolarEntitiesVisible(floor === 0);
+  setAmenitiesVisible(floor === 0);
+  setBuildingHighlightsVisible(floor === 0);
+  setOutdoorOnlyButtonsVisible(floor === 0);
 
   updateNavigationVisibility(floor);
+
+  for (const listener of floorChangeListeners) listener(floor);
+}
+
+// Lets outdoor-only features (currently: the amenities panel) react to any
+// floor change without floors.ts needing to import them directly — panel.ts
+// already imports from floors.ts, so a reverse import here would be circular.
+type FloorChangeListener = (floor: number) => void;
+const floorChangeListeners = new Set<FloorChangeListener>();
+export function onFloorChange(listener: FloorChangeListener): () => void {
+  floorChangeListeners.add(listener);
+  return () => floorChangeListeners.delete(listener);
 }
 
 function requestChairFloor(floor: number): void {
@@ -263,6 +300,7 @@ async function ensureFloorCompletelyLoaded(floor: number, token: number): Promis
 }
 
 export function showFloor(floor: number): void {
+  if (solarWorkspaceActive && floor !== 0) return;
   if (isCctvActive()) {
     showToast("Exit camera view first to use this.", "error");
     return;
@@ -295,6 +333,10 @@ export function showFloor(floor: number): void {
 
 // Returns a Promise so the UI can tie spinner lifetime to actual load completion.
 export function openFloorProfessional(floorNumber: number): Promise<void> {
+  if (solarWorkspaceActive && floorNumber !== 0) {
+    showToast("Close Solar Workspace before opening an indoor floor.", "error");
+    return Promise.resolve();
+  }
   if (isCctvActive()) {
     showToast("Exit camera view first to use this.", "error");
     return Promise.resolve();
@@ -371,6 +413,34 @@ export function openFloorProfessional(floorNumber: number): Promise<void> {
   })();
 }
 
+/** Enter the outdoor, map-only state used by rooftop solar analysis. */
+export function enterSolarMapMode(): void {
+  solarWorkspaceActive = true;
+  document.body.classList.add("solar-workspace-active");
+
+  if (isCctvActive()) {
+    clearCctvViewshed();
+    exitCctvMode();
+    hideCctvPanel();
+  }
+
+  void openFloorProfessional(0);
+  viewer.camera.flyTo({
+    destination: Cesium.Rectangle.fromDegrees(
+      PUNJABI_BAGH_BBOX.minLon,
+      PUNJABI_BAGH_BBOX.minLat,
+      PUNJABI_BAGH_BBOX.maxLon,
+      PUNJABI_BAGH_BBOX.maxLat
+    ),
+    duration: 0.85
+  });
+}
+
+export function exitSolarMapMode(): void {
+  solarWorkspaceActive = false;
+  document.body.classList.remove("solar-workspace-active");
+}
+
 function updateBodyFloorClass(floor: number): void {
   try {
     const body = document.body;
@@ -387,8 +457,6 @@ function detectFloorFromScreenCenter(): number | null {
   const picked = viewer.scene.pick(center);
   const primitive = picked?.primitive;
 
-  if (primitive === models.ground) return 1;
-  if (primitive === models.first) return 2;
   if (primitive === models.second) return 3;
   if (primitive === models.third) return 4;
   return null;
@@ -429,8 +497,6 @@ export function initSmartFloorCamera(): void {
     if (now - lastSwitchTime < 300) return;
 
     if (models.fullBuilding) models.fullBuilding.show = false;
-    if (models.ground) models.ground.show = true;
-    if (models.first) models.first.show = true;
     if (models.second) models.second.show = true;
     if (models.third) models.third.show = true;
 

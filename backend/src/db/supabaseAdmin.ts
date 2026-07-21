@@ -19,11 +19,12 @@ if (!serviceRoleKey) {
 
 const clientOptions = { auth: { autoRefreshToken: false, persistSession: false } };
 
-// Verifying a caller's JWT does not require service-role privileges. This
-// client intentionally falls back to the anon key for local development.
+// Verifying a caller's JWT does not require service-role privileges. Prefer
+// the same public key used by the frontends so auth verification is not tied
+// to service-role key rotation or availability.
 export const supabaseAuth = createClient(
   url || "https://placeholder.supabase.co",
-  serviceRoleKey || anonKey || "placeholder-api-key",
+  anonKey || serviceRoleKey || "placeholder-api-key",
   clientOptions
 );
 

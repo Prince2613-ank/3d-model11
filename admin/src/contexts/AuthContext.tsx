@@ -1,11 +1,43 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { api } from "../lib/api";
 import type { Profile } from "../types/domain";
 
+const PROFILE_POLL_INTERVAL_MS = 2 * 60 * 1000;
+
 const PROFILE_CACHE_KEY = "digital-twin-admin-profile";
+const GOOGLE_TOKEN_CACHE_KEY = "digital-twin-admin-google-calendar-token";
+const GOOGLE_TOKEN_LIFETIME_MS = 50 * 60 * 1000;
+
+function cacheGoogleToken(token: string | null): void {
+  if (!token) {
+    window.sessionStorage.removeItem(GOOGLE_TOKEN_CACHE_KEY);
+    return;
+  }
+  window.sessionStorage.setItem(GOOGLE_TOKEN_CACHE_KEY, JSON.stringify({
+    token,
+    expiresAt: Date.now() + GOOGLE_TOKEN_LIFETIME_MS
+  }));
+}
+
+function readCachedGoogleToken(): string | null {
+  try {
+    const raw = window.sessionStorage.getItem(GOOGLE_TOKEN_CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as { token?: string; expiresAt?: number };
+    if (!cached.token || !cached.expiresAt || cached.expiresAt <= Date.now()) {
+      cacheGoogleToken(null);
+      return null;
+    }
+    return cached.token;
+  } catch {
+    cacheGoogleToken(null);
+    return null;
+  }
+}
 
 function readCachedProfile(): Profile | null {
   try {
@@ -22,6 +54,7 @@ interface AuthContextValue {
   isLoading: boolean;
   isAdmin: boolean;
   signInWithGoogle: () => Promise<void>;
+  getGoogleAccessToken: () => Promise<string | null>;
   signOut: () => Promise<void>;
 }
 
@@ -32,24 +65,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(readCachedProfile);
   const [sessionResolved, setSessionResolved] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
+  const queryClient = useQueryClient();
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
+      if (data.session?.provider_token) cacheGoogleToken(data.session.provider_token);
       setSessionResolved(true);
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
+      if (nextSession?.provider_token) cacheGoogleToken(nextSession.provider_token);
       setSessionResolved(true);
       if (event === "SIGNED_OUT") {
+        cacheGoogleToken(null);
         setProfile(null);
         window.localStorage.removeItem(PROFILE_CACHE_KEY);
       }
     });
 
-    return () => subscription.subscription.unsubscribe();
+    return () => {
+      subscription.subscription.unsubscribe();
+    };
   }, []);
+
+  // Fetches /me and applies the result. `silent` skips the loading spinner —
+  // used for background refreshes (poll/focus) so an admin whose role was
+  // just changed elsewhere doesn't see the whole shell flash to a loader.
+  const refreshProfile = useCallback((currentSession: Session, silent = false) => {
+    const prevProfile = profileRef.current;
+    const hasCurrentProfile = prevProfile?.id === currentSession.user.id;
+    if (!hasCurrentProfile && !silent) setProfileLoading(true);
+
+    api.get<{ profile: Profile }>("/me")
+      .then(({ profile: nextProfile }) => {
+        setProfile(nextProfile);
+        window.localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(nextProfile));
+        // A role/active-state change (e.g. an employee just promoted to
+        // admin) should be reflected across the app immediately rather
+        // than waiting for each page's own staleTime to expire.
+        if (!hasCurrentProfile || prevProfile?.role !== nextProfile.role || prevProfile?.is_active !== nextProfile.is_active) {
+          void queryClient.invalidateQueries();
+        }
+      })
+      .catch(() => {
+        if (!hasCurrentProfile) setProfile(null);
+      })
+      .finally(() => setProfileLoading(false));
+  }, [queryClient]);
 
   useEffect(() => {
     if (!sessionResolved) return;
@@ -61,19 +127,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const hasCurrentProfile = profile?.id === session.user.id;
-    if (!hasCurrentProfile) setProfileLoading(true);
-
-    api.get<{ profile: Profile }>("/me")
-      .then(({ profile: nextProfile }) => {
-        setProfile(nextProfile);
-        window.localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(nextProfile));
-      })
-      .catch(() => {
-        if (!hasCurrentProfile) setProfile(null);
-      })
-      .finally(() => setProfileLoading(false));
+    refreshProfile(session);
   }, [sessionResolved, session?.user.id]);
+
+  // Catches two cases the mount-time fetch above misses: an admin's role
+  // changing while their tab stays open (polling), and a session that went
+  // stale while the tab was backgrounded/asleep (focus/visibility).
+  useEffect(() => {
+    if (!session) return;
+
+    const onFocus = () => refreshProfile(session, true);
+    const onVisibility = () => { if (document.visibilityState === "visible") refreshProfile(session, true); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    const poll = window.setInterval(() => refreshProfile(session, true), PROFILE_POLL_INTERVAL_MS);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.clearInterval(poll);
+    };
+  }, [session, refreshProfile]);
 
   const currentProfile = session && profile?.id === session.user.id ? profile : null;
   const isLoading = !sessionResolved || Boolean(session && profileLoading && !currentProfile);
@@ -81,13 +155,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = async () => {
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin }
+      options: {
+        redirectTo: window.location.origin,
+        // Calendar scope lets the Bookings page read/cancel room bookings via
+        // the signed-in admin's own Google account (see lib/googleCalendar.ts).
+        scopes: "https://www.googleapis.com/auth/calendar.events",
+        queryParams: { access_type: "offline", prompt: "consent" }
+      }
     });
+  };
+
+  // Google's own OAuth token (Calendar scope), as opposed to the Supabase JWT in
+  // `session`. Supabase only returns this right after a fresh sign-in — it isn't
+  // persisted across reloads, so it goes null again until the user reconnects.
+  const getGoogleAccessToken = async (): Promise<string | null> => {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.provider_token) {
+      cacheGoogleToken(data.session.provider_token);
+      return data.session.provider_token;
+    }
+    return readCachedGoogleToken();
   };
 
   const signOut = async () => {
     setProfile(null);
     window.localStorage.removeItem(PROFILE_CACHE_KEY);
+    cacheGoogleToken(null);
     await supabase.auth.signOut();
   };
 
@@ -99,6 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isAdmin: currentProfile?.role === "admin",
         signInWithGoogle,
+        getGoogleAccessToken,
         signOut
       }}
     >
