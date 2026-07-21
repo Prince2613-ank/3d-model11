@@ -1,124 +1,97 @@
-# Cesium Attendance MVP
+# Flodata Digital Twin
 
-This project has a Vite/Cesium frontend and a small Express backend for attendance tracking.
+This monorepo contains three independently hosted services:
 
-Attendance flow:
+- `backend/` — Express/TypeScript API (port `4000` locally)
+- `cesium_demo/` — Vite/Cesium user viewer (port `5500` locally)
+- `admin/` — Vite/React admin panel (port `5600` locally)
 
-- Google Login identifies the user in the frontend.
-- The browser watches mobile GPS with `navigator.geolocation.watchPosition`.
-- The frontend detects building entry/exit using a geofence.
-- Sign-in is allowed only from 09:30 to 19:30 IST.
-- If the user is still signed in at 19:30 IST, attendance signs out automatically.
-- The frontend calls the backend attendance APIs.
-- The backend writes attendance rows to Google Sheets using a service account.
+The browser apps talk to the backend through an explicit `VITE_API_BASE_URL`.
+They do not proxy API traffic through their own static hosts.
 
-## Google Sheet
+## Run locally
 
-The sheet must have a tab named `Attendance` with these columns in row 1:
-
-```text
-Email, Name, SignInTime, SignOutTime, TotalMinutes, Latitude, Longitude, Accuracy, Date, Status
-```
-
-Share the spreadsheet with the service account email from `server/service-account.json`. Give it Editor access.
-
-## Backend Setup
-
-Install dependencies:
+Install all dependencies:
 
 ```bash
-cd server
 npm install
+cd backend && npm install
+cd ../cesium_demo && npm install
+cd ../admin && npm install
+cd ..
 ```
 
-Place the service account key at:
+Create the environment files from the examples:
 
-```text
-server/service-account.json
+```bash
+cp backend/.env.example backend/.env
+cp cesium_demo/.env.example cesium_demo/.env
+cp admin/.env.example admin/.env
 ```
 
-The file is ignored by Git and must not be committed.
-
-Create `server/.env`:
+In both frontend environment files, point the apps at the standalone backend:
 
 ```env
-PORT=5000
-SPREADSHEET_ID=1WWLKkv8saZsMA7WgCv5j_Wnu5wJBaR8q9Mwz-v9TqYA
-GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
-SHEET_NAME=Attendance
-CORS_ORIGIN=http://localhost:5173,http://localhost:5500
-ATTENDANCE_BUILDING_LAT=28.670903
-ATTENDANCE_BUILDING_LNG=77.133783
-ATTENDANCE_ENTER_RADIUS_METERS=100
-ATTENDANCE_EXIT_RADIUS_METERS=100
-ATTENDANCE_MAX_ACCURACY_METERS=100
-ATTENDANCE_REQUIRED_SAMPLES=3
-ATTENDANCE_REQUIRED_DURATION_MS=5000
-ATTENDANCE_MAX_SPEED_KMH=150
-ATTENDANCE_MAX_SAMPLE_SPREAD_METERS=50
+VITE_API_BASE_URL=http://localhost:4000/api
 ```
 
-Run the backend:
+Run all three services:
 
 ```bash
-cd server
-npm start
-```
-
-Health check:
-
-```bash
-curl http://localhost:5000/health
-```
-
-## Frontend Setup
-
-Install frontend dependencies:
-
-```bash
-cd cesium_demo
-npm install
-```
-
-Run the frontend:
-
-```bash
-cd cesium_demo
 npm run dev
 ```
 
-Optional frontend env:
+The API is then available at `http://localhost:4000/api`, with its health check
+at `http://localhost:4000/api/health`.
+
+## Host the backend separately on Render
+
+The root `render.yaml` declares `gis-platform-backend` as an independent Node
+web service. It uses `backend/` as its root directory and runs:
+
+```text
+Build: npm ci && npm run build
+Start: npm start
+Health check: /api/health
+```
+
+Create or sync the repository as a Render Blueprint, then provide these required
+backend environment variables in Render:
 
 ```env
-VITE_ATTENDANCE_API_BASE_URL=http://localhost:5000
-VITE_ATTENDANCE_BUILDING_LAT=28.670903
-VITE_ATTENDANCE_BUILDING_LON=77.133783
-VITE_ATTENDANCE_ENTER_RADIUS_METERS=100
-VITE_ATTENDANCE_EXIT_RADIUS_METERS=100
-VITE_ATTENDANCE_MAX_ACCURACY_METERS=100
+DATABASE_URL=postgresql://...
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+CORS_ORIGIN=https://your-viewer-host,https://your-admin-host
+ADMIN_PANEL_URL=https://your-admin-host
+USER_PANEL_URL=https://your-viewer-host
 ```
 
-## Test Attendance API
+`SUPABASE_SERVICE_ROLE_KEY` is server-only and must never be placed in either
+frontend environment.
 
-Sign in:
+After the backend deploys, copy its public URL into both static services. The
+value must include `/api`:
+
+```env
+VITE_API_BASE_URL=https://gis-platform-backend.onrender.com/api
+```
+
+Redeploy both frontends after changing a `VITE_*` value because Vite embeds
+these variables at build time. Verify the standalone backend with:
 
 ```bash
-curl -X POST http://localhost:5000/api/attendance/signin \
-  -H "Content-Type: application/json" \
-  -d "{\"email\":\"test@example.com\",\"name\":\"Test User\",\"lat\":28.670903,\"lng\":77.133783,\"accuracy\":12}"
+curl https://gis-platform-backend.onrender.com/api/health
 ```
 
-Sign out:
+Optional backend integrations are configured with `GOOGLE_SOLAR_API_KEY`,
+`GMAIL_USER`, `GMAIL_APP_PASSWORD`, `MAIL_FROM_NAME`, and `ADMIN_EMAIL`.
+
+## Individual development commands
 
 ```bash
-curl -X POST http://localhost:5000/api/attendance/signout \
-  -H "Content-Type: application/json" \
-  -d "{\"email\":\"test@example.com\",\"lat\":28.670950,\"lng\":77.133800,\"accuracy\":14}"
+npm run dev:backend
+npm run dev:cesium
+npm run dev:admin
 ```
-
-## Notes
-
-- Do not expose `service-account.json` in the frontend.
-- Google Sheets API calls are made only from the Express backend.
-- The frontend only calls `/api/attendance/signin` and `/api/attendance/signout`.
-- GPS accuracy indoors can be poor. Current laptop testing allows readings up to `100m` accuracy, requires 3 consistent samples over at least 5 seconds, and rejects suspicious speed/location jumps.

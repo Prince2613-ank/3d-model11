@@ -26,6 +26,19 @@ import { errorHandler } from "./middleware/errorHandler";
 const app  = express();
 const PORT = parseInt(process.env.PORT ?? "4000");
 
+if (process.env.NODE_ENV === "production") {
+  const required = [
+    "DATABASE_URL",
+    "SUPABASE_URL",
+    "SUPABASE_ANON_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+  ].filter((name) => !process.env[name]);
+
+  if (required.length) {
+    throw new Error(`Missing required production environment variables: ${required.join(", ")}`);
+  }
+}
+
 // CORS_ORIGIN is a comma-separated list (e.g. the viewer + admin panel origins)
 // so multiple deployed frontends can share one backend. "*" keeps the old
 // behavior of allowing any origin.
@@ -37,6 +50,12 @@ app.use(cors({ origin: allowedOrigins }));
 app.use(compression());
 app.use(express.json());
 app.use(attachUser);
+
+// A useful response at the service root makes it obvious that the standalone
+// backend is online; API consumers should use routes below /api.
+app.get("/", (_req, res) => {
+  res.json({ service: "gis-platform-backend", health: "/api/health" });
+});
 
 app.get("/api/health", async (_req, res) => {
   try {
