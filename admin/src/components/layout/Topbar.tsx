@@ -8,10 +8,46 @@ import { api } from "../../lib/api";
 import type { Complaint, ComplaintHistoryEntry, Notification } from "../../types/domain";
 
 const TITLES: Record<string, string> = {
-  "/": "Operations overview", "/building": "Building management", "/rooms": "Rooms & spaces",
-  "/assets": "Employee workspace", "/complaints": "Complaint desk", "/users": "Users & access",
+  "/rooms": "Rooms & spaces",
+  "/bookings": "Room bookings", "/assets": "Employee workspace", "/complaints": "Complaint desk", "/users": "Users & access",
   "/announcements": "Announcements", "/reports": "Reports & insights", "/settings": "Workspace settings",
 };
+
+function timeOfDayGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+/**
+ * The bell button isn't flush against the viewport's right edge — the profile
+ * avatar sits to its right — so anchoring the notification panel via CSS
+ * `right` (relative to the bell) pushes a ~350px-wide panel further left than
+ * the screen on mobile, clipping it off the left edge. Clamp an explicit
+ * `left` instead so it always fits within the viewport.
+ */
+function notificationPanelLeft(bellRect: DOMRect): number {
+  const panelWidth = Math.min(370, window.innerWidth - 24);
+  return Math.max(12, Math.min(bellRect.right - panelWidth, window.innerWidth - panelWidth - 12));
+}
+
+const TIMELINE_DOT_CLASS: Record<string, string> = {
+  pending: "bg-amber-500 ring-amber-50 dark:ring-amber-500/10",
+  assigned: "bg-sky-500 ring-sky-50 dark:ring-sky-500/10",
+  resolved: "bg-emerald-500 ring-emerald-50 dark:ring-emerald-500/10",
+  rejected: "bg-rose-500 ring-rose-50 dark:ring-rose-500/10",
+};
+
+// Older data (created before the backend guarded against re-resolving an
+// already-resolved complaint) can contain back-to-back rows for the same
+// transition — collapse those so the timeline reads as one event, not two.
+function dedupeHistory(history: ComplaintHistoryEntry[]): ComplaintHistoryEntry[] {
+  return history.filter((entry, index) => {
+    const prev = history[index - 1];
+    return !prev || prev.to_status !== entry.to_status || prev.note !== entry.note;
+  });
+}
 
 function timeAgo(iso: string): string {
   const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -27,18 +63,23 @@ export function Topbar() {
   const { theme, toggleTheme } = useTheme();
   const { pathname } = useLocation();
   const [isBellOpen, setIsBellOpen] = useState(false);
+  const [bellRect, setBellRect] = useState<DOMRect | null>(null);
   const [detail, setDetail] = useState<Notification | null>(null);
   const [complaint, setComplaint] = useState<Complaint | null>(null);
   const [history, setHistory] = useState<ComplaintHistoryEntry[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
+  const notificationPanelRef = useRef<HTMLDivElement>(null);
   const { data: unread } = useUnreadNotificationCount(true);
   const { data: notifData } = useNotifications(isBellOpen);
   const markRead = useMarkNotificationRead();
 
   useEffect(() => {
     const close = (event: MouseEvent) => {
-      if (!bellRef.current?.contains(event.target as Node)) setIsBellOpen(false);
+      const target = event.target as Node;
+      if (!bellRef.current?.contains(target) && !notificationPanelRef.current?.contains(target)) {
+        setIsBellOpen(false);
+      }
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
@@ -77,10 +118,13 @@ export function Topbar() {
   };
 
   return (
-    <header className="relative z-30 flex h-[68px] shrink-0 items-center justify-between gap-2 border-b border-slate-200/70 bg-white/80 px-3 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/75 sm:h-[82px] sm:px-6 lg:px-8">
+    <header className="relative z-30 flex h-[68px] shrink-0 items-center justify-between gap-2 border-b border-slate-200/60 bg-white/65 px-3 backdrop-blur-2xl dark:border-white/10 dark:bg-slate-950/75 sm:h-[82px] sm:px-6 lg:px-8">
       <div className="min-w-0">
-        <div className="hidden items-center gap-2 text-[11px] font-bold uppercase tracking-[.18em] text-indigo-500 min-[360px]:flex"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400"/> Live workspace</div>
-        <h1 className="truncate text-[15px] font-extrabold tracking-tight text-slate-900 dark:text-white min-[360px]:mt-1 sm:text-lg">{TITLES[pathname] ?? "Digital Twin Admin"}</h1>
+        <h1 className="truncate text-[15px] font-semibold tracking-tight text-slate-900 dark:text-white sm:text-lg">
+          {pathname === "/"
+            ? `${timeOfDayGreeting()}, ${(profile?.display_name || "Admin").split(" ")[0]} 👋`
+            : TITLES[pathname]}
+        </h1>
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
@@ -89,13 +133,24 @@ export function Topbar() {
         </button>
 
         <div className="relative" ref={bellRef}>
-          <button onClick={() => setIsBellOpen((open) => !open)} className={`relative grid h-9 w-9 place-items-center rounded-xl border bg-white shadow-sm transition hover:-translate-y-0.5 dark:bg-slate-900 sm:h-10 sm:w-10 ${isBellOpen ? "border-indigo-300 text-indigo-600" : "border-slate-200 text-slate-500 hover:border-indigo-200 hover:text-indigo-600 dark:border-white/10 dark:text-slate-300"}`} aria-label="Notifications">
+          <button
+            onClick={() => {
+              if (!isBellOpen && bellRef.current) setBellRect(bellRef.current.getBoundingClientRect());
+              setIsBellOpen((open) => !open);
+            }}
+            className={`relative grid h-9 w-9 place-items-center rounded-xl border bg-white shadow-sm transition hover:-translate-y-0.5 dark:bg-slate-900 sm:h-10 sm:w-10 ${isBellOpen ? "border-indigo-300 text-indigo-600" : "border-slate-200 text-slate-500 hover:border-indigo-200 hover:text-indigo-600 dark:border-white/10 dark:text-slate-300"}`}
+            aria-label="Notifications"
+          >
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
             {!!unread?.count && <span className="absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full border-2 border-white bg-rose-500 px-1 text-[9px] font-black text-white dark:border-slate-950">{unread.count > 99 ? "99+" : unread.count}</span>}
           </button>
 
-          {isBellOpen && (
-            <div className="absolute right-0 mt-3 w-[min(370px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,.22)] dark:border-white/10 dark:bg-slate-900">
+          {isBellOpen && bellRect && createPortal((
+            <div
+              ref={notificationPanelRef}
+              className="fixed z-[60] w-[min(370px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,.22)] dark:border-white/10 dark:bg-slate-900"
+              style={{ top: bellRect.bottom + 12, left: notificationPanelLeft(bellRect) }}
+            >
               <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-white/10 dark:bg-white/5"><div><p className="text-sm font-extrabold text-slate-900 dark:text-white">Notifications</p><p className="text-[11px] text-slate-400">Live operational updates</p></div><span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-bold text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300">{unread?.count ?? 0} unread</span></div>
               <div className="max-h-[430px] overflow-y-auto p-2">
                 {(notifData?.notifications ?? []).length === 0 && <div className="px-3 py-10 text-center"><div className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-full bg-slate-100 text-slate-400 dark:bg-white/5"><svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/></svg></div><p className="text-sm font-semibold text-slate-500">You are all caught up</p></div>}
@@ -109,11 +164,11 @@ export function Topbar() {
                 ))}
               </div>
             </div>
-          )}
+          ), document.body)}
         </div>
 
         <div className="ml-0.5 flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white p-1 shadow-sm dark:border-white/10 dark:bg-slate-900 sm:ml-1 sm:rounded-2xl sm:py-1.5 sm:pl-1.5 sm:pr-3">
-          {profile?.avatar_url ? <img src={profile.avatar_url} alt="" className="h-8 w-8 rounded-lg object-cover sm:h-9 sm:w-9 sm:rounded-xl" /> : <div className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-400 text-xs font-black text-white sm:h-9 sm:w-9 sm:rounded-xl">{(profile?.display_name || profile?.email || "?").slice(0, 1).toUpperCase()}</div>}
+          {profile?.avatar_url ? <img src={profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover sm:h-9 sm:w-9" /> : <div className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-indigo-500 to-cyan-400 text-xs font-black text-white sm:h-9 sm:w-9">{(profile?.display_name || profile?.email || "?").slice(0, 1).toUpperCase()}</div>}
           <div className="hidden max-w-36 sm:block"><p className="truncate text-xs font-bold text-slate-800 dark:text-white">{profile?.display_name || profile?.email}</p><p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500">Administrator</p></div>
           <button onClick={signOut} className="hidden rounded-lg px-2 py-1 text-[11px] font-bold text-slate-400 transition hover:bg-rose-50 hover:text-rose-500 lg:block">Sign out</button>
         </div>
@@ -138,7 +193,7 @@ export function Topbar() {
                 {complaint.assigned_notes && <DetailSection title="Assignment notes" body={complaint.assigned_notes}/>} 
                 {complaint.admin_reply && <DetailSection title="Admin response" body={complaint.admin_reply}/>} 
                 {complaint.resolution_text && <DetailSection title="Resolution" body={complaint.resolution_text}/>} 
-                {history.length > 0 && <section><h3 className="mb-3 text-[10px] font-black uppercase tracking-[.14em] text-slate-400">Activity timeline</h3><div className="space-y-3 border-l-2 border-indigo-100 pl-5 dark:border-indigo-500/20">{history.map((entry) => <div key={entry.id} className="relative"><span className="absolute -left-[26px] top-1 h-2.5 w-2.5 rounded-full bg-indigo-500 ring-4 ring-indigo-50 dark:ring-slate-900"/><p className="text-sm font-bold capitalize text-slate-700 dark:text-slate-200">{entry.to_status ? `Status changed to ${entry.to_status}` : "Complaint updated"}</p><p className="mt-1 text-[10px] font-medium text-slate-400">{new Date(entry.created_at).toLocaleString()}</p>{entry.note && <p className="mt-1 text-xs leading-5 text-slate-500">{entry.note}</p>}</div>)}</div></section>}
+                {history.length > 0 && <section><h3 className="mb-3 text-[10px] font-black uppercase tracking-[.14em] text-slate-400">Activity timeline</h3><div className="space-y-4 border-l-2 border-indigo-100 pl-5 dark:border-indigo-500/20">{dedupeHistory(history).map((entry, index, arr) => { const isLatest = index === arr.length - 1; const dotClass = (entry.to_status && TIMELINE_DOT_CLASS[entry.to_status]) || "bg-indigo-500 ring-indigo-50 dark:ring-slate-900"; return <div key={entry.id} className="relative"><span className={`absolute -left-[26px] top-1 h-2.5 w-2.5 rounded-full ring-4 ${dotClass}`}/><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-bold capitalize text-slate-700 dark:text-slate-200">{entry.to_status ? `${entry.from_status || "New"} → ${entry.to_status}` : "Complaint updated"}</p>{isLatest && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300">Latest</span>}</div><p className="mt-1 text-[10px] font-medium text-slate-400">{new Date(entry.created_at).toLocaleString()}</p>{entry.note && <p className="mt-1.5 rounded-lg bg-slate-100/80 px-2.5 py-1.5 text-xs leading-5 text-slate-600 dark:bg-white/5 dark:text-slate-300">{entry.note}</p>}</div>; })}</div></section>}
               </>}
             </div>
           </article>

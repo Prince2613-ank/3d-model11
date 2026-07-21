@@ -4785,6 +4785,15 @@ button.floor-route-active {
 
 body.floor-loading-active .hamburger-btn,
 body.floor-loading-active .left-sidebar,
+/* Solar analysis is a floor-0 map workspace; indoor controls add no value here. */
+body.solar-workspace-active #leftSidebar,
+body.solar-workspace-active #cameraPanel,
+body.solar-workspace-active #assetPopup,
+body.solar-workspace-active #roomDetailsCard,
+body.solar-workspace-active #bookingPanel {
+  display: none !important;
+}
+
 body.floor-loading-active .user-profile-header,
 body.floor-loading-active #cameraExitCard,
 body.floor-loading-active #cameraPanel,
@@ -5110,6 +5119,10 @@ body.floor-loading-active #toastContainer {
   grid-template-columns: 1fr;
 }
 
+.room-info-actions-triple {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .room-info-actions .btn {
   width: 100%;
   min-height: 42px;
@@ -5123,6 +5136,13 @@ body.floor-loading-active #toastContainer {
   color: #fff !important;
   border-color: transparent !important;
   box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+}
+
+.room-info-cancel-btn {
+  background: linear-gradient(135deg, #dc2626, #b91c1c) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+  box-shadow: 0 8px 18px rgba(220, 38, 38, 0.22);
 }
 
 #bookingRoomMetadata {
@@ -6015,6 +6035,17 @@ body.camera-view-active .hamburger-btn {
 }
 .nearby-nav-btn--active svg { stroke: currentColor; }
 
+/* Nearby amenities are an outdoor-map feature. Keep the toolbar control
+   strictly on floor 0, including while late UI modules are mounting. */
+body[data-active-floor]:not([data-active-floor="0"]) #nearbyNavBtn {
+  display: none !important;
+}
+
+/* Solar analysis uses the outdoor rooftop map and is available only on floor 0. */
+body[data-active-floor]:not([data-active-floor="0"]) #solarToolbarBtn {
+  display: none !important;
+}
+
 @keyframes nearby-nav-pulse {
   0% {
     box-shadow: 0 0 0 0 rgba(54, 209, 142, 0.45);
@@ -6088,8 +6119,9 @@ body.camera-view-active .nearby-nav-btn {
 .notification-center-arrived { animation: notification-bell-arrived .65s ease both; }
 @keyframes notification-bell-arrived { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(12deg) scale(1.08); } 55% { transform: rotate(-10deg) scale(1.08); } 75% { transform: rotate(5deg); } }
 .cesium-viewer-toolbar .nearby-nav-btn { order: 1; }
-.cesium-viewer-toolbar .notification-center-btn { order: 2; }
-.cesium-viewer-toolbar .user-profile-header { order: 3; }
+.cesium-viewer-toolbar .my-complaints-btn { order: 2; }
+.cesium-viewer-toolbar .notification-center-btn { order: 3; }
+.cesium-viewer-toolbar .user-profile-header { order: 4; }
 
 .notification-center-panel {
   position: fixed;
@@ -6126,11 +6158,51 @@ body.camera-view-active .nearby-nav-btn {
 .notification-center-item-icon.type-complaint_resolved { background: #ecfdf5; color: #059669; }
 .notification-center-item-icon.type-complaint_rejected { background: #fff1f2; color: #e11d48; }
 .notification-center-item-icon.type-complaint_replied { background: #eff6ff; color: #2563eb; }
+.notification-center-item-icon.type-room_booked { background: #eef2ff; color: #4f46e5; }
+.notification-center-item-icon.type-room_booking_cancelled { background: #fff1f2; color: #e11d48; }
 .notification-center-item-content { min-width: 0; display: flex; flex: 1; flex-direction: column; }
 .notification-center-item-content strong { padding-right: 12px; color: #1e293b; font: 800 12.5px/1.35 system-ui, sans-serif; }
 .notification-center-item-body { display: -webkit-box; margin-top: 4px; overflow: hidden; color: #64748b; font: 500 11.5px/1.5 system-ui, sans-serif; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .notification-center-item-time { margin-top: 6px; color: #94a3b8; font: 700 9px/1.2 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .08em; }
 .notification-center-unread-dot { position: absolute; top: 15px; right: 13px; width: 7px; height: 7px; border-radius: 50%; background: #6366f1; box-shadow: 0 0 0 4px rgba(99,102,241,.1); }
+
+.notification-center-entry { border-radius: 14px; }
+.notification-center-entry.is-expanded .notification-center-item { background: #f1f5f9; }
+.notification-center-expand-caret { flex: 0 0 auto; align-self: center; color: #94a3b8; font-size: 10px; transition: transform .15s; }
+.notification-center-entry.is-expanded .notification-center-expand-caret { transform: rotate(90deg); color: #4f46e5; }
+.notification-center-inline-detail { margin: 0 8px 8px; padding: 11px 13px; border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0; color: #475569; font: 500 12px/1.6 system-ui, sans-serif; }
+.notification-center-inline-detail[hidden] { display: none; }
+.notification-center-inline-detail-facts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.notification-center-inline-fact { padding: 3px 9px; border-radius: 999px; background: #eef2ff; color: #4338ca; font: 800 9.5px/1.4 system-ui, sans-serif; text-transform: capitalize; }
+.notification-center-inline-fact.status-resolved { background: #ecfdf5; color: #047857; }
+.notification-center-inline-fact.status-rejected { background: #fff1f2; color: #be123c; }
+.notification-center-inline-fact.status-assigned { background: #eff6ff; color: #1d4ed8; }
+.notification-center-inline-fact.status-pending { background: #fffbeb; color: #b45309; }
+.notification-center-inline-detail-message { margin: 0; color: #334155; white-space: pre-wrap; }
+.notification-center-inline-detail-viewfull { display: inline-block; margin-top: 9px; color: #4f46e5; font: 800 10.5px/1.2 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .06em; background: none; border: 0; padding: 0; cursor: pointer; }
+.notification-center-inline-detail-viewfull:hover { text-decoration: underline; }
+
+.my-complaints-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 14px 4px; }
+.my-complaints-tab { padding: 6px 11px; border: 1px solid #e2e8f0; border-radius: 999px; background: #f8fafc; color: #64748b; font: 700 10.5px/1.2 system-ui, sans-serif; cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+.my-complaints-tab:hover { border-color: #c7d2fe; color: #4338ca; }
+.my-complaints-tab.is-active { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+.my-complaints-entry { border-radius: 14px; }
+.my-complaints-entry.is-expanded .my-complaints-item { background: #f1f5f9; }
+.my-complaints-item { position: relative; width: 100%; display: flex; align-items: flex-start; gap: 11px; padding: 12px; border: 0; border-radius: 14px; background: transparent; color: inherit; text-align: left; cursor: pointer; transition: background .15s, transform .15s; }
+.my-complaints-item:hover { background: #f1f5f9; transform: translateX(2px); }
+.my-complaints-status-dot { flex: 0 0 10px; width: 10px; height: 10px; margin-top: 4px; border-radius: 50%; background: #94a3b8; }
+.my-complaints-status-dot.status-pending { background: #f59e0b; }
+.my-complaints-status-dot.status-assigned { background: #0ea5e9; }
+.my-complaints-status-dot.status-resolved { background: #10b981; }
+.my-complaints-status-dot.status-rejected { background: #f43f5e; }
+.my-complaints-item-content { min-width: 0; display: flex; flex: 1; flex-direction: column; }
+.my-complaints-item-content strong { padding-right: 12px; color: #1e293b; font: 800 12.5px/1.35 system-ui, sans-serif; }
+.my-complaints-item-meta { margin-top: 4px; color: #94a3b8; font: 700 9.5px/1.2 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .06em; }
+.my-complaints-caret { flex: 0 0 auto; align-self: center; color: #94a3b8; font-size: 10px; transition: transform .15s; }
+.my-complaints-entry.is-expanded .my-complaints-caret { transform: rotate(90deg); color: #4f46e5; }
+.my-complaints-detail { margin: 0 8px 8px 41px; padding: 9px 12px; border-radius: 10px; background: #f8fafc; border: 1px solid #e2e8f0; }
+.my-complaints-detail[hidden] { display: none; }
+.my-complaints-detail p { margin: 0; color: #475569; font: 500 12px/1.6 system-ui, sans-serif; white-space: pre-wrap; }
 
 .notification-detail-modal { position: fixed; inset: 0; z-index: 12000; display: grid; place-items: center; padding: 20px; box-sizing: border-box; }
 .notification-detail-modal[hidden] { display: none; }
@@ -6157,9 +6229,14 @@ body.camera-view-active .nearby-nav-btn {
 .notification-detail-timeline { margin-top: 20px; }
 .notification-detail-timeline-event { position: relative; margin-left: 7px; padding: 0 0 17px 20px; border-left: 2px solid #e0e7ff; }
 .notification-detail-timeline-event::before { content: ""; position: absolute; top: 2px; left: -6px; width: 10px; height: 10px; border: 2px solid #fff; border-radius: 50%; background: #6366f1; box-shadow: 0 0 0 2px #c7d2fe; }
-.notification-detail-timeline-event strong { display: block; color: #334155; font: 800 12px/1.35 system-ui, sans-serif; text-transform: capitalize; }
+.notification-detail-timeline-event.status-pending::before { background: #f59e0b; box-shadow: 0 0 0 2px #fef3c7; }
+.notification-detail-timeline-event.status-assigned::before { background: #0ea5e9; box-shadow: 0 0 0 2px #e0f2fe; }
+.notification-detail-timeline-event.status-resolved::before { background: #10b981; box-shadow: 0 0 0 2px #d1fae5; }
+.notification-detail-timeline-event.status-rejected::before { background: #f43f5e; box-shadow: 0 0 0 2px #ffe4e6; }
+.notification-detail-timeline-event strong { display: flex; align-items: center; gap: 7px; color: #334155; font: 800 12px/1.35 system-ui, sans-serif; text-transform: capitalize; }
+.notification-detail-timeline-event .timeline-latest-badge { display: inline-block; margin-top: 0; padding: 2px 7px; border-radius: 999px; background: #eef2ff; color: #4f46e5; font: 800 8.5px/1.4 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .07em; }
 .notification-detail-timeline-event span { display: block; margin-top: 3px; color: #94a3b8; font: 600 9px/1.2 system-ui, sans-serif; }
-.notification-detail-timeline-event p { margin: 6px 0 0; color: #64748b; font: 500 11.5px/1.5 system-ui, sans-serif; }
+.notification-detail-timeline-event p { margin: 6px 0 0; padding: 6px 9px; border-radius: 9px; background: #f1f5f9; color: #475569; font: 500 11.5px/1.5 system-ui, sans-serif; }
 
 @media (max-width: 768px) {
   .notification-center-btn { width: 30px !important; height: 30px !important; min-width: 30px !important; }

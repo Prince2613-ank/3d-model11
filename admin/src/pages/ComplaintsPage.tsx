@@ -37,6 +37,7 @@ export function ComplaintsPage() {
   const [page, setPage] = useState(1);
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [detailComplaint, setDetailComplaint] = useState<ComplaintWithAsset | null>(null);
+  const [actionToast, setActionToast] = useState("");
   const queryClient = useQueryClient();
 
   const params = new URLSearchParams();
@@ -52,6 +53,15 @@ export function ComplaintsPage() {
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["complaints"] });
+
+  const handleActionDone = (confirmation?: string) => {
+    invalidate();
+    setActiveModal(null);
+    if (confirmation) {
+      setActionToast(confirmation);
+      window.setTimeout(() => setActionToast(""), 4500);
+    }
+  };
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/complaints/${id}`),
@@ -163,16 +173,16 @@ export function ComplaintsPage() {
       )}
 
       {activeModal?.type === "assign" && (
-        <AssignComplaintModal complaint={activeModal.complaint} onClose={() => setActiveModal(null)} onDone={invalidate} />
+        <AssignComplaintModal complaint={activeModal.complaint} onClose={() => setActiveModal(null)} onDone={handleActionDone} />
       )}
       {activeModal?.type === "resolve" && (
-        <ResolveComplaintModal complaint={activeModal.complaint} onClose={() => setActiveModal(null)} onDone={invalidate} />
+        <ResolveComplaintModal complaint={activeModal.complaint} onClose={() => setActiveModal(null)} onDone={handleActionDone} />
       )}
       {activeModal?.type === "reject" && (
-        <RejectComplaintModal complaint={activeModal.complaint} onClose={() => setActiveModal(null)} onDone={invalidate} />
+        <RejectComplaintModal complaint={activeModal.complaint} onClose={() => setActiveModal(null)} onDone={handleActionDone} />
       )}
       {activeModal?.type === "reply" && (
-        <ReplyComplaintModal complaint={activeModal.complaint} onClose={() => setActiveModal(null)} onDone={invalidate} />
+        <ReplyComplaintModal complaint={activeModal.complaint} onClose={() => setActiveModal(null)} onDone={handleActionDone} />
       )}
       {activeModal?.type === "delete" && (
         <Modal
@@ -194,6 +204,12 @@ export function ComplaintsPage() {
         </Modal>
       )}
       {detailComplaint && <ComplaintDetailModal complaint={detailComplaint} onClose={() => setDetailComplaint(null)} />}
+
+      {actionToast && (
+        <div className="fixed right-4 top-24 z-[130] flex items-center gap-3 rounded-2xl border border-emerald-200 bg-white/95 px-4 py-3 text-sm font-bold text-emerald-700 shadow-[0_18px_60px_rgba(15,23,42,.18)] backdrop-blur dark:border-emerald-500/25 dark:bg-slate-900/95 dark:text-emerald-300">
+          <span className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-100 dark:bg-emerald-500/15">✓</span>{actionToast}
+        </div>
+      )}
     </div>
   );
 }

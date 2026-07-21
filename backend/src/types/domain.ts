@@ -9,7 +9,8 @@ export type ComplaintPriority = "low" | "medium" | "high" | "critical";
 export type ComplaintStatus = "pending" | "assigned" | "resolved" | "rejected";
 export type NotificationType =
   | "complaint_created" | "complaint_assigned" | "complaint_resolved"
-  | "complaint_rejected" | "complaint_replied" | "new_complaint_admin" | "announcement" | "direct_message";
+  | "complaint_rejected" | "complaint_replied" | "new_complaint_admin" | "announcement" | "direct_message"
+  | "room_booked" | "room_booking_cancelled";
 export type AnnouncementCategory = "power_shutdown" | "maintenance" | "fire_drill" | "holiday" | "other";
 
 export interface AuthenticatedUser {

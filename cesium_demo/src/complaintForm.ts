@@ -48,6 +48,10 @@ export function closeComplaintForm(): void {
 export function openComplaintForm(next: ComplaintTarget): void {
   target = next;
   resetForm();
+  // Read the current session at interaction time as well as listening for auth
+  // events. This prevents a stale local flag from disagreeing with the profile
+  // state after a token refresh or OAuth popup handoff.
+  isSignedIn = Boolean(getCurrentUser());
 
   const popup = el<HTMLElement>("complaintFormPopup");
   const signInPrompt = el<HTMLElement>("complaintSignInPrompt");
@@ -116,7 +120,9 @@ async function handleSubmit(event: SubmitEvent): Promise<void> {
     submitBtn.disabled = false;
     submitBtn.textContent = "Submit";
     errorEl.hidden = false;
-    errorEl.textContent = error instanceof ApiError ? error.message : "Something went wrong. Please try again.";
+    errorEl.textContent = error instanceof ApiError && error.status === 401
+      ? "Your session expired. Please sign in again and retry."
+      : error instanceof ApiError ? error.message : "Something went wrong. Please try again.";
   }
 }
 

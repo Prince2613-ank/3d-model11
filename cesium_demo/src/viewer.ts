@@ -168,8 +168,6 @@ export const MODEL_SCALE = 25;
 export const BASE_ALT = 0.01;
 export const FLOOR_H = 3.6;
 export const STACK_COMPRESS = -0.6;
-export const ALT_GROUND = BASE_ALT;
-export const ALT_1ST = BASE_ALT + FLOOR_H + STACK_COMPRESS;
 export const ALT_2ND = BASE_ALT + 2 * FLOOR_H + 2 * STACK_COMPRESS;
 export const ALT_3RD = BASE_ALT + 3 * FLOOR_H + 3 * STACK_COMPRESS;
 

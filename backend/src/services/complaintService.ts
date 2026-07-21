@@ -5,8 +5,60 @@ import { complaintHistoryRepository } from "../repositories/complaintHistoryRepo
 import { complaintRepository, ComplaintFilters } from "../repositories/complaintRepository";
 import { notificationRepository } from "../repositories/notificationRepository";
 import { activityLogRepository } from "../repositories/activityLogRepository";
+import { profileRepository } from "../repositories/profileRepository";
+import { sendMail } from "../lib/mailer";
+import { complaintCreatedAdminEmail, complaintStatusEmail } from "../lib/emailTemplates";
 import { AuthenticatedUser, Complaint, ComplaintPriority, CameraPosition } from "../types/domain";
 import { NotFoundError } from "../errors";
+
+// Email is a best-effort side channel alongside the in-app notification —
+// a broken/unconfigured mail server (or a DB hiccup fetching recipients)
+// must never fail the underlying complaint action.
+async function emailAdminsAboutNewComplaint(
+  complaint: Complaint,
+  reporter: AuthenticatedUser,
+  targetName: string,
+  description: string
+): Promise<void> {
+  try {
+    const adminEmails = await profileRepository.listAdminEmails();
+    const fallback = process.env.ADMIN_EMAIL;
+    const recipients = adminEmails.length ? adminEmails : fallback ? [fallback] : [];
+    if (!recipients.length) return;
+    const email = complaintCreatedAdminEmail({
+      complaintId: complaint.id,
+      reporterName: reporter.displayName || reporter.email,
+      reporterEmail: reporter.email,
+      issueType: complaint.issue_type,
+      targetName,
+      description,
+      createdAt: new Date(complaint.created_at)
+    });
+    await sendMail({ to: recipients, replyTo: reporter.email, ...email });
+  } catch (err) {
+    console.error("[complaintService] Failed to email admins about new complaint:", (err as Error).message);
+  }
+}
+
+async function emailReporterAboutStatus(
+  kind: "assigned" | "resolved" | "rejected" | "replied",
+  complaint: Complaint,
+  message: string,
+  admin: AuthenticatedUser
+): Promise<void> {
+  try {
+    if (!complaint.reporter_email) return;
+    const email = complaintStatusEmail(kind, {
+      complaintId: complaint.id,
+      targetName: complaint.target_name || "your report",
+      issueType: complaint.issue_type,
+      message
+    });
+    await sendMail({ to: complaint.reporter_email, replyTo: admin.email, ...email });
+  } catch (err) {
+    console.error(`[complaintService] Failed to email reporter about complaint ${kind}:`, (err as Error).message);
+  }
+}
 
 export interface CreateComplaintInput {
   objectKey?: string;
@@ -65,7 +117,10 @@ export const complaintService = {
         note: "Complaint created"
       }),
       notificationRepository.create({
-        isAdminBroadcast: reporter.role !== "admin",
+        // New complaints (from either a regular user or an admin reporting on
+        // someone's behalf) are an admin-facing event — broadcast to admins only,
+        // never to the wider end-user base.
+        isAdminBroadcast: true,
         type: reporter.role === "admin" ? "direct_message" : "new_complaint_admin",
         title: `${reporter.role === "admin" ? "Admin reported" : "New complaint"}: ${targetName}`,
         body: input.description,
@@ -78,7 +133,8 @@ export const complaintService = {
         entityType: "complaint",
         entityId: complaint.id,
         metadata: { targetType: input.targetType, assetId: asset?.id, roomId: room?.id, targetName, priority: input.priority }
-      })
+      }),
+      emailAdminsAboutNewComplaint(complaint, reporter, targetName, input.description)
     ]);
 
     return complaint;
@@ -133,7 +189,8 @@ export const complaintService = {
         entityType: "complaint",
         entityId: complaintId,
         metadata: params
-      })
+      }),
+      emailReporterAboutStatus("assigned", updated, params.assignedToName ? `Assigned to ${params.assignedToName}` : "Your complaint has been assigned.", admin)
     ]);
 
     return updated;
@@ -146,6 +203,7 @@ export const complaintService = {
   ): Promise<Complaint> {
     const existing = await complaintRepository.findById(complaintId);
     if (!existing) throw new NotFoundError("Complaint", complaintId);
+    if (existing.status === "resolved") return existing;
 
     const updated = await complaintRepository.resolve(complaintId, params);
     if (!updated) throw new NotFoundError("Complaint", complaintId);
@@ -175,7 +233,8 @@ export const complaintService = {
         action: "complaint_resolved",
         entityType: "complaint",
         entityId: complaintId
-      })
+      }),
+      emailReporterAboutStatus("resolved", updated, params.resolutionText, admin)
     ]);
 
     return updated;
@@ -184,6 +243,7 @@ export const complaintService = {
   async reject(admin: AuthenticatedUser, complaintId: string, reason: string): Promise<Complaint> {
     const existing = await complaintRepository.findById(complaintId);
     if (!existing) throw new NotFoundError("Complaint", complaintId);
+    if (existing.status === "rejected") return existing;
 
     const updated = await complaintRepository.reject(complaintId, reason);
     if (!updated) throw new NotFoundError("Complaint", complaintId);
@@ -214,7 +274,8 @@ export const complaintService = {
         entityType: "complaint",
         entityId: complaintId,
         metadata: { reason }
-      })
+      }),
+      emailReporterAboutStatus("rejected", updated, reason, admin)
     ]);
 
     return updated;
@@ -243,7 +304,8 @@ export const complaintService = {
         action: "complaint_replied",
         entityType: "complaint",
         entityId: complaintId
-      })
+      }),
+      emailReporterAboutStatus("replied", updated, message, admin)
     ]);
 
     return updated;

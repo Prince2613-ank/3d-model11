@@ -3,7 +3,7 @@ import { Cesium, viewer, ALT_2ND, ALT_3RD } from "./viewer";
 import { loadModels } from "./models";
 import { getInitialFloorFromUrl, getSelectedFloor, hasPersistedFloorState, initSmartFloorCamera, openFloorProfessional, preloadFloor, showFloor } from "./floors";
 import { getNavigableRoomNames, loadRooms } from "./rooms";
-import { getNavigablePersonNames, chairNavPoints, loadChairsForFloor, thirdFloorChairs, secondFloorChairs } from "./chairs";
+import { getNavigablePersonNames, chairNavPoints, loadChairsForFloor, thirdFloorChairs, secondFloorChairs, findChairByFuzzyName } from "./chairs";
 import { initializeCalendar } from "./calendar";
 import {
   exitNavigation,
@@ -12,6 +12,7 @@ import {
   installStairPathDebug,
   startNavigation,
   flyRoutePreview,
+  bounceChair,
   setNavigationFloorSwitchHandler,
   showStairDebugUI,
   hideStairDebugUI,
@@ -43,6 +44,7 @@ import { initAssetPopup } from "./assetPopup";
 import { initComplaintForm } from "./complaintForm";
 import { isOAuthPopupCallback } from "./auth";
 import { initNotificationCenter } from "./notificationCenter";
+import { initMyComplaints } from "./myComplaints";
 import {
   bindCctvPanel,
   bindUiControls,
@@ -90,8 +92,6 @@ async function playOnboardingSplash(): Promise<void> {
 
 const FLOOR_LABELS: Record<number, string> = {
   0: "All Floors",
-  1: "Ground Floor",
-  2: "1st Floor",
   3: "2nd Floor",
   4: "3rd Floor",
 };
@@ -203,6 +203,7 @@ async function bootstrap(): Promise<void> {
   if (!kioskMode) {
     initComplaintForm();
     initNotificationCenter();
+    initMyComplaints();
   }
 
 
@@ -747,6 +748,13 @@ function installAssistant(): void {
           viewer.scene.requestRender();
         }, 10000);
       });
+    },
+
+    bounceSeat: async (personName: string, floor: number) => {
+      if (floor !== 3 && floor !== 4) return;
+      await loadChairsForFloor(floor);
+      const chair = findChairByFuzzyName(personName, floor);
+      if (chair) bounceChair(chair);
     },
 
     triggerOutdoorNav: (origin: string, _destination: string) => {

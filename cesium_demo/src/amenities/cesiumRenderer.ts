@@ -112,6 +112,18 @@ export function clearAllAmenityEntities(): void {
   for (const [key] of entityMap) clearCategory(key);
 }
 
+/** Amenities (outdoor OSM points) only make sense on the outdoor/all-floors
+ * view (floor 0) — hide them whenever an indoor floor is selected, same as
+ * setSolarEntitiesVisible does for the solar overlay (see floors.ts). */
+export function setAmenitiesVisible(visible: boolean): void {
+  for (const entities of entityMap.values()) {
+    for (const entity of entities) entity.show = visible;
+  }
+  if (routeEntity) routeEntity.show = visible;
+  if (userDot) userDot.show = visible;
+  viewer.scene.requestRender();
+}
+
 // ── Route rendering ──────────────────────────────────────────────────────────
 
 export async function renderRoute(

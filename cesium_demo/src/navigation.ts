@@ -408,14 +408,31 @@ export function isNavigationCameraActive(): boolean {
  * Bounces a chair vertically along true world-up (not the model's own local Z,
  * whose axis is scrambled by the yaw/pitch/roll baked into computeMatrix()) so
  * arriving at a seat destination gets a visible "you're here" cue, like a map
- * pin bounce. Settles back to the chair's exact original transform when done.
+ * pin bounce. Also tints the chair red and drops a red marker at its exact
+ * position for the duration. Settles back to the chair's original transform
+ * and color, and removes the marker, when done.
  */
-function bounceChair(chair: ChairModel, durationMs = 2200, amplitudeMeters = 0.18): void {
+export function bounceChair(chair: ChairModel, durationMs = 3400, amplitudeMeters = 0.4): void {
   const originalMatrix = Cesium.Matrix4.clone(chair.modelMatrix);
+  const originalColor = Cesium.Color.clone(chair.color);
   const center = chair.boundingSphere?.center ?? Cesium.Matrix4.getTranslation(originalMatrix, new Cesium.Cartesian3());
   const enu = Cesium.Transforms.eastNorthUpToFixedFrame(center);
   const upColumn = Cesium.Matrix4.getColumn(enu, 2, new Cesium.Cartesian4());
   const worldUp = new Cesium.Cartesian3(upColumn.x, upColumn.y, upColumn.z);
+
+  chair.color = Cesium.Color.RED;
+
+  const marker = viewer.entities.add({
+    position: Cesium.Cartesian3.clone(center),
+    point: {
+      pixelSize: 16,
+      color: Cesium.Color.RED,
+      outlineColor: Cesium.Color.WHITE,
+      outlineWidth: 2,
+      heightReference: Cesium.HeightReference.NONE,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    } as any,
+  });
 
   const start = performance.now();
   const scratchTranslation = new Cesium.Cartesian3();
@@ -425,13 +442,15 @@ function bounceChair(chair: ChairModel, durationMs = 2200, amplitudeMeters = 0.1
     const elapsed = performance.now() - start;
     if (elapsed >= durationMs) {
       chair.modelMatrix = originalMatrix;
+      chair.color = originalColor;
+      viewer.entities.remove(marker);
       viewer.scene.requestRender();
       return;
     }
 
     // Ease the bounce amplitude down over the duration so it settles rather than cutting off abruptly.
     const decay = 1 - elapsed / durationMs;
-    const offset = amplitudeMeters * decay * Math.abs(Math.sin(elapsed / 140));
+    const offset = amplitudeMeters * decay * Math.abs(Math.sin(elapsed / 75));
     Cesium.Cartesian3.multiplyByScalar(worldUp, offset, scratchTranslation);
     Cesium.Matrix4.fromTranslation(scratchTranslation, scratchTranslationMatrix);
     Cesium.Matrix4.multiply(scratchTranslationMatrix, originalMatrix, chair.modelMatrix);

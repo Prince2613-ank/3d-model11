@@ -1,9 +1,17 @@
 import { pool } from "../db/client";
 import { Notification, NotificationType } from "../types/domain";
 
+// Announcements (org-wide notices like a power shutdown or fire drill) are
+// created with no userId and is_admin_broadcast=false, matching this clause —
+// they're meant for every signed-in person, admins included. Without this,
+// an account with the admin role (e.g. testing both panels under one login)
+// never saw announcements, since the admin branch below only matched
+// is_admin_broadcast=true.
+const PUBLIC_BROADCAST_CLAUSE = `(n.user_id IS NULL AND n.is_admin_broadcast = false)`;
+
 function visibilityClause(isAdmin: boolean): string {
-  if (isAdmin) return `(n.user_id = $1 OR n.is_admin_broadcast = true)`;
-  return `(n.user_id = $1 OR (n.user_id IS NULL AND n.is_admin_broadcast = false))`;
+  if (isAdmin) return `(n.user_id = $1 OR n.is_admin_broadcast = true OR ${PUBLIC_BROADCAST_CLAUSE})`;
+  return `(n.user_id = $1 OR ${PUBLIC_BROADCAST_CLAUSE})`;
 }
 
 export const notificationRepository = {

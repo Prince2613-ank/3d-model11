@@ -11,6 +11,7 @@ import { CommunityTab } from "./CommunityTab";
 import { ReportsTab } from "./ReportsTab";
 import { SolarBuildingEstimate } from "../solar/solarService";
 import "./solarWorkspace.css";
+import { enterSolarMapMode, exitSolarMapMode } from "../floors";
 
 type TabKey = "dashboard" | "building" | "community" | "reports";
 
@@ -40,6 +41,15 @@ export function SolarWorkspace() {
 
   const { estimate, loading, error, runAnalysis, clear } = useSolarAnalysis();
 
+  const openWorkspace = () => {
+    setOpen(true);
+  };
+
+  const closeWorkspace = () => {
+    setOpen(false);
+    exitSolarMapMode();
+  };
+
   useBuildingPicker(estimate, (id) => {
     setSelectedBuildingId(id);
     setTab("building");
@@ -66,6 +76,7 @@ export function SolarWorkspace() {
   }, [selectedBuilding, selectedBuildingName]);
 
   const handleAnalyze = () => {
+    enterSolarMapMode();
     void runAnalysis(date, mode);
   };
 
@@ -100,10 +111,11 @@ export function SolarWorkspace() {
 
   const navButton = (
     <button
+      id="solarToolbarBtn"
       className={`sw-nav-icon-btn${open ? " sw-nav-icon-btn--active" : ""}`}
       title="Rooftop Solar Workspace"
       aria-label="Rooftop Solar Workspace"
-      onClick={() => setOpen((o) => !o)}
+      onClick={() => open ? closeWorkspace() : openWorkspace()}
       // Fallback position only applies if the Cesium toolbar wasn't found to
       // portal into — once portaled, the toolbar's flex layout takes over.
       style={portalTarget ? undefined : { position: "fixed", top: 24, right: 54, zIndex: 900 }}
@@ -143,7 +155,7 @@ export function SolarWorkspace() {
                   <div className="sw-hdr-sub">Rooftop generation, financials & community insight</div>
                 </div>
               </div>
-              <button className="sw-icon-btn" onClick={() => setOpen(false)} title="Close">✕</button>
+              <button className="sw-icon-btn" onClick={closeWorkspace} title="Close">✕</button>
             </div>
 
             <div className="sw-tabs">

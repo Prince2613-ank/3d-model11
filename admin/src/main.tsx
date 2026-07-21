@@ -12,7 +12,7 @@ const queryClient = new QueryClient({
       retry: 1,
       staleTime: 60_000,
       gcTime: 30 * 60_000,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true,
       refetchOnReconnect: true,
       placeholderData: (previousData: unknown) => previousData
     }

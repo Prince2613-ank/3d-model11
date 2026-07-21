@@ -22,14 +22,54 @@ export interface CurrentUser {
 
 let currentSession: Session | null = null;
 let googleProviderToken: string | null = null;
+let freshGoogleSignIn = false;
 const listeners = new Set<(user: CurrentUser | null) => void>();
 const OAUTH_POPUP_FLAG = "oauth_popup";
+const GOOGLE_TOKEN_CACHE_KEY = "flodata-google-calendar-token";
+const GOOGLE_TOKEN_LIFETIME_MS = 50 * 60 * 1000;
+let refreshPromise: Promise<string | null> | null = null;
 
 interface OAuthPopupSession {
   type: "flodata-oauth-session";
   accessToken: string;
   refreshToken: string;
   providerToken: string | null;
+}
+
+function cacheGoogleToken(token: string | null): void {
+  googleProviderToken = token;
+  if (!token) {
+    window.sessionStorage.removeItem(GOOGLE_TOKEN_CACHE_KEY);
+    return;
+  }
+  window.sessionStorage.setItem(GOOGLE_TOKEN_CACHE_KEY, JSON.stringify({
+    token,
+    expiresAt: Date.now() + GOOGLE_TOKEN_LIFETIME_MS
+  }));
+}
+
+function readCachedGoogleToken(): string | null {
+  try {
+    const raw = window.sessionStorage.getItem(GOOGLE_TOKEN_CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as { token?: string; expiresAt?: number };
+    if (!cached.token || !cached.expiresAt || cached.expiresAt <= Date.now()) {
+      window.sessionStorage.removeItem(GOOGLE_TOKEN_CACHE_KEY);
+      return null;
+    }
+    return cached.token;
+  } catch {
+    window.sessionStorage.removeItem(GOOGLE_TOKEN_CACHE_KEY);
+    return null;
+  }
+}
+
+googleProviderToken = readCachedGoogleToken();
+
+export function consumeFreshGoogleSignIn(): boolean {
+  const value = freshGoogleSignIn;
+  freshGoogleSignIn = false;
+  return value;
 }
 
 export function isOAuthPopupCallback(): boolean {
@@ -48,14 +88,14 @@ function toCurrentUser(user: User | undefined): CurrentUser | null {
 
 supabase.auth.getSession().then(({ data }) => {
   currentSession = data.session;
-  googleProviderToken = data.session?.provider_token ?? googleProviderToken;
+  if (data.session?.provider_token) cacheGoogleToken(data.session.provider_token);
   notify();
 });
 
 supabase.auth.onAuthStateChange((event, session) => {
   currentSession = session;
-  if (session?.provider_token) googleProviderToken = session.provider_token;
-  if (event === "SIGNED_OUT") googleProviderToken = null;
+  if (session?.provider_token) cacheGoogleToken(session.provider_token);
+  if (event === "SIGNED_OUT") cacheGoogleToken(null);
   notify();
 
   if (session && isOAuthPopupCallback() && window.opener) {
@@ -87,7 +127,27 @@ export function getCurrentUser(): CurrentUser | null {
 
 export async function getAccessToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
+  const session = data.session;
+  if (!session) return null;
+  const expiresSoon = !session.expires_at || session.expires_at * 1000 <= Date.now() + 60_000;
+  if (!expiresSoon) return session.access_token;
+  return refreshAccessToken();
+}
+
+export async function refreshAccessToken(): Promise<string | null> {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error || !data.session) return null;
+    currentSession = data.session;
+    notify();
+    return data.session.access_token;
+  })().finally(() => {
+    refreshPromise = null;
+  });
+
+  return refreshPromise;
 }
 
 /**
@@ -98,12 +158,18 @@ export async function getAccessToken(): Promise<string | null> {
  */
 export async function getGoogleAccessToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
-  return googleProviderToken ?? data.session?.provider_token ?? null;
+  const token = googleProviderToken ?? data.session?.provider_token ?? readCachedGoogleToken();
+  if (token && token !== googleProviderToken) cacheGoogleToken(token);
+  return token;
 }
 
 export async function signInWithGoogle(): Promise<void> {
+  freshGoogleSignIn = true;
   const popup = window.open("about:blank", "flodata-google-signin", "popup=yes,width=520,height=720");
-  if (!popup) throw new Error("Google sign-in popup was blocked. Allow popups and try again.");
+  if (!popup) {
+    freshGoogleSignIn = false;
+    throw new Error("Google sign-in popup was blocked. Allow popups and try again.");
+  }
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
@@ -120,6 +186,7 @@ export async function signInWithGoogle(): Promise<void> {
   });
 
   if (error || !data.url) {
+    freshGoogleSignIn = false;
     popup.close();
     throw error ?? new Error("Google sign-in could not be started.");
   }
@@ -147,8 +214,14 @@ export async function signInWithGoogle(): Promise<void> {
   });
 
   popup.location.replace(data.url);
-  const popupSession = await sessionPromise;
-  googleProviderToken = popupSession.providerToken;
+  let popupSession: OAuthPopupSession;
+  try {
+    popupSession = await sessionPromise;
+  } catch (error) {
+    freshGoogleSignIn = false;
+    throw error;
+  }
+  cacheGoogleToken(popupSession.providerToken);
   const { error: sessionError } = await supabase.auth.setSession({
     access_token: popupSession.accessToken,
     refresh_token: popupSession.refreshToken
@@ -160,3 +233,20 @@ export async function signInWithGoogle(): Promise<void> {
 export async function signOut(): Promise<void> {
   await supabase.auth.signOut();
 }
+
+// Supabase's background auto-refresh timer is throttled/paused for a
+// backgrounded or sleeping tab, so a token can go stale while the viewer sits
+// idle. Proactively refreshing as soon as the tab regains focus means the
+// next data request succeeds on the first try instead of silently failing
+// (or paying for an extra refresh-and-retry round trip).
+async function refreshIfStale(): Promise<void> {
+  if (!currentSession) return;
+  const expiresSoon = !currentSession.expires_at || currentSession.expires_at * 1000 <= Date.now() + 60_000;
+  if (expiresSoon) await refreshAccessToken();
+}
+
+window.addEventListener("focus", () => void refreshIfStale());
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") void refreshIfStale();
+});
+window.addEventListener("online", () => void refreshIfStale());

@@ -244,6 +244,16 @@ export function clearRadiusBorder(): void {
   if (_radiusEntity) { viewer.entities.remove(_radiusEntity); _radiusEntity = null; }
 }
 
+/** These are the real extruded building highlights (separate from the flat
+ * category markers in amenities/cesiumRenderer.ts) — same outdoor-only rule:
+ * hide them whenever an indoor floor is selected. */
+export function setBuildingHighlightsVisible(visible: boolean): void {
+  if (_highlightEntity) _highlightEntity.show = visible;
+  if (_radiusEntity) _radiusEntity.show = visible;
+  for (const entity of _amenityEntities) entity.show = visible;
+  viewer.scene.requestRender();
+}
+
 /**
  * Highlight a single amenity card click — prominent blue + fly.
  */

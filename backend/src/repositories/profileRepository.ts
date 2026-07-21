@@ -41,5 +41,19 @@ export const profileRepository = {
 
   async touchLastLogin(id: string): Promise<void> {
     await pool.query("UPDATE profiles SET last_login_at = now() WHERE id = $1", [id]);
+  },
+
+  async listAdminEmails(): Promise<string[]> {
+    const { rows } = await pool.query<{ email: string }>(
+      "SELECT email FROM profiles WHERE role = 'admin' AND is_active = true AND email IS NOT NULL AND email <> ''"
+    );
+    return rows.map((row) => row.email);
+  },
+
+  async listActiveEmails(): Promise<string[]> {
+    const { rows } = await pool.query<{ email: string }>(
+      "SELECT email FROM profiles WHERE is_active = true AND email IS NOT NULL AND email <> ''"
+    );
+    return rows.map((row) => row.email);
   }
 };

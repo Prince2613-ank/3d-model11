@@ -304,6 +304,20 @@ export function findChairByName(name: string, floor: 3 | 4): ChairModel | null {
   return chairs.find((c) => c.chairName === name) ?? null;
 }
 
+/** Case-insensitive (and substring-tolerant) lookup for callers that only have a free-typed name. */
+export function findChairByFuzzyName(query: string, floor: 3 | 4): ChairModel | null {
+  const q = query.toLowerCase().trim();
+  const chairs = floor === 3 ? secondFloorChairs : thirdFloorChairs;
+  return (
+    chairs.find((c) => c.chairName?.toLowerCase() === q) ??
+    chairs.find((c) => {
+      const name = c.chairName?.toLowerCase();
+      return Boolean(name) && (name!.includes(q) || q.includes(name!));
+    }) ??
+    null
+  );
+}
+
 export function getNavigablePersonNames(): string[] {
   const nameFloors = new Map<string, Set<number>>();
   for (const pt of chairNavPoints) {

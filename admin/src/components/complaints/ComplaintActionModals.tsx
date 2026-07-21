@@ -9,7 +9,13 @@ import { Input, Textarea, Label } from "../ui/Input";
 interface ModalProps {
   complaint: ComplaintWithAsset;
   onClose: () => void;
-  onDone: () => void;
+  // Passed a short confirmation naming the reporter, so the admin gets
+  // explicit feedback about who the action/notification just went to.
+  onDone: (confirmation?: string) => void;
+}
+
+function reporterLabel(complaint: ComplaintWithAsset): string {
+  return complaint.reporter_name || complaint.reporter_email || "the reporter";
 }
 
 export function AssignComplaintModal({ complaint, onClose, onDone }: ModalProps) {
@@ -23,7 +29,7 @@ export function AssignComplaintModal({ complaint, onClose, onDone }: ModalProps)
       deadline: deadline || undefined,
       notes: notes || undefined
     }),
-    onSuccess: () => { onDone(); onClose(); }
+    onSuccess: () => { onDone(`Assignment notification sent to ${reporterLabel(complaint)}`); onClose(); }
   });
 
   return (
@@ -62,7 +68,7 @@ export function ResolveComplaintModal({ complaint, onClose, onDone }: ModalProps
 
   const mutation = useMutation({
     mutationFn: () => api.patch(`/complaints/${complaint.id}/resolve`, { resolutionText }),
-    onSuccess: () => { onDone(); onClose(); }
+    onSuccess: () => { onDone(`Resolution notification sent to ${reporterLabel(complaint)}`); onClose(); }
   });
 
   return (
@@ -93,7 +99,7 @@ export function RejectComplaintModal({ complaint, onClose, onDone }: ModalProps)
 
   const mutation = useMutation({
     mutationFn: () => api.patch(`/complaints/${complaint.id}/reject`, { reason }),
-    onSuccess: () => { onDone(); onClose(); }
+    onSuccess: () => { onDone(`Rejection notification sent to ${reporterLabel(complaint)}`); onClose(); }
   });
 
   return (
@@ -124,7 +130,7 @@ export function ReplyComplaintModal({ complaint, onClose, onDone }: ModalProps) 
 
   const mutation = useMutation({
     mutationFn: () => api.patch(`/complaints/${complaint.id}/reply`, { message }),
-    onSuccess: () => { onDone(); onClose(); }
+    onSuccess: () => { onDone(`Reply sent to ${reporterLabel(complaint)}`); onClose(); }
   });
 
   return (
