@@ -2,6 +2,8 @@ import nodemailer, { Transporter } from "nodemailer";
 
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const MAIL_FROM_EMAIL = process.env.MAIL_FROM_EMAIL || GMAIL_USER;
 const MAIL_FROM_NAME = process.env.MAIL_FROM_NAME || "Flodata Digital Twin";
 
 let transporter: Transporter | null = null;
@@ -42,6 +44,41 @@ export interface MailMessage {
   text: string;
 }
 
+async function sendWithResend(
+  message: MailMessage,
+  to: string | string[] | undefined,
+  bcc: string | string[] | undefined
+): Promise<void> {
+  if (!MAIL_FROM_EMAIL) {
+    throw new Error("MAIL_FROM_EMAIL is required when RESEND_API_KEY is configured");
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+      "User-Agent": "flodata-digital-twin/1.0"
+    },
+    body: JSON.stringify({
+      from: `${MAIL_FROM_NAME} <${MAIL_FROM_EMAIL}>`,
+      // Resend requires a To recipient. A bcc-only broadcast is visibly
+      // addressed to the sender while recipients remain private.
+      to: to || MAIL_FROM_EMAIL,
+      bcc,
+      reply_to: message.replyTo || undefined,
+      subject: message.subject,
+      html: message.html,
+      text: message.text
+    })
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Resend API ${response.status}: ${detail}`);
+  }
+}
+
 /**
  * Best-effort email send. Never throws — a broken/unconfigured mail server
  * should never take down the underlying complaint/announcement action, the
@@ -54,12 +91,18 @@ export async function sendMail(message: MailMessage): Promise<void> {
   const hasBcc = Boolean(bcc) && !(Array.isArray(bcc) && bcc.length === 0);
   if (!hasTo && !hasBcc) return;
 
-  const client = getTransporter();
-  if (!client) return;
-
   try {
+    // Prefer the HTTPS provider so email works on hosts that block SMTP,
+    // including Render's free web-service tier.
+    if (RESEND_API_KEY) {
+      await sendWithResend(message, hasTo ? to : undefined, hasBcc ? bcc : undefined);
+      return;
+    }
+
+    const client = getTransporter();
+    if (!client) return;
     await client.sendMail({
-      from: `"${MAIL_FROM_NAME}" <${GMAIL_USER}>`,
+      from: `"${MAIL_FROM_NAME}" <${MAIL_FROM_EMAIL}>`,
       // A bcc-only broadcast still needs a "to" for the message to be valid —
       // address it to the sender itself.
       to: hasTo ? to : `"${MAIL_FROM_NAME}" <${GMAIL_USER}>`,

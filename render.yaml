@@ -21,6 +21,15 @@ services:
       - path: /
         name: Cache-Control
         value: public, max-age=0, must-revalidate
+    envVars:
+      # Set this to the public URL of the independently hosted backend,
+      # including /api (for example: https://gis-platform-backend.onrender.com/api).
+      - key: VITE_API_BASE_URL
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
 
   - type: web
     name: gis-platform-admin
@@ -59,6 +68,7 @@ services:
     rootDir: backend
     buildCommand: npm ci && npm run build
     startCommand: npm start
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
@@ -67,4 +77,32 @@ services:
       - key: CORS_ORIGIN
         sync: false
       - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ADMIN_PANEL_URL
+        sync: false
+      - key: USER_PANEL_URL
+        sync: false
+      # Optional integrations. Leave unset if solar lookup or email delivery
+      # is not needed.
+      - key: GOOGLE_SOLAR_API_KEY
+        sync: false
+      # HTTPS transactional email works on Render Free (SMTP does not).
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MAIL_FROM_EMAIL
+        sync: false
+      # Optional SMTP fallback for local development or paid hosting.
+      - key: GMAIL_USER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
+      - key: MAIL_FROM_NAME
+        value: Flodata Digital Twin
+      - key: ADMIN_EMAIL
         sync: false

@@ -1,6 +1,6 @@
 import { getAccessToken, refreshAccessToken } from "./auth";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined;
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api").replace(/\/$/, "");
 
 export class ApiError extends Error {
   status: number;
