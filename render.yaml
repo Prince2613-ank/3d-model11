@@ -92,6 +92,12 @@ services:
       # is not needed.
       - key: GOOGLE_SOLAR_API_KEY
         sync: false
+      # HTTPS transactional email works on Render Free (SMTP does not).
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MAIL_FROM_EMAIL
+        sync: false
+      # Optional SMTP fallback for local development or paid hosting.
       - key: GMAIL_USER
         sync: false
       - key: GMAIL_APP_PASSWORD

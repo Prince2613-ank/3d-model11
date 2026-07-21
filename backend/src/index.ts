@@ -26,6 +26,10 @@ import { errorHandler } from "./middleware/errorHandler";
 const app  = express();
 const PORT = parseInt(process.env.PORT ?? "4000");
 
+// Render terminates HTTPS at its reverse proxy and forwards the original
+// client address through X-Forwarded-For.
+app.set("trust proxy", 1);
+
 if (process.env.NODE_ENV === "production") {
   const required = [
     "DATABASE_URL",

@@ -85,8 +85,19 @@ these variables at build time. Verify the standalone backend with:
 curl https://gis-platform-backend.onrender.com/api/health
 ```
 
-Optional backend integrations are configured with `GOOGLE_SOLAR_API_KEY`,
-`GMAIL_USER`, `GMAIL_APP_PASSWORD`, `MAIL_FROM_NAME`, and `ADMIN_EMAIL`.
+Optional backend integrations are configured with `GOOGLE_SOLAR_API_KEY` and
+the email variables below. Render Free blocks SMTP, so production email uses
+Resend's HTTPS API:
+
+```env
+RESEND_API_KEY=re_your_api_key
+MAIL_FROM_EMAIL=notifications@your-verified-domain.com
+MAIL_FROM_NAME=Flodata Digital Twin
+ADMIN_EMAIL=admin@your-domain.com
+```
+
+`GMAIL_USER` and `GMAIL_APP_PASSWORD` remain available as an SMTP fallback for
+local development or a host that permits SMTP connections.
 
 ## Individual development commands
 
