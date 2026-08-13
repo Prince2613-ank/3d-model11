@@ -10,7 +10,7 @@ if (ionToken) {
 
 export const viewer = new Cesium.Viewer("cesiumContainer", {
   terrainProvider: undefined,
-  baseLayerPicker: true,
+  baseLayerPicker: false,
   geocoder: false,
   homeButton: false,
   sceneModePicker: false,

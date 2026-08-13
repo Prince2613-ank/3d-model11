@@ -165,18 +165,6 @@ function bindCalendarControls(button: HTMLElement): void {
     }
   });
 
-  document.getElementById("reconnectCalendarBtn")?.addEventListener("click", async (event) => {
-    event.stopPropagation();
-    closeUserMenu();
-    // Forces a fresh Google OAuth round-trip to get a new Calendar provider_token —
-    // Supabase doesn't persist or refresh that token across reloads on its own.
-    try {
-      await signInWithGoogle();
-    } catch (error) {
-      console.error("Reconnecting Google Calendar failed:", error);
-    }
-  });
-
   document.getElementById("logoutBtn")?.addEventListener("click", (event) => {
     event.stopPropagation();
     void signOut();

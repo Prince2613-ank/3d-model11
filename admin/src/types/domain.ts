@@ -67,6 +67,10 @@ export interface Room {
 export interface Asset {
   id: string;
   object_key: string;
+  seat_id: string;
+  seat_number: string | null;
+  designation: string | null;
+  joining_date: string | null;
   name: string;
   category: AssetCategory;
   room_id: string | null;
@@ -79,6 +83,7 @@ export interface Asset {
   attachments: string[];
   live_status: AssetLiveStatus;
   assigned_to_profile_id: string | null;
+  assigned_to_name: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

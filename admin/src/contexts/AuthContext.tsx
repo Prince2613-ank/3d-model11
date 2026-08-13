@@ -160,7 +160,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Calendar scope lets the Bookings page read/cancel room bookings via
         // the signed-in admin's own Google account (see lib/googleCalendar.ts).
         scopes: "https://www.googleapis.com/auth/calendar.events",
-        queryParams: { access_type: "offline", prompt: "consent" }
+        // "select_account" (not "consent") — Google only re-shows the data-access
+        // permissions screen the first time these scopes are granted; returning
+        // users just pick an account and land straight back in, no forced re-consent.
+        queryParams: { access_type: "offline", prompt: "select_account" }
       }
     });
   };

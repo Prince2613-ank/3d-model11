@@ -65,7 +65,21 @@ export function ComplaintsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/complaints/${id}`),
-    onSuccess: () => { invalidate(); setActiveModal(null); }
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: ["complaints"] });
+      const previous = queryClient.getQueriesData<{ complaints: ComplaintWithAsset[]; total: number; pageSize: number }>({ queryKey: ["complaints"] });
+      queryClient.setQueriesData<{ complaints: ComplaintWithAsset[]; total: number; pageSize: number }>({ queryKey: ["complaints"] }, (current) => current && {
+        ...current,
+        complaints: current.complaints.filter((complaint) => complaint.id !== id),
+        total: Math.max(0, current.total - 1)
+      });
+      return { previous };
+    },
+    onError: (_error, _id, context) => {
+      context?.previous.forEach(([key, value]) => queryClient.setQueryData(key, value));
+    },
+    onSuccess: () => { setDetailComplaint(null); setActiveModal(null); },
+    onSettled: invalidate
   });
 
   const columns: Column<ComplaintWithAsset>[] = [

@@ -18,4 +18,11 @@ router.post(
   asyncHandler(uploadController.uploadComplaintPhoto)
 );
 
+router.post(
+  "/asset-photo",
+  requireAuth,
+  upload.single("photo"),
+  asyncHandler(uploadController.uploadAssetPhoto)
+);
+
 export default router;

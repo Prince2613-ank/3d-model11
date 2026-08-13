@@ -32,27 +32,24 @@ export function NavIcon({ name }: { name: IconName }) {
 
 export function Sidebar() {
   return (
-    <aside className="relative z-20 hidden w-[76px] shrink-0 flex-col border-r border-slate-200/75 bg-white/95 text-slate-900 shadow-[8px_0_35px_rgba(55,65,100,.04)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-950 dark:text-white md:flex lg:w-[278px]">
-      <div className="flex h-[82px] items-center justify-center gap-3 border-b border-slate-100 px-4 dark:border-white/10 lg:justify-start lg:px-7">
-        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-gradient-to-br from-indigo-500 to-violet-700 text-white shadow-lg shadow-indigo-500/25">
-          <span className="text-[19px] font-black italic leading-none tracking-tight">F</span>
-        </div>
-        <div className="hidden min-w-0 lg:block">
-          <p className="truncate text-[16px] font-black tracking-tight">Flodata Admin</p>
-          <p className="mt-0.5 text-[11px] font-medium text-slate-400">Admin Panel</p>
+    <aside className="relative z-20 hidden w-[76px] shrink-0 flex-col border-r border-slate-200 bg-white text-black md:flex lg:w-[278px] dark:border-white/10 dark:bg-slate-950 dark:text-white">
+      <div className="flex h-[82px] items-center justify-center border-b border-slate-200 px-4 lg:justify-start lg:px-7 dark:border-white/10">
+        <div className="min-w-0 text-center lg:text-left">
+          <p className="truncate text-[16px] font-bold tracking-[.06em] text-black dark:text-white">FLODATA</p>
+          <p className="mt-0.5 hidden text-[10px] font-semibold uppercase tracking-[.16em] text-slate-500 lg:block dark:text-slate-500">Admin Panel</p>
         </div>
       </div>
-      <div className="hidden px-7 pb-3 pt-7 text-[10px] font-black uppercase tracking-[.2em] text-slate-400 lg:block">Workspace</div>
-      <nav className="flex-1 space-y-1.5 px-3 py-5 lg:py-1">
+      <div className="hidden px-7 pb-2 pt-6 text-[10px] font-semibold uppercase tracking-[.16em] text-slate-500 lg:block dark:text-slate-500">Command centre</div>
+      <nav className="flex-1 space-y-1 px-3 py-5 lg:py-1">
         {NAV_ITEMS.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             end={item.end}
             title={item.label}
-            className={({ isActive }) => `group relative flex h-12 items-center justify-center gap-3 rounded-xl px-3 text-sm font-semibold transition-all duration-200 lg:justify-start ${isActive ? "bg-gradient-to-r from-indigo-600 to-violet-500 text-white shadow-lg shadow-indigo-500/20" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white"}`}
+            className={({ isActive }) => `flex h-11 items-center justify-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors lg:justify-start ${isActive ? "bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-md" : "text-black hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white"}`}
           >
-            {({ isActive }) => <><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg transition-colors ${isActive ? "text-white" : "text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-slate-200"}`}><NavIcon name={item.icon}/></span><span className="hidden lg:block">{item.label}</span></>}
+            {({ isActive }) => <><span className={isActive ? "text-white" : "text-black dark:text-slate-300"}><NavIcon name={item.icon}/></span><span className="hidden lg:block">{item.label}</span></>}
           </NavLink>
         ))}
       </nav>

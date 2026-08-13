@@ -18,12 +18,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = await getAccessToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  let response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  // Asset/complaint information is shared with the admin dashboard. Never use a
+  // stale browser-cached response here, otherwise a dashboard edit can appear
+  // to be missing in the 3D user panel.
+  let response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers, cache: options.cache ?? "no-store" });
   if (response.status === 401 && token) {
     const refreshedToken = await refreshAccessToken();
     if (refreshedToken) {
       headers.set("Authorization", `Bearer ${refreshedToken}`);
-      response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+      response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers, cache: options.cache ?? "no-store" });
     }
   }
 
@@ -66,12 +69,16 @@ export const api = {
 export interface AssetDTO {
   id: string;
   object_key: string;
+  seat_id: string;
+  seat_number: string | null;
+  designation: string | null;
   name: string;
   category: string;
   description: string | null;
   image_url: string | null;
   live_status: "ok" | "pending" | "assigned" | "resolved";
   assigned_to_profile_id: string | null;
+  assigned_to_name: string | null;
   assigned_employee_name: string | null;
 }
 

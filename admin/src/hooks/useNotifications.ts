@@ -31,3 +31,11 @@ export function useMarkNotificationRead() {
     queryClient.invalidateQueries({ queryKey: ["notifications"] });
   };
 }
+
+export function useMarkAllNotificationsRead() {
+  const queryClient = useQueryClient();
+  return async () => {
+    await api.patch("/notifications/read-all");
+    queryClient.invalidateQueries({ queryKey: ["notifications"] });
+  };
+}

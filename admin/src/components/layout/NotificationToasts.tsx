@@ -29,16 +29,15 @@ export function NotificationToasts() {
 
   if (toasts.length === 0) return null;
   return (
-    <div className="pointer-events-none fixed right-3 top-20 z-[120] flex w-[min(390px,calc(100vw-24px))] flex-col gap-2 sm:right-5 sm:top-24" aria-live="polite">
+    <div className="pointer-events-none fixed bottom-[86px] right-3 z-[120] flex w-[min(340px,calc(100vw-24px))] flex-col-reverse gap-1.5 sm:right-5 md:bottom-5" aria-live="polite">
       {toasts.map((toast) => (
-        <article key={toast.id} className="pointer-events-auto overflow-hidden rounded-2xl border border-indigo-200/70 bg-white/95 shadow-[0_18px_60px_rgba(15,23,42,.22)] backdrop-blur-xl dark:border-indigo-500/25 dark:bg-slate-900/95">
-          <div className="h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-cyan-400" />
-          <div className="flex gap-3 p-4">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo-50 text-lg text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300">{toast.type === "direct_message" ? "✉" : toast.type === "announcement" ? "📣" : "!"}</span>
-            <div className="min-w-0 flex-1"><p className="text-[9px] font-black uppercase tracking-[.15em] text-indigo-500">New notification</p><h3 className="mt-1 text-sm font-extrabold text-slate-900 dark:text-white">{toast.title}</h3>{toast.body && <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500 dark:text-slate-400">{toast.body}</p>}</div>
-            <button onClick={() => setToasts((current) => current.filter((item) => item.id !== toast.id))} className="h-7 w-7 shrink-0 rounded-lg text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10" aria-label="Dismiss notification">×</button>
-          </div>
-        </article>
+        <div
+          key={toast.id}
+          className="pointer-events-auto flex items-center gap-2 rounded-full bg-brand-600 py-2 pl-3.5 pr-2 text-white shadow-[0_8px_24px_rgba(122,29,255,.35)]"
+        >
+          <p className="min-w-0 flex-1 truncate text-xs font-semibold">{toast.title}</p>
+          <button onClick={() => setToasts((current) => current.filter((item) => item.id !== toast.id))} className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-xs text-white/80 hover:bg-white/15 hover:text-white" aria-label="Dismiss notification">×</button>
+        </div>
       ))}
     </div>
   );

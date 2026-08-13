@@ -1,7 +1,7 @@
 import { api } from "./api";
 import { onAuthChange, type CurrentUser } from "./auth";
 import { showToast } from "./booking";
-import { registerToolbarPanel, closeOtherToolbarPanels } from "./panelCoordination";
+import { registerToolbarPanel, closeOtherToolbarPanels, registerPanelOpener, openToolbarPanel } from "./panelCoordination";
 
 type NotificationType =
   | "complaint_created" | "complaint_assigned" | "complaint_resolved"
@@ -485,6 +485,11 @@ export function initNotificationCenter(): void {
     await api.patch("/notifications/read-all");
     await refreshNotifications(false);
   });
+  element<HTMLButtonElement>("notificationHelpBtn").addEventListener("click", (event) => {
+    event.stopPropagation();
+    setPanelOpen(false);
+    openToolbarPanel("myComplaints");
+  });
   element<HTMLButtonElement>("notificationDetailCloseBtn").addEventListener("click", closeNotificationDetail);
   element<HTMLButtonElement>("notificationDetailBackdrop").addEventListener("click", closeNotificationDetail);
   document.addEventListener("keydown", (event) => {
@@ -492,5 +497,6 @@ export function initNotificationCenter(): void {
   });
 
   registerToolbarPanel("notifications", () => setPanelOpen(false));
+  registerPanelOpener("notifications", () => setPanelOpen(true));
   onAuthChange(handleAuthChange);
 }

@@ -39,10 +39,11 @@ import {
   getCorridorDrawGeoJSON,
 } from "./navigation";
 import { clearCctvViewshed } from "./cameraShed/cctvViewshed";
-import { chairObjectKey } from "./assetStatus";
+import { chairObjectKey, refreshChairStatuses } from "./assetStatus";
 import { initAssetPopup } from "./assetPopup";
-import { initComplaintForm } from "./complaintForm";
-import { isOAuthPopupCallback } from "./auth";
+import { initComplaintForm, openComplaintForm } from "./complaintForm";
+import { isOAuthPopupCallback, getCurrentUser, signInWithGoogle, signOut } from "./auth";
+import { openToolbarPanel } from "./panelCoordination";
 import { initNotificationCenter } from "./notificationCenter";
 import { initMyComplaints } from "./myComplaints";
 import {
@@ -63,7 +64,7 @@ import {
   installSeatViewDebug,
   installArrivalViewTuner,
 } from "./ui";
-import { createBooking, getCurrentEvents, showToast, fetchGlobalEvents, matchRoomName } from "./booking";
+import { createBooking, cancelBooking, getCurrentEvents, showToast, fetchGlobalEvents, matchRoomName, currentUserEmail } from "./booking";
 import { initAssistant, handleAssistantQuery, type MarkerPoint } from "./assistant";
 import { initAmenities } from "./amenities/index";
 import { mountSolarWorkspace } from "./solar-react/mount";
@@ -217,8 +218,6 @@ async function bootstrap(): Promise<void> {
     }
     flyRoutePreview();
   });
-  setNavigationMessage("Loading building data...");
-
   // Resume the floor the user was on before a reload (persisted in the URL as ?floor=N,
   // including 0 for the "all floors" dashboard) instead of always restarting on the
   // default view with the full onboarding splash.
@@ -269,6 +268,11 @@ async function bootstrap(): Promise<void> {
   }
 
   initSmartFloorCamera();
+  // The scene and dashboard share asset records. Refresh loaded chair labels and
+  // status colours so dashboard changes appear in the user view automatically.
+  window.setInterval(() => {
+    void refreshChairStatuses([...secondFloorChairs, ...thirdFloorChairs]);
+  }, 20_000);
   installStairPathDebug();
   await installIntermediatePointDebug();
   preloadHeavyFloorsInBackground();
@@ -315,7 +319,7 @@ async function bootstrap(): Promise<void> {
     initAmenities();
     mountSolarWorkspace();
   }
-  setNavigationMessage("Choose rooms to start navigation.");
+
 
   // ── Arrival view tuner (enable with ?arrivalViewDebug=1 in URL) ──
   installArrivalViewTuner();
@@ -617,6 +621,27 @@ function findClosestOption(select: HTMLSelectElement, query: string): string | n
   return partial?.value ?? null;
 }
 
+function resolveBookingDate(dateStr: string): Date {
+  const today = new Date();
+  const normalized = dateStr.trim().toLowerCase();
+  if (!normalized || normalized === "today") return today;
+  if (normalized === "tomorrow") {
+    const d = new Date(today);
+    d.setDate(d.getDate() + 1);
+    return d;
+  }
+  const parsed = new Date(`${dateStr}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? today : parsed;
+}
+
+function combineDateAndTime(date: Date, timeStr: string): Date | null {
+  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const result = new Date(date);
+  result.setHours(Number(match[1]), Number(match[2]), 0, 0);
+  return result;
+}
+
 function installAssistant(): void {
   const fab = document.getElementById("assistantFab") as HTMLButtonElement | null;
   const panel = document.getElementById("assistantPanel") as HTMLElement | null;
@@ -786,6 +811,94 @@ function installAssistant(): void {
 
     getRoomNames: () => getNavigableRoomNames(),
     getPersonNames: () => getNavigablePersonNames(),
+
+    raiseComplaintForRoom: (roomName: string, floor: 3 | 4, issueDescription?: string) => {
+      void openFloorProfessional(floor);
+      openComplaintForm({
+        targetType: "room",
+        objectName: roomName,
+        floor,
+        prefillDescription: issueDescription
+      });
+    },
+
+    raiseComplaintForPerson: async (personName: string, floor: 3 | 4, issueDescription?: string) => {
+      await loadChairsForFloor(floor);
+      const chair = findChairByFuzzyName(personName, floor);
+      if (!chair) throw new Error(`Could not find a seat for "${personName}".`);
+      void openFloorProfessional(floor);
+      openComplaintForm({
+        targetType: "asset",
+        objectKey: chairObjectKey(chair),
+        objectName: chair.chairDisplayName || chair.chairName || personName,
+        floor,
+        prefillDescription: issueDescription
+      });
+    },
+
+    showMyComplaints: () => {
+      if (!getCurrentUser()) throw new Error("Sign in first to view your complaints.");
+      openToolbarPanel("myComplaints");
+    },
+
+    bookRoom: async (roomName: string, date: string, startTime: string, endTime: string) => {
+      const matched = matchRoomName(roomName);
+      if (!matched) return `I don't know a bookable room called "${roomName}". Bookable rooms: Dojo, Eureka, Manthan, Meeting Room, Conference Room.`;
+
+      const day = resolveBookingDate(date);
+      const start = combineDateAndTime(day, startTime);
+      const end = combineDateAndTime(day, endTime);
+      if (!start || !end) return "I couldn't understand those times. Please give a start and end time like 15:00.";
+      if (end <= start) return "The end time has to be after the start time.";
+
+      const result = await createBooking(matched, start, end, getCurrentEvents());
+      if (result.success) {
+        const dateLabel = day.toLocaleDateString([], { month: "short", day: "numeric" });
+        const startLabel = start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const endLabel = end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        return `Booked ${matched} on ${dateLabel} from ${startLabel} to ${endLabel}.`;
+      }
+      return result.error ?? "Booking failed. Please try again.";
+    },
+
+    cancelMyBooking: async (roomName: string) => {
+      const matched = matchRoomName(roomName);
+      if (!matched) return `I don't know a bookable room called "${roomName}".`;
+
+      const myEmailPrefix = currentUserEmail?.split("@")[0] ?? "";
+      if (!myEmailPrefix) return "Please sign in first to manage bookings.";
+
+      const now = new Date();
+      const myBooking = getCurrentEvents().find(
+        (event) => event.room === matched && event.end >= now && event.organizer === myEmailPrefix
+      );
+      if (!myBooking) return `I couldn't find an upcoming booking of yours for ${matched}.`;
+
+      const result = await cancelBooking(myBooking);
+      return result.success ? `Cancelled your booking for ${matched}.` : (result.error ?? "Cancellation failed.");
+    },
+
+    clearRoute: () => {
+      const btn = document.getElementById("clearMapRouteBtn") as HTMLButtonElement | null;
+      if (!btn || btn.hidden) throw new Error("There's no route currently drawn to clear.");
+      btn.click();
+    },
+
+    signIn: async () => {
+      if (getCurrentUser()) return;
+      await signInWithGoogle();
+    },
+
+    signOutUser: async () => {
+      if (!getCurrentUser()) return;
+      await signOut();
+    },
+
+    openNotifications: () => {
+      const btn = document.getElementById("notificationCenterBtn") as HTMLButtonElement | null;
+      if (!btn || btn.hidden) throw new Error("Sign in first to view notifications.");
+      btn.click();
+    },
   });
 
   function addMessage(text: string, role: "user" | "bot" | "thinking" | "error"): HTMLElement {

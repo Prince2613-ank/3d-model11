@@ -10,6 +10,7 @@ interface ComplaintTarget {
   objectName: string;
   floor: 3 | 4;
   roomId?: string;
+  prefillDescription?: string;
 }
 
 let target: ComplaintTarget | null = null;
@@ -38,6 +39,7 @@ function resetForm(): void {
   el<HTMLElement>("complaintFormSuccess").hidden = true;
   el<HTMLButtonElement>("complaintSubmitBtn").disabled = false;
   el<HTMLButtonElement>("complaintSubmitBtn").textContent = "Submit";
+  el<HTMLElement>("complaintPhotosCount").textContent = "";
 }
 
 export function closeComplaintForm(): void {
@@ -60,6 +62,9 @@ export function openComplaintForm(next: ComplaintTarget): void {
   popup.hidden = false;
   signInPrompt.hidden = isSignedIn;
   form.style.display = isSignedIn ? "" : "none";
+  if (next.prefillDescription) {
+    el<HTMLTextAreaElement>("complaintDescription").value = next.prefillDescription;
+  }
 }
 
 async function uploadPhotos(files: FileList): Promise<string[]> {
@@ -139,6 +144,13 @@ export function initComplaintForm(): void {
 
   el<HTMLButtonElement>("complaintSignInBtn").addEventListener("click", () => {
     void signInWithGoogle();
+  });
+
+  el<HTMLInputElement>("complaintPhotos").addEventListener("change", (event) => {
+    const count = (event.target as HTMLInputElement).files?.length ?? 0;
+    el<HTMLElement>("complaintPhotosCount").textContent = count === 0
+      ? ""
+      : count === 1 ? "1 photo selected" : `${count} photos selected`;
   });
 
   el<HTMLButtonElement>("complaintFormCloseBtn").addEventListener("click", closeComplaintForm);

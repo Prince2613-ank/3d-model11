@@ -398,37 +398,49 @@
 
   <section id="mapDirectionsPanel" class="map-directions-panel" aria-label="Map Route" hidden>
     <div class="map-directions-header">
-      <strong>Map Route</strong>
+      <span class="map-directions-title">
+        <span class="map-directions-icon" aria-hidden="true">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 21s-6-4.2-6-10a6 6 0 1 1 12 0c0 5.8-6 10-6 10z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            <circle cx="12" cy="11" r="2.2" fill="currentColor"/>
+          </svg>
+        </span>
+        <strong>Map Route</strong>
+      </span>
       <button id="mapDirectionsCloseBtn" type="button" aria-label="Close map route">x</button>
     </div>
 
-    <label for="mapOriginInput">From</label>
-    <div class="map-autocomplete-wrapper">
-      <input id="mapOriginInput" type="text" placeholder="Room or address" autocomplete="off" />
-      <button type="button" class="map-autocomplete-arrow" tabindex="-1" aria-label="Show options" data-target="mapOriginInput"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="3" width="14" height="2" rx="1" fill="currentColor"/><rect x="1" y="7" width="14" height="2" rx="1" fill="currentColor"/><rect x="1" y="11" width="9" height="2" rx="1" fill="currentColor"/></svg></button>
-      <button id="useCurrentLocationBtn" type="button" class="map-locate-icon-btn" title="Use current location" aria-label="Use current location">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
-          <path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-      </button>
-      <ul id="mapOriginDropdown" class="map-autocomplete-dropdown" role="listbox" hidden></ul>
-    </div>
+    <div class="map-route-fields">
+      <div class="map-field map-field--from">
+        <span class="map-field-dot" aria-hidden="true"></span>
+        <div class="map-field-body">
+          <label for="mapOriginInput">From</label>
+          <div class="map-autocomplete-wrapper">
+            <input id="mapOriginInput" type="text" placeholder="Room or address" autocomplete="off" />
+            <button type="button" class="map-autocomplete-arrow" tabindex="-1" aria-label="Show options" data-target="mapOriginInput"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="3" width="14" height="2" rx="1" fill="currentColor"/><rect x="1" y="7" width="14" height="2" rx="1" fill="currentColor"/><rect x="1" y="11" width="9" height="2" rx="1" fill="currentColor"/></svg></button>
+            <ul id="mapOriginDropdown" class="map-autocomplete-dropdown" role="listbox" hidden></ul>
+          </div>
+        </div>
+      </div>
 
-    <div class="map-swap-row">
       <button id="swapRouteBtn" type="button" class="map-swap-btn" aria-label="Swap From and To">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M7 4v13M7 17l-3-3m3 3 3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M17 20V7m0-3 3 3m-3-3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>
-    </div>
 
-    <label for="mapDestinationInput">To</label>
-    <div class="map-autocomplete-wrapper">
-      <input id="mapDestinationInput" type="text" placeholder="Room or address" autocomplete="off" />
-      <button type="button" class="map-autocomplete-arrow" tabindex="-1" aria-label="Show options" data-target="mapDestinationInput"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="3" width="14" height="2" rx="1" fill="currentColor"/><rect x="1" y="7" width="14" height="2" rx="1" fill="currentColor"/><rect x="1" y="11" width="9" height="2" rx="1" fill="currentColor"/></svg></button>
-      <ul id="mapDestinationDropdown" class="map-autocomplete-dropdown" role="listbox" hidden></ul>
+      <div class="map-field map-field--to">
+        <span class="map-field-dot" aria-hidden="true"></span>
+        <div class="map-field-body">
+          <label for="mapDestinationInput">To</label>
+          <div class="map-autocomplete-wrapper">
+            <input id="mapDestinationInput" type="text" placeholder="Room or address" autocomplete="off" />
+            <button type="button" class="map-autocomplete-arrow" tabindex="-1" aria-label="Show options" data-target="mapDestinationInput"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="3" width="14" height="2" rx="1" fill="currentColor"/><rect x="1" y="7" width="14" height="2" rx="1" fill="currentColor"/><rect x="1" y="11" width="9" height="2" rx="1" fill="currentColor"/></svg></button>
+            <ul id="mapDestinationDropdown" class="map-autocomplete-dropdown" role="listbox" hidden></ul>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Hidden selects kept for indoor nav JS compatibility -->
@@ -443,10 +455,14 @@
       <button id="startNavBtn" class="map-route-btn" type="button">Navigate</button>
     </div>
     <button id="exitNavBtn" class="map-route-btn map-route-btn--danger" type="button" hidden>Exit Navigation</button>
-    <button id="flyPreviewBtn" class="map-route-btn" type="button" hidden style="background:#6a0dad; margin-top:4px;">&#9654; Preview Route</button>
-    <button id="worldRouteIndoorNavBtn" class="map-route-btn" type="button" hidden style="background:#0055cc; margin-top:4px;">&#8594; Start Indoor Navigation</button>
+    <button id="flyPreviewBtn" class="map-route-btn" type="button" hidden style="background:linear-gradient(135deg,#a855f7,#7c3aed); box-shadow:0 4px 12px rgba(124,58,237,0.32); margin-top:6px;">&#9654; Preview Route</button>
+    <button id="worldRouteIndoorNavBtn" class="map-route-btn" type="button" hidden style="background:linear-gradient(135deg,#3b82f6,#0055cc); box-shadow:0 4px 12px rgba(0,85,204,0.32); margin-top:6px;">&#8594; Start Indoor Navigation</button>
 
     <div id="mapRouteSummary" class="map-route-summary" hidden></div>
+    <button id="clearMapRouteBtn" class="map-route-btn map-route-btn--outline map-clear-route-btn" type="button" hidden>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Clear Route
+    </button>
     <div id="navSummary" class="nav-summary" hidden></div>
     <button id="toggleDirectionsBtn" class="map-toggle-directions-btn" type="button" hidden>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -459,7 +475,25 @@
     </button>
     <div id="navSteps" class="nav-steps" hidden></div>
   </section>
-  
+
+  <div id="navBottomBar" class="nav-bottom-bar" hidden>
+    <div class="nav-bottom-progress"><div id="navBottomProgressFill" class="nav-bottom-progress-fill"></div></div>
+    <div class="nav-bottom-row">
+      <div id="navBottomIcon" class="nav-bottom-icon">&uarr;</div>
+      <div class="nav-bottom-text">
+        <div id="navBottomInstruction" class="nav-bottom-instruction">Head to start</div>
+        <div id="navBottomContext" class="nav-bottom-context"></div>
+      </div>
+      <button id="navBottomPreviewBtn" type="button" class="nav-bottom-btn nav-bottom-preview" aria-label="Preview route" title="Preview route">
+        <span id="navBottomPreviewIcon" class="nav-bottom-preview-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </span>
+        <span id="navBottomPreviewLabel" class="nav-bottom-preview-label">Preview</span>
+      </button>
+      <button id="navBottomCloseBtn" type="button" class="nav-bottom-btn nav-bottom-close" aria-label="Exit navigation" title="Exit navigation">&times;</button>
+    </div>
+  </div>
+
   <button id="hamburgerMenu" class="hamburger-btn" aria-label="Toggle Controls" title="Toggle Controls">
     <span></span>
     <span></span>
@@ -475,18 +509,10 @@
     </svg>
   </button>
 
-  <button id="myComplaintsBtn" class="notification-center-btn my-complaints-btn" type="button" aria-label="My Complaints" aria-expanded="false" title="My Complaints" hidden>
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="9"/>
-      <path d="M9.5 9a2.5 2.5 0 0 1 4.9.8c0 1.7-2.4 1.9-2.4 3.7"/>
-      <path d="M12 17h.01"/>
-    </svg>
-  </button>
-
   <section id="myComplaintsPanel" class="notification-center-panel my-complaints-panel" aria-label="My Complaints" hidden>
     <header class="notification-center-header">
       <div>
-        <span class="notification-center-eyebrow">Help</span>
+        <button id="myComplaintsBackBtn" type="button" class="notification-center-back">&larr; Back to Notifications</button>
         <h3>My Complaints</h3>
       </div>
     </header>
@@ -509,7 +535,10 @@
         <span class="notification-center-eyebrow">Live updates</span>
         <h3>Notifications</h3>
       </div>
-      <button id="notificationMarkAllBtn" type="button">Mark all read</button>
+      <div class="notification-center-header-actions">
+        <button id="notificationHelpBtn" type="button" class="notification-center-help">Past Complaints</button>
+        <button id="notificationMarkAllBtn" type="button">Mark all read</button>
+      </div>
     </header>
     <div id="notificationCenterStatus" class="notification-center-status">Sign in to see announcements and complaint updates.</div>
     <div id="notificationCenterList" class="notification-center-list"></div>
@@ -546,7 +575,6 @@
     </div>
     <div class="user-dropdown-arrow">▼</div>
     <div id="userMenu" class="user-menu" hidden>
-      <button id="reconnectCalendarBtn" type="button">Reconnect Calendar</button>
       <button id="logoutBtn" type="button">Logout</button>
     </div>
   </div>
@@ -620,10 +648,10 @@
     <section class="panel common-panel" aria-label="Floor controls">
       <h3>Floor Controls</h3>
       <div id="floorButtons">
-        <button class="btn" type="button" data-floor="3">Show 2nd Floor</button>
-        <button class="btn" type="button" data-floor="4">Show 3rd Floor</button>
+        <button class="btn" type="button" data-floor="3">Flodata 2nd Floor</button>
+        <button class="btn" type="button" data-floor="4">Flodata 3rd Floor</button>
       </div>
-      <button class="btn" type="button" data-floor="0">Show All Floors</button>
+      <button class="btn" type="button" data-floor="0">Flodata Building</button>
     </section>
   </div>
 
@@ -674,7 +702,17 @@
 
   <section id="assetPopup" class="common-panel asset-popup" hidden>
     <div class="panel-header">
-      <span id="assetPopupTitle">Object</span>
+      <span class="asset-popup-title-group">
+        <span class="asset-popup-avatar-wrap">
+          <span id="assetPopupAvatarFallback" class="asset-popup-avatar asset-popup-avatar-fallback">?</span>
+          <img id="assetPopupAvatar" class="asset-popup-avatar" alt="" hidden />
+          <button id="assetPopupAvatarEditBtn" type="button" class="asset-popup-avatar-edit-btn" hidden aria-label="Change photo">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <input id="assetPopupPhotoInput" type="file" accept="image/*" hidden />
+        </span>
+        <span id="assetPopupTitle">Object</span>
+      </span>
       <button id="assetPopupCloseBtn" class="panel-close-btn" type="button" aria-label="Close">✕</button>
     </div>
     <img id="assetPopupImage" class="asset-popup-image" alt="" hidden />
@@ -684,50 +722,93 @@
     </p>
     <p id="assetPopupDescription" class="asset-popup-description"></p>
     <div id="assetPopupDetails" class="asset-popup-details" hidden>
-      <div><span>Employee</span><strong id="assetDetailEmployee">—</strong></div>
-      <div><span>Seat ID</span><strong id="assetDetailSeat">—</strong></div>
+      <div class="asset-detail-editable-cell">
+        <span>Employee</span>
+        <strong id="assetDetailEmployee">—</strong>
+        <input id="assetDetailEmployeeInput" type="text" maxlength="80" hidden />
+      </div>
+      <div class="asset-detail-editable-cell"><span>Seat ID</span><strong id="assetDetailSeat">—</strong><input id="assetDetailSeatInput" type="text" maxlength="80" hidden /></div>
       <div><span>Floor</span><strong id="assetDetailFloor">—</strong></div>
-      <div><span>Status</span><strong id="assetDetailStatus">—</strong></div>
-      <div><span>Category</span><strong id="assetDetailCategory">Chair</strong></div>
-      <div><span>Seat number</span><strong id="assetDetailNumber">—</strong></div>
+      <div class="asset-detail-editable-cell"><span id="assetDetailStatusLabel">Status</span><strong id="assetDetailStatus">—</strong><select id="assetDetailStatusInput" hidden><option value="ok">OK</option><option value="pending">Pending</option><option value="assigned">Assigned</option><option value="resolved">Resolved</option></select></div>
+      <div class="asset-detail-editable-cell"><span>Category</span><strong id="assetDetailCategory">Chair</strong><select id="assetDetailCategoryInput" hidden><option value="chair">Chair</option><option value="ac">AC</option><option value="projector">Projector</option><option value="door">Door</option><option value="printer">Printer</option><option value="monitor">Monitor</option><option value="fire_extinguisher">Fire extinguisher</option><option value="desk">Desk</option><option value="elevator">Elevator</option><option value="light">Light</option><option value="other">Other</option></select></div>
+      <div class="asset-detail-editable-cell"><span>Designation</span><strong id="assetDetailDesignation">—</strong><input id="assetDetailDesignationInput" type="text" maxlength="80" hidden /></div>
+    </div>
+    <div id="assetDetailEditActions" class="asset-detail-employee-edit-row" hidden>
+      <button id="assetDetailSaveBtn" type="button" class="asset-edit-mini-btn asset-edit-save-btn">Save</button>
+      <button id="assetDetailCancelBtn" type="button" class="asset-edit-mini-btn asset-edit-cancel-btn">Cancel</button>
     </div>
     <p id="assetPopupUnregistered" class="asset-popup-unregistered" hidden>
       This item isn't registered as a manageable asset yet — ask an admin to add it.
     </p>
     <div class="asset-popup-actions">
       <button id="assetPopupDetailsBtn" class="btn" type="button" aria-expanded="false">Details</button>
+      <button id="assetPopupEditBtn" class="btn" type="button" hidden>Edit details</button>
       <button id="assetPopupComplaintBtn" class="btn btn-primary" type="button">Raise Complaint</button>
     </div>
   </section>
 
+  <section id="photoCropModal" class="photo-crop-modal" hidden>
+    <div class="photo-crop-card">
+      <div class="panel-header">
+        <span>Adjust photo</span>
+        <button id="photoCropCloseBtn" type="button" class="panel-close-btn" aria-label="Close">✕</button>
+      </div>
+      <p class="photo-crop-hint">Drag the slider so the face sits inside the circle — this is exactly how the photo will show.</p>
+      <div id="photoCropViewport" class="photo-crop-viewport"></div>
+      <input id="photoCropRange" class="photo-crop-range" type="range" min="0" max="100" value="20" />
+      <div class="photo-crop-actions">
+        <button id="photoCropCancelBtn" type="button" class="btn">Cancel</button>
+        <button id="photoCropConfirmBtn" type="button" class="btn btn-primary">Use this photo</button>
+      </div>
+    </div>
+  </section>
+
   <section id="complaintFormPopup" class="common-panel complaint-form-popup" hidden>
-    <div class="panel-header">
-      <span>Raise Complaint</span>
+    <div class="panel-header complaint-form-header">
+      <span class="complaint-form-title">
+        <span class="complaint-form-icon" aria-hidden="true">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 9v4M12 17h.01" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M10.3 3.6 2.4 17.3A2 2 0 0 0 4.1 20h15.8a2 2 0 0 0 1.7-2.7L13.7 3.6a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2"/></svg>
+        </span>
+        Raise Complaint
+      </span>
       <button id="complaintFormCloseBtn" class="panel-close-btn" type="button" aria-label="Close">✕</button>
     </div>
 
-    <div id="complaintSignInPrompt" hidden>
+    <div id="complaintSignInPrompt" class="complaint-signin-prompt" hidden>
       <p>Sign in with Google to report an issue.</p>
       <button id="complaintSignInBtn" class="btn btn-primary" type="button">Sign in with Google</button>
     </div>
 
-    <form id="complaintForm">
-      <label for="complaintIssueType">Issue Type</label>
-      <input id="complaintIssueType" type="text" placeholder="e.g. Not working, Damaged, Missing" required />
+    <form id="complaintForm" class="complaint-form">
+      <div class="complaint-field">
+        <label for="complaintIssueType">Issue type</label>
+        <input id="complaintIssueType" type="text" placeholder="e.g. Not working, Damaged, Missing" required />
+      </div>
 
-      <label for="complaintPriority">Priority</label>
-      <select id="complaintPriority">
-        <option value="low">Low</option>
-        <option value="medium" selected>Medium</option>
-        <option value="high">High</option>
-        <option value="critical">Critical</option>
-      </select>
+      <div class="complaint-field">
+        <label for="complaintPriority">Priority</label>
+        <select id="complaintPriority" class="complaint-priority-select">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+          <option value="critical">Critical</option>
+        </select>
+      </div>
 
-      <label for="complaintDescription">Description</label>
-      <textarea id="complaintDescription" rows="3" required></textarea>
+      <div class="complaint-field">
+        <label for="complaintDescription">Description</label>
+        <textarea id="complaintDescription" rows="3" required placeholder="A few details about the issue..."></textarea>
+      </div>
 
-      <label for="complaintPhotos">Upload Images</label>
-      <input id="complaintPhotos" type="file" accept="image/*" multiple />
+      <div class="complaint-field">
+        <label for="complaintPhotos">Photos <span class="complaint-optional">(optional)</span></label>
+        <label class="complaint-file-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 8a2 2 0 0 1 2-2h1.2l.9-1.5A1 1 0 0 1 8.96 4h6.08a1 1 0 0 1 .86.5L16.8 6H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.2" stroke="currentColor" stroke-width="1.8"/></svg>
+          Choose photos
+          <input id="complaintPhotos" class="complaint-file-input" type="file" accept="image/*" multiple />
+        </label>
+        <span id="complaintPhotosCount" class="complaint-file-count"></span>
+      </div>
 
       <p id="complaintFormError" class="complaint-form-error" hidden></p>
       <p id="complaintFormSuccess" class="complaint-form-success" hidden>Complaint submitted. Thank you!</p>

@@ -3905,6 +3905,35 @@ body {
   color: #0d9488 !important;
 }
 
+.google-map-route-btn.active {
+  background: linear-gradient(135deg, #1a73e8, #16a34a) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+  box-shadow: 0 2px 10px rgba(26, 115, 232, 0.45) !important;
+}
+
+
+.home-toolbar-btn {
+  order: -2;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%) !important;
+  border-color: rgba(217, 119, 6, 0.35) !important;
+  color: #b45309 !important;
+  box-shadow: 0 2px 8px rgba(180, 83, 9, 0.14) !important;
+}
+
+.home-toolbar-btn svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.home-toolbar-btn:hover {
+  border-color: rgba(217, 119, 6, 0.6) !important;
+  color: #92400e !important;
+}
 
 .camera-controls-toolbar-btn {
   order: -2;
@@ -3932,18 +3961,58 @@ body {
 
 .map-directions-panel {
   position: fixed;
-  top: 66px;
-  right: 14px;
+  top: 76px;
+  right: 12px;
   z-index: 10003;
-  width: min(280px, calc(100vw - 28px));
-  max-height: calc(100vh - 90px);
+  width: min(272px, calc(100vw - 24px));
+  max-height: calc(100vh - 88px);
   overflow-y: auto;
-  padding: 10px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.62);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 16px 40px rgba(14, 28, 54, 0.22);
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 20px 48px rgba(14, 28, 54, 0.26), 0 0 0 1px rgba(15, 23, 42, 0.03);
   box-sizing: border-box;
+}
+
+@media (max-width: 480px) {
+  .map-directions-panel {
+    top: 68px;
+    right: 6px;
+    width: min(206px, calc(100vw - 12px));
+    padding: 8px;
+  }
+
+  .map-directions-panel input {
+    height: 27px;
+    font-size: 11.5px;
+  }
+
+  .map-input-row > button,
+  .map-route-btn {
+    height: 28px;
+    font-size: 10.5px;
+  }
+
+  .map-swap-btn {
+    width: 20px;
+    height: 20px;
+  }
+
+  .map-swap-btn svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  .map-clear-route-btn {
+    height: 25px;
+    font-size: 10px;
+  }
+
+  .map-toggle-directions-btn {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
 }
 
 .map-section-label {
@@ -3965,41 +4034,83 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
-  color: #202124;
-  font-size: 16px;
+  margin: -2px -2px 8px;
+  padding-bottom: 8px;
+  color: #111827;
+  font-size: 14px;
+  border-bottom: 1px solid #eef1f6;
+}
+
+.map-directions-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.map-directions-title strong {
+  font-size: 14.5px;
+  letter-spacing: 0.1px;
+}
+
+.map-directions-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #1a73e8, #16a34a);
+  color: #fff;
+  box-shadow: 0 3px 8px rgba(26, 115, 232, 0.38);
 }
 
 .map-directions-header button {
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
   margin: 0;
   padding: 0;
   border: 0;
-  border-radius: 7px;
-  background: #eef2f7;
-  color: #1f2937;
+  border-radius: 50%;
+  background: #f1f4f9;
+  color: #4b5563;
   font-weight: 800;
+  transition: background 0.15s, color 0.15s;
+}
+
+.map-directions-header button:hover {
+  background: #fee2e2;
+  color: #dc2626;
 }
 
 .map-directions-panel label {
   display: block;
-  margin: 6px 0 3px;
-  color: #4b5563;
-  font-size: 11px;
-  font-weight: 700;
+  margin: 0 0 2px;
+  color: #94a3b8;
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
 
 .map-directions-panel input {
   width: 100%;
-  height: 32px;
+  height: 30px;
   padding: 0 8px;
-  border: 1px solid #d5dbe5;
+  border: 1.5px solid #e2e6ee;
   border-radius: 8px;
-  background: #fff;
+  background: #f8fafc;
   color: #111827;
+  font-size: 12.5px;
   box-sizing: border-box;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.map-directions-panel input:focus {
+  outline: none;
+  border-color: #1a73e8;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.14);
 }
 
 
@@ -4037,20 +4148,22 @@ body {
 }
 
 .map-autocomplete-wrapper input {
-  padding-right: 60px;
+  padding-right: 36px;
 }
 
 .map-autocomplete-dropdown {
-  position: absolute;
-  top: calc(100% + 2px);
-  left: 0;
-  right: 0;
+  /* Positioned via JS (bindMapAutocomplete's positionDropdown()) as a fixed
+     overlay instead of being absolutely positioned inside the scrollable
+     .map-directions-panel — otherwise the panel counts the open dropdown as
+     overflow content, triggers its own scrollbar, and the browser's
+     scroll-focused-input-into-view behavior clips/shifts the whole card. */
+  position: fixed;
   z-index: 99999;
   background: #fff;
   border: 1px solid #d5dbe5;
   border-radius: 8px;
   box-shadow: 0 6px 20px rgba(0,0,0,0.14);
-  max-height: 220px;
+  max-height: 280px;
   overflow-y: auto;
   list-style: none;
   margin: 0;
@@ -4119,66 +4232,117 @@ body {
 
 .map-input-row > button,
 .map-route-btn {
-  height: 34px;
+  height: 32px;
   margin: 0;
   padding: 0 6px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 9px;
   background: #1a73e8;
   color: #fff;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
-}
-
-.map-swap-row {
-  display: flex;
-  justify-content: center;
-  margin: 4px 0;
-}
-
-.map-locate-icon-btn {
-  position: absolute;
-  right: 42px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  background: none;
-  border: none;
-  color: #1a73e8;
+  letter-spacing: 0.1px;
   cursor: pointer;
-  border-radius: 50%;
-  transition: background 0.15s;
+  transition: transform 0.12s ease, box-shadow 0.15s ease, filter 0.15s ease;
 }
 
-.map-locate-icon-btn:hover {
-  background: rgba(26, 115, 232, 0.1);
+.map-route-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+}
+
+.map-route-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.map-route-btn:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.map-route-fields {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 16px;
+}
+
+.map-route-fields::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 3px;
+  width: 2px;
+  background-image: linear-gradient(to bottom, #cbd5e1 60%, transparent 0%);
+  background-size: 2px 6px;
+  background-repeat: repeat-y;
+}
+
+.map-field {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.map-field-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin-top: 12px;
+  margin-left: -16px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px #fff;
+  z-index: 1;
+}
+
+.map-field--from .map-field-dot {
+  background: #16a34a;
+}
+
+.map-field--to .map-field-dot {
+  background: #dc2626;
+}
+
+.map-field-body {
+  flex: 1;
+  min-width: 0;
 }
 
 .map-swap-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
   padding: 0;
   color: #1a57d6;
-  background: rgba(26, 87, 214, 0.08);
-  border: 1px solid rgba(26, 87, 214, 0.2);
+  background: #fff;
+  border: 1.5px solid rgba(26, 87, 214, 0.25);
   border-radius: 50%;
+  box-shadow: 0 3px 8px rgba(26, 87, 214, 0.18);
   cursor: pointer;
-  position: relative;
-  top: 10px;
-  transition: background 0.15s, transform 0.2s;
+  /* Taken out of the from/to flex flow entirely and pinned between the two
+     *inputs* specifically (not just the midpoint of the two label+input
+     blocks) — each block's label sits above its input, so the true center
+     between the From and To search bars is a bit below the container's
+     50% mark, roughly by half a label's height. */
+  position: absolute;
+  top: calc(50% + 7px);
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  z-index: 2;
+  transition: background 0.15s, box-shadow 0.15s, transform 0.2s;
 }
 
 .map-swap-btn:hover {
-  background: rgba(26, 87, 214, 0.18);
-  transform: rotate(180deg);
+  background: rgba(26, 87, 214, 0.1);
+  box-shadow: 0 4px 12px rgba(26, 87, 214, 0.3);
+  transform: translate(-50%, -50%) rotate(180deg);
 }
 
 .map-action-row {
@@ -4194,23 +4358,27 @@ body {
 
 .map-route-btn {
   width: 100%;
-  margin-top: 8px;
-  background: #16a34a;
+  margin-top: 6px;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.32);
 }
 
 .map-route-btn--outline {
   background: transparent !important;
   color: #1a57d6;
-  border: 1.5px solid #1a57d6 !important;
+  border: 1.5px solid rgba(26, 87, 214, 0.45) !important;
+  box-shadow: none;
   margin-top: 0;
 }
 
-.map-route-btn--outline:hover {
+.map-route-btn--outline:hover:not(:disabled) {
   background: rgba(26, 87, 214, 0.08) !important;
+  border-color: #1a57d6 !important;
 }
 
 .map-route-btn--danger {
-  background: #dc2626 !important;
+  background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
 }
 
 .map-toggle-directions-btn {
@@ -4218,20 +4386,25 @@ body {
   align-items: center;
   gap: 6px;
   width: 100%;
-  margin-top: 8px;
-  padding: 7px 10px;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: #f1f5fb;
+  border: 1px solid #e6ebf3;
+  border-radius: 9px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   color: #334155;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, border-color 0.15s;
 }
 
 .map-toggle-directions-btn:hover {
-  background: #e2e8f0;
+  background: #e8eefc;
+  border-color: #c7d5ef;
+}
+
+.map-toggle-directions-btn svg:first-child {
+  color: #1a73e8;
 }
 
 .map-toggle-directions-btn .toggle-chevron {
@@ -4252,6 +4425,228 @@ body {
   font-size: 13px;
   font-weight: 800;
   line-height: 1.35;
+}
+
+/* Navigation feedback belongs in the HUD/bottom bar, not in the compact
+   route form. This prevents startup and route-status descriptions from
+   crowding the card. */
+.nav-summary {
+  display: none !important;
+}
+
+.map-clear-route-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.4) !important;
+}
+
+.map-clear-route-btn:hover {
+  background: rgba(220, 38, 38, 0.08) !important;
+  border-color: #dc2626 !important;
+}
+
+/* Fix: an author stylesheet's own `display` always beats the browser's
+   default `[hidden] { display: none }` rule — without this, these buttons'
+   `display: flex` keeps them visible even while the `hidden` attribute is
+   set (e.g. Clear Route showing up before any route has been drawn). */
+.map-clear-route-btn[hidden],
+.map-toggle-directions-btn[hidden] {
+  display: none !important;
+}
+
+/* ── Compact bottom navigation bar (replaces the full card once navigation starts) ── */
+.nav-bottom-bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 10004;
+  width: min(420px, calc(100vw - 20px));
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(17, 24, 39, 0.94);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.32);
+  backdrop-filter: blur(14px);
+  overflow: hidden;
+}
+
+.nav-bottom-bar[hidden] {
+  display: none;
+}
+
+.nav-bottom-progress {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.nav-bottom-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: #0ea5e9;
+  transition: width 0.25s ease;
+}
+
+.nav-bottom-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.nav-bottom-icon {
+  display: grid;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 8px;
+  background: #0ea5e9;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.nav-bottom-bar[data-nav-icon="left"] .nav-bottom-icon,
+.nav-bottom-bar[data-nav-icon="right"] .nav-bottom-icon {
+  background: #ef4444;
+}
+
+.nav-bottom-bar[data-nav-icon="stairs"] .nav-bottom-icon {
+  background: #7c3aed;
+}
+
+.nav-bottom-bar[data-nav-icon="arrive"] .nav-bottom-icon {
+  background: #22c55e;
+}
+
+.nav-bottom-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.nav-bottom-instruction {
+  overflow: hidden;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-bottom-context {
+  overflow: hidden;
+  margin-top: 1px;
+  color: rgba(226, 232, 240, 0.85);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-bottom-btn {
+  display: grid;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.nav-bottom-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.nav-bottom-preview {
+  display: flex;
+  align-items: center;
+  width: auto;
+  gap: 4px;
+  padding: 0 10px 0 8px;
+  border-radius: 14px;
+  color: #38bdf8;
+}
+
+.nav-bottom-preview-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.nav-bottom-preview-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.15px;
+  white-space: nowrap;
+}
+
+.nav-bottom-close {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+}
+
+.nav-bottom-close:hover {
+  background: rgba(239, 68, 68, 0.32);
+}
+
+@media (max-width: 720px) {
+  /* Lifted above the AI assistant FAB (parked bottom-right) and centered,
+     rather than squeezed left of it — clears the FAB vertically instead of
+     narrowing the bar horizontally to dodge it. */
+  .nav-bottom-bar {
+    left: 50%;
+    right: auto;
+    bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    width: min(360px, calc(100vw - 24px));
+    border-radius: 10px;
+  }
+
+  .nav-bottom-row {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  .nav-bottom-icon,
+  .nav-bottom-btn {
+    width: 26px;
+    height: 26px;
+  }
+
+  .nav-bottom-preview {
+    width: auto;
+    padding: 0 8px 0 6px;
+  }
+
+  .nav-bottom-preview-label {
+    font-size: 10px;
+  }
+
+  .nav-bottom-instruction {
+    font-size: 12px;
+  }
+
+  .nav-bottom-context {
+    font-size: 10px;
+  }
 }
 
 
@@ -4994,6 +5389,113 @@ body.floor-loading-active #toastContainer {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
+}
+
+.asset-popup-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.asset-popup-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.asset-popup-avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.asset-popup-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e2e8f0;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.asset-popup-avatar-fallback[hidden] {
+  display: none !important;
+}
+
+/* ── Photo crop modal ─────────────────────────────────────────────── */
+.photo-crop-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.55);
+  padding: 16px;
+}
+
+.photo-crop-modal[hidden] {
+  display: none !important;
+}
+
+.photo-crop-card {
+  width: min(340px, 100%);
+  border-radius: 16px;
+  background: #fff;
+  padding: 14px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.photo-crop-hint {
+  margin: 0 0 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.photo-crop-viewport {
+  width: 220px;
+  height: 220px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  border: 2px solid #e2e8f0;
+  background-color: #f1f5f9;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center 20%;
+}
+
+.photo-crop-range {
+  display: block;
+  width: 100%;
+  margin: 0 0 14px;
+}
+
+.photo-crop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.asset-popup-avatar-edit-btn {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #1a57d6;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
 }
 
 #panelCloseBtn,
@@ -6148,7 +6650,13 @@ body.camera-view-active .nearby-nav-btn {
 .notification-center-header h3 { margin: 0; font: 800 19px/1.2 system-ui, sans-serif; letter-spacing: -.02em; }
 .notification-center-header button { padding: 7px 10px; border: 1px solid rgba(255,255,255,.2); border-radius: 9px; background: rgba(255,255,255,.1); color: #e0e7ff; font: 700 10px/1 system-ui, sans-serif; cursor: pointer; transition: background .15s; }
 .notification-center-header button:hover { background: rgba(255,255,255,.2); color: #fff; }
+.notification-center-header-actions { display: flex; align-items: center; gap: 6px; }
+.notification-center-back { padding: 0 !important; margin-bottom: 3px; border: none !important; background: none !important; color: #a5b4fc !important; font: 800 9px/1.2 system-ui, sans-serif !important; text-transform: uppercase; letter-spacing: .1em; display: block; }
+.notification-center-back:hover { color: #fff !important; background: none !important; }
 .notification-center-status { margin: 12px; padding: 28px 18px; border: 1px dashed #cbd5e1; border-radius: 14px; background: #f8fafc; color: #64748b; text-align: center; font: 600 12px/1.65 system-ui, sans-serif; }
+.notification-center-status p { margin: 0; }
+.notification-center-status-retry { display: inline-block; margin-top: 12px; padding: 7px 18px; border: none; border-radius: 8px; background: #4f46e5; color: #fff; font: 700 11px/1 system-ui, sans-serif; cursor: pointer; transition: background .15s; }
+.notification-center-status-retry:hover { background: #4338ca; }
 .notification-center-list { max-height: min(510px, calc(100vh - 180px)); overflow-y: auto; padding: 8px; }
 .notification-center-item { position: relative; width: 100%; display: flex; align-items: flex-start; gap: 12px; padding: 12px; border: 0; border-radius: 14px; background: transparent; color: inherit; text-align: left; cursor: pointer; transition: background .15s, transform .15s; }
 .notification-center-item:hover { background: #f1f5f9; transform: translateX(2px); }
@@ -6466,17 +6974,23 @@ body.camera-view-active .nearby-nav-btn {
   }
 
   .left-sidebar {
-    width: 90vw;
-    max-width: 300px;
+    width: 68vw;
+    max-width: 240px;
   }
 
   .common-panel {
-    padding: 10px 12px;
+    padding: 9px 10px;
+  }
+
+  .common-panel h3 {
+    font-size: 12.5px;
+    margin: 0 0 8px 0;
   }
 
   .btn {
-    font-size: 12px;
-    padding: 7px 10px;
+    font-size: 11px;
+    padding: 6px 8px;
+    margin-bottom: 6px;
   }
 
   .nav-container {
@@ -7789,7 +8303,8 @@ body.camera-view-active .nearby-nav-btn {
 .asset-popup-image {
   width: 100%;
   height: 140px;
-  object-fit: cover;
+  object-fit: contain;
+  background: #f1f5f9;
   border-radius: 10px;
   margin-bottom: 10px;
 }
@@ -7855,6 +8370,60 @@ body.camera-view-active .nearby-nav-btn {
   font-size: 12px;
   text-transform: capitalize;
 }
+.asset-detail-editable-cell input,
+.asset-detail-editable-cell select {
+  width: 100%;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid rgba(26, 87, 214, .35);
+  border-radius: 6px;
+  color: #1a202c;
+  font: inherit;
+  font-size: 12px;
+  background: #fff;
+}
+.asset-detail-editable-cell input:focus,
+.asset-detail-editable-cell select:focus {
+  outline: none;
+  border-color: #1a57d6;
+}
+
+.asset-detail-employee-edit-row {
+  display: flex;
+  gap: 6px;
+  margin: -6px 0 12px;
+}
+.asset-detail-employee-edit-row[hidden] { display: none; }
+.asset-detail-employee-input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 9px;
+  border: 1.5px solid rgba(26, 87, 214, 0.35);
+  border-radius: 8px;
+  font-size: 12px;
+  color: #1a202c;
+  background: #fff;
+}
+.asset-detail-employee-input:focus {
+  outline: none;
+  border-color: #1a57d6;
+}
+.asset-edit-mini-btn {
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  background: #16a34a;
+  color: #fff;
+}
+.asset-edit-mini-btn.asset-edit-cancel-btn {
+  background: #eef2f7;
+  color: #334155;
+}
 
 .asset-popup-unregistered {
   font-size: 12px;
@@ -7879,28 +8448,130 @@ body.camera-view-active .nearby-nav-btn {
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 1300;
-  width: 320px !important;
+  width: 340px !important;
   max-height: 85vh;
   overflow-y: auto;
 }
 
+.complaint-form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -2px -2px 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eef1f6;
+}
+
+.complaint-form-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.complaint-form-icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #fff;
+  box-shadow: 0 3px 8px rgba(220, 38, 38, 0.35);
+}
+
+.complaint-field {
+  margin-bottom: 10px;
+}
+
 .complaint-form-popup label {
   display: block;
-  font-size: 12px;
+  margin: 0 0 4px;
+  color: #94a3b8;
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.complaint-optional {
+  color: #cbd5e1;
   font-weight: 600;
-  color: #555;
-  margin: 8px 0 4px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.complaint-form-popup input[type="text"],
+.complaint-form-popup textarea,
+.complaint-priority-select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1.5px solid #e2e6ee;
+  background: #f8fafc;
+  color: #111827;
+  font-family: inherit;
+  font-size: 13px;
+  box-sizing: border-box;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.complaint-form-popup input[type="text"]:focus,
+.complaint-form-popup textarea:focus,
+.complaint-priority-select:focus {
+  outline: none;
+  border-color: #1a73e8;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.14);
 }
 
 .complaint-form-popup textarea {
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  font-family: inherit;
-  font-size: 13px;
+  min-height: 64px;
   resize: vertical;
-  box-sizing: border-box;
+}
+
+.complaint-file-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1.5px solid #e2e6ee;
+  background: #fff;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.complaint-file-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.complaint-file-input {
+  display: none;
+}
+
+.complaint-file-count {
+  margin-left: 8px;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.complaint-signin-prompt {
+  padding: 6px 0 4px;
+  text-align: center;
+}
+
+.complaint-signin-prompt p {
+  margin: 0 0 10px;
+  color: #475569;
+  font-size: 13px;
 }
 
 .complaint-form-error {
@@ -7956,3 +8627,32 @@ body.kiosk-mode .cesium-baseLayerPicker-dropDown {
 /* Map Route / turn-by-turn navigation stays enabled in kiosk mode — it's the
    one interactive feature meant to survive the QR deep link. */
 
+
+/* ── Shared floating-clear button dock (solar heatmap + nearby amenities) ── */
+.floating-clear-dock {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  z-index: 950;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.floating-clear-dock > * {
+  position: static !important;
+  left: auto !important;
+  bottom: auto !important;
+  width: auto !important;
+  margin: 0 !important;
+  pointer-events: auto;
+}
+@media (max-width: 540px) {
+  .floating-clear-dock {
+    bottom: 78px;
+    max-width: calc(100vw - 20px);
+    gap: 6px;
+    overflow-x: auto;
+  }
+}

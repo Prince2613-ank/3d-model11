@@ -233,6 +233,32 @@
   .sw-report-grid { grid-template-columns: 1fr; }
 }
 
+/* ── Floating "clear solar view" button (shown when the panel is closed but a solar heatmap is still rendered) ── */
+.sw-floating-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  margin: 0;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(194, 65, 12, .3);
+  background: linear-gradient(135deg, #ffd45a, #ff7a3d);
+  color: #3d1c0a;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(148, 73, 22, .28);
+}
+.sw-floating-clear-btn svg { width: 12px; height: 12px; flex-shrink: 0; }
+.sw-floating-clear-btn:hover { box-shadow: 0 10px 24px rgba(148, 73, 22, .38); }
+.sw-floating-clear-btn:active { transform: scale(.96); }
+
+@media (max-width: 400px) {
+  .sw-floating-clear-btn { padding: 6px 10px; font-size: 10px; gap: 5px; }
+}
+
 /* Warm solar workspace theme */
 .sw-workspace {
   background:

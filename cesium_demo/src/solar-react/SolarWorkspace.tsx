@@ -12,6 +12,7 @@ import { ReportsTab } from "./ReportsTab";
 import { SolarBuildingEstimate } from "../solar/solarService";
 import "./solarWorkspace.css";
 import { enterSolarMapMode, exitSolarMapMode } from "../floors";
+import { getFloatingClearDock } from "../ui/floatingDock";
 
 type TabKey = "dashboard" | "building" | "community" | "reports";
 
@@ -137,6 +138,27 @@ export function SolarWorkspace() {
   return (
     <>
       {portalTarget ? createPortal(navButton, portalTarget) : navButton}
+
+      {createPortal(
+        <AnimatePresence>
+          {!open && estimate && (
+            <motion.button
+              key="sw-floating-clear"
+              className="sw-floating-clear-btn"
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.85, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 320, damping: 30 }}
+              onClick={handleClear}
+              title="Clear solar heatmap from the map"
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+              Clear solar
+            </motion.button>
+          )}
+        </AnimatePresence>,
+        getFloatingClearDock(),
+      )}
 
       <AnimatePresence>
         {open && (
