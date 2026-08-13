@@ -14,6 +14,15 @@ export type AssistantCallbacks = {
   bounceSeat: (personName: string, floor: number) => void | Promise<void>;
   triggerOutdoorNav: (origin: string, destination: string) => void;
   startPreviewRoute?: () => void;
+  raiseComplaintForRoom: (roomName: string, floor: 3 | 4, issueDescription?: string) => void;
+  raiseComplaintForPerson: (personName: string, floor: 3 | 4, issueDescription?: string) => void | Promise<void>;
+  showMyComplaints: () => void;
+  bookRoom: (roomName: string, date: string, startTime: string, endTime: string) => Promise<string>;
+  cancelMyBooking: (roomName: string) => Promise<string>;
+  clearRoute: () => void;
+  signIn: () => Promise<void>;
+  signOutUser: () => Promise<void>;
+  openNotifications: () => void;
   getRoomNames: () => string[];
   getPersonNames: () => string[];
 };
@@ -318,7 +327,94 @@ const TOOLS = [
     type: "function",
     function: {
       name: "clear_markers",
-      description: "Clear all markers and stop blinking on the map",
+      description: "Clear all highlight markers/pins and stop seat blinking on the map. NOT for clearing a navigation route — use clear_route for that.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "clear_route",
+      description: "Clear the currently drawn navigation route from the map and reset the Map Route panel. Use for 'clear the route', 'remove the route', 'cancel navigation', 'start over with directions'.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "sign_in",
+      description: "Sign the user in with Google. Use for 'sign in', 'log in', 'connect my account'.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "sign_out",
+      description: "Sign the user out. Use for 'sign out', 'log out', 'log me out'.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "open_notifications",
+      description: "Open the notifications panel showing the signed-in user's recent notifications. Use for 'open notifications', 'show my notifications', 'any updates for me'.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "book_room",
+      description: "Book a meeting room for a specific date and time range. ALWAYS require an explicit start AND end time in THIS message — if the user hasn't given a time, ask them for one instead of guessing. Bookable rooms: Dojo, Eureka, Manthan, Meeting Room, Conference Room.",
+      parameters: {
+        type: "object",
+        properties: {
+          room_name: { type: "string", description: "Room to book" },
+          date: { type: "string", description: "Date as 'today', 'tomorrow', or YYYY-MM-DD. Resolve relative dates using the current date given in your system instructions." },
+          start_time: { type: "string", description: "Start time in 24-hour HH:MM format, e.g. '15:00' for 3pm" },
+          end_time: { type: "string", description: "End time in 24-hour HH:MM format" },
+        },
+        required: ["room_name", "date", "start_time", "end_time"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "cancel_booking",
+      description: "Cancel the signed-in user's own upcoming booking for a room. Use for 'cancel my booking', 'cancel X', 'free up X', 'release my reservation'.",
+      parameters: {
+        type: "object",
+        properties: {
+          room_name: { type: "string", description: "Room whose booking should be cancelled" },
+        },
+        required: ["room_name"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "raise_complaint",
+      description: "Open the complaint form pre-filled for a room or a person's chair/seat. Use when the user wants to report a problem, file/raise a complaint, or says something is broken, not working, dirty, or damaged, and names a room or a person.",
+      parameters: {
+        type: "object",
+        properties: {
+          target_name: { type: "string", description: "Room name or person's name whose seat/chair has the issue" },
+          target_kind: { type: "string", enum: ["room", "person"], description: "Whether target_name refers to a room or a person's seat" },
+          issue_description: { type: "string", description: "Short description of the problem, if the user gave one, e.g. 'AC not cooling' or 'projector screen broken'" },
+        },
+        required: ["target_name", "target_kind"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "show_my_complaints",
+      description: "Open the My Complaints panel, showing the signed-in user's previously raised complaints and their current status. Use for 'my complaints', 'status of my complaint', 'show my reports'.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -345,6 +441,7 @@ ${BUILDING_KNOWLEDGE}
 
 Navigation rooms available: ${rooms.join(", ")}
 Registered people: ${people.join(", ")}
+Current date/time: ${new Date().toLocaleString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })} — use this to resolve "today"/"tomorrow"/relative dates for bookings. When calling book_room, output the date as YYYY-MM-DD.
 
 ━━━ SCOPE RULE (HIGHEST PRIORITY) ━━━
 If the user's question is NOT about this building (rooms, floors, seats, people, navigation, meetings, facilities), respond ONLY with:
@@ -389,6 +486,29 @@ AVAILABILITY (ALWAYS use check_room_availability — NEVER reply with text about
   "is X free", "is X available", "is X occupied", "can I use X now", "who booked X", "when is X free"
   → check_room_availability (this tool has LIVE calendar access and returns the real current status)
 
+BOOKING (use book_room):
+  "book X tomorrow 3-4pm", "reserve X for 2-3pm today", "schedule X at 10am for an hour"
+  → book_room. Requires an explicit start AND end time in THIS message — if no time is given,
+  ask a short clarifying question instead of guessing one.
+
+CANCEL BOOKING (use cancel_booking):
+  "cancel my booking for X", "cancel X", "free up X", "release my reservation"
+  → cancel_booking
+
+COMPLAINTS (use raise_complaint):
+  "report an issue with X", "raise a complaint about X", "X is broken/not working/dirty/damaged", "file a complaint for X"
+  → raise_complaint. target_kind="room" for rooms/facilities, target_kind="person" for a person's chair/seat.
+
+MY COMPLAINTS (use show_my_complaints):
+  "my complaints", "status of my complaint", "show my reports", "what did I report"
+  → show_my_complaints
+
+APP CONTROLS:
+  "clear the route", "remove the route", "start over with directions" → clear_route (NOT clear_markers)
+  "sign in", "log in", "connect my account" → sign_in
+  "sign out", "log out", "log me out" → sign_out
+  "open notifications", "show my notifications", "any updates for me" → open_notifications
+
 OUTDOOR → INDOOR (use outdoor_to_indoor_navigation):
   Any starting point outside the building (metro, landmark, address)
   → outdoor_to_indoor_navigation
@@ -422,7 +542,7 @@ const BUILDING_OFF_TOPIC_REPLY =
 
 // ── Client-side floor shortcuts (bypass LLM scope filter) ─────────
 const FLOOR_SHORTCUTS: { pattern: RegExp; floor: number; label: string }[] = [
-  { pattern: /\b(all floors?|full build|whole build|show all|all floor|all level|every floor|every level|outdoor view|outside view)\b/i, floor: 0, label: "All Floors (full building / outdoor view)" },
+  { pattern: /\b(all floors?|full build|whole build|show all|all floor|all level|every floor|every level|outdoor view|outside view|go home|home view|reset view|reset the view|zoom out)\b/i, floor: 0, label: "All Floors (full building / outdoor view)" },
   { pattern: /\b(2nd floor|second floor|floor 2|dojo|manthan|eureka)\b/i, floor: 3, label: "2nd Floor" },
   { pattern: /\b(3rd floor|third floor|floor 3|conference|library|lounge)\b/i, floor: 4, label: "3rd Floor" },
 ];
@@ -613,9 +733,59 @@ export async function handleAssistantQuery(userText: string): Promise<string> {
         callbacks!.triggerOutdoorNav(args.origin as string, "FloData Analytics, 28 Shivaji Marg, Delhi");
         result = `Opening map directions from "${args.origin}" to FloData Analytics building. Follow the route to reach the building, then switch to indoor navigation.`;
 
+      } else if (name === "book_room") {
+        result = await callbacks!.bookRoom(args.room_name, args.date, args.start_time, args.end_time);
+
+      } else if (name === "cancel_booking") {
+        result = await callbacks!.cancelMyBooking(args.room_name);
+
+      } else if (name === "raise_complaint") {
+        const key = String(args.target_name).toLowerCase().trim();
+        if (args.target_kind === "room") {
+          const match = Object.entries(ROOM_COORDS).find(([k]) =>
+            k.toLowerCase().includes(key) || key.includes(k.toLowerCase())
+          );
+          if (match) {
+            const [roomKey, coord] = match;
+            callbacks!.raiseComplaintForRoom(roomKey, coord.floor as 3 | 4, args.issue_description);
+            result = `Opening a complaint form for ${roomKey}.`;
+          } else {
+            result = `Could not find room "${args.target_name}" in the building.`;
+          }
+        } else {
+          const match = Object.entries(PERSON_DESKS).find(([k]) => k.includes(key) || key.includes(k));
+          if (match) {
+            const [personKey, desk] = match;
+            await callbacks!.raiseComplaintForPerson(personKey, desk.floor as 3 | 4, args.issue_description);
+            result = `Opening a complaint form for ${args.target_name}'s seat.`;
+          } else {
+            result = `Could not find "${args.target_name}" in the seating directory.`;
+          }
+        }
+
+      } else if (name === "show_my_complaints") {
+        callbacks!.showMyComplaints();
+        result = "Opening your complaints.";
+
       } else if (name === "clear_markers") {
         callbacks!.clearMarkers();
         result = "Cleared all markers from the map.";
+
+      } else if (name === "clear_route") {
+        callbacks!.clearRoute();
+        result = "Route cleared.";
+
+      } else if (name === "sign_in") {
+        await callbacks!.signIn();
+        result = "Signing you in with Google.";
+
+      } else if (name === "sign_out") {
+        await callbacks!.signOutUser();
+        result = "You've been signed out.";
+
+      } else if (name === "open_notifications") {
+        callbacks!.openNotifications();
+        result = "Opening your notifications.";
 
       } else if (name === "start_preview_route") {
         if (callbacks!.startPreviewRoute) {

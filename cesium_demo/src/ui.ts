@@ -23,6 +23,7 @@ import { floorPropertyToLabel, getRoomInventory } from "./roomInventory";
 import { getLiveRoom } from "./rooms";
 import { openComplaintForm } from "./complaintForm";
 import { FLOOR_CAMERAS } from "./config";
+import { isPreviewActive, togglePreviewPause } from "./navigation";
 import {
   clearCctvViewshed,
   showBlindSpots,
@@ -67,6 +68,7 @@ type SceneCallbacks = {
 };
 
 let lastHoveredChair: ChairModel | null = null;
+let activeNavSummary: NavigationSummary | null = null;
 
 function optionalElement<T extends HTMLElement>(id: string): T | null {
   return document.getElementById(id) as T | null;
@@ -476,6 +478,26 @@ function setMapRouteSummary(distanceMeters: number, destinationLabel: string, ha
   summary.textContent = hasIndoorLeg
     ? `Total route: ${formatDistance(distanceMeters)} | Arrival: ${destinationLabel}`
     : `Distance: ${formatDistance(distanceMeters)} | Destination: ${destinationLabel}`;
+
+  const clearBtn = optionalElement<HTMLButtonElement>("clearMapRouteBtn");
+  if (clearBtn) clearBtn.hidden = false;
+}
+
+function clearDrawnMapRoute(): void {
+  clearMapRoute();
+  pendingWorldRouteNavigation = null;
+
+  const summary = optionalElement<HTMLElement>("mapRouteSummary");
+  if (summary) { summary.hidden = true; summary.textContent = ""; }
+
+  const clearBtn = optionalElement<HTMLButtonElement>("clearMapRouteBtn");
+  if (clearBtn) clearBtn.hidden = true;
+
+  const indoorNavBtn = optionalElement<HTMLButtonElement>("worldRouteIndoorNavBtn");
+  if (indoorNavBtn) indoorNavBtn.hidden = true;
+
+  setRoutePreviewAvailable(false);
+
 }
 
 async function loadOutdoorNavigationGraph(): Promise<OutdoorNavigationNode[]> {
@@ -980,6 +1002,25 @@ function createMapToolbarButton(): HTMLButtonElement {
   return button;
 }
 
+function createHomeToolbarButton(): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.id = "homeToolbarBtn";
+  button.className = "cesium-toolbar-button home-toolbar-btn";
+  button.type = "button";
+  button.title = "Home view (all floors)";
+  button.setAttribute("aria-label", "Home view (all floors)");
+  button.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M4 11.5 12 4l8 7.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M6 10v9a1 1 0 0 0 1 1h3v-5h4v5h3a1 1 0 0 0 1-1v-9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  `;
+  button.addEventListener("click", () => {
+    document.querySelector<HTMLButtonElement>('[data-floor="0"]')?.click();
+  });
+  return button;
+}
+
 function createCameraToolbarButton(): HTMLButtonElement {
   const button = document.createElement("button");
   button.id = "cameraControlsToolbarBtn";
@@ -1136,6 +1177,16 @@ function moveNearbyBtnIntoToolbar(toolbar: HTMLElement): void {
 function closeAllToolbarPanels(): void {
   const mapPanel = document.getElementById("mapDirectionsPanel");
   if (mapPanel) mapPanel.hidden = true;
+  syncMapToolbarButtonActive();
+}
+
+function syncMapToolbarButtonActive(): void {
+  const toolbarBtn = optionalElement<HTMLButtonElement>("googleMapRouteBtn");
+  if (!toolbarBtn) return;
+  const panel = optionalElement<HTMLElement>("mapDirectionsPanel");
+  const bar = optionalElement<HTMLElement>("navBottomBar");
+  const active = (panel && !panel.hidden) || (bar && !bar.hidden);
+  toolbarBtn.classList.toggle("active", Boolean(active));
 }
 
 export function installMapDirectionsControl(): void {
@@ -1153,11 +1204,16 @@ export function installMapDirectionsControl(): void {
   const button = createMapToolbarButton();
   toolbar.prepend(button);
 
+  const homeButton = createHomeToolbarButton();
+  toolbar.insertBefore(homeButton, button);
+
+  optionalElement<HTMLButtonElement>("clearMapRouteBtn")?.addEventListener("click", () => {
+    clearDrawnMapRoute();
+  });
 
   const originInput = element<HTMLInputElement>("mapOriginInput");
   const destinationInput = element<HTMLInputElement>("mapDestinationInput");
   const closeButton = element<HTMLButtonElement>("mapDirectionsCloseBtn");
-  const currentLocationButton = element<HTMLButtonElement>("useCurrentLocationBtn");
   const routeButton = element<HTMLButtonElement>("showGoogleRouteBtn");
 
   button.addEventListener("click", () => {
@@ -1167,10 +1223,12 @@ export function installMapDirectionsControl(): void {
       panel.hidden = false;
       destinationInput.focus();
     }
+    syncMapToolbarButtonActive();
   });
 
   closeButton.addEventListener("click", () => {
     panel.hidden = true;
+    syncMapToolbarButtonActive();
   });
 
   const navBtn = optionalElement<HTMLButtonElement>("startNavBtn");
@@ -1210,31 +1268,6 @@ export function installMapDirectionsControl(): void {
     // Sync the hidden fromRoom/toRoom selects so startNavigation() uses the swapped values
     syncRoomSelectsFromInputs(toVal, fromVal);
     updateActionButtons();
-  });
-
-  currentLocationButton.addEventListener("click", () => {
-    if (!navigator.geolocation) {
-      showToast("Current location is not available in this browser.", "error");
-      return;
-    }
-
-    currentLocationButton.disabled = true;
-    currentLocationButton.textContent = "Locating";
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        originInput.value = `${position.coords.latitude.toFixed(7)},${position.coords.longitude.toFixed(7)}`;
-        currentLocationButton.disabled = false;
-        currentLocationButton.textContent = "Locate";
-        syncIndoorRouteFromMap(destinationInput.value);
-        showToast("Current location selected.", "success");
-      },
-      () => {
-        currentLocationButton.disabled = false;
-        currentLocationButton.textContent = "Locate";
-        showToast("Allow location permission to use current location.", "error");
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
-    );
   });
 
   const indoorNavBtn = optionalElement<HTMLButtonElement>("worldRouteIndoorNavBtn");
@@ -2017,6 +2050,51 @@ export function bindUiControls(callbacks: UiCallbacks): void {
     callbacks.exitNavigation();
   });
 
+  optionalElement<HTMLButtonElement>("navBottomCloseBtn")?.addEventListener("click", () => {
+    callbacks.exitNavigation();
+  });
+
+  optionalElement<HTMLButtonElement>("navBottomPreviewBtn")?.addEventListener("click", () => {
+    if (isPreviewActive()) {
+      const paused = togglePreviewPause();
+      setNavBottomPreviewIcon(!paused);
+    } else {
+      const btn = optionalElement<HTMLButtonElement>("navBottomPreviewBtn");
+      optionalElement<HTMLButtonElement>("flyPreviewBtn")?.click();
+      // flyPreviewBtn's own handler awaits startNavigation() first — which
+      // redraws the route and, as a side effect, resets this button's icon
+      // back to "Preview" via showNavBottomBar() — before flyRoutePreview()
+      // actually starts the animation. Setting the icon to "playing" right
+      // here would just get clobbered by that reset a tick later, which is
+      // why the first click used to leave the button stuck showing
+      // "Preview" while the camera was already moving. Poll briefly until
+      // the preview is genuinely running before flipping the icon.
+      if (btn) btn.disabled = true;
+      let attempts = 0;
+      const waitForPreview = window.setInterval(() => {
+        attempts += 1;
+        if (isPreviewActive()) {
+          window.clearInterval(waitForPreview);
+          if (btn) btn.disabled = false;
+          setNavBottomPreviewIcon(true);
+        } else if (attempts > 40) { // ~10s safety cutoff
+          window.clearInterval(waitForPreview);
+          if (btn) btn.disabled = false;
+        }
+      }, 250);
+    }
+  });
+
+  // The preview can also finish on its own (reaching the destination) without
+  // ever going through the pause toggle — poll to flip the icon back to
+  // "play" once that happens, so it doesn't get stuck showing "pause".
+  window.setInterval(() => {
+    const btn = optionalElement<HTMLButtonElement>("navBottomPreviewBtn");
+    if (btn && btn.dataset.state === "playing" && !isPreviewActive()) {
+      setNavBottomPreviewIcon(false);
+    }
+  }, 500);
+
   optionalElement<HTMLButtonElement>("swapRoomsBtn")?.addEventListener("click", () => {
     const fromRoom = element<HTMLSelectElement>("fromRoom");
     const toRoom = element<HTMLSelectElement>("toRoom");
@@ -2138,6 +2216,7 @@ function bindMapAutocomplete(
         <span>Example: ${escapeMapOption(displayRouteOption(personExample))}</span>
       </li>
     `;
+    positionDropdown();
     dropdown.hidden = false;
   }
 
@@ -2156,6 +2235,7 @@ function bindMapAutocomplete(
       html += addresses.map((name) => `<li role="option" tabindex="-1">${escapeMapOption(name)}</li>`).join("");
     }
     dropdown.innerHTML = html;
+    positionDropdown();
     dropdown.hidden = false;
   }
 
@@ -2172,6 +2252,17 @@ function bindMapAutocomplete(
       ${items.map(renderMapOption).join("")}
     `;
     dropdown.hidden = false;
+  }
+
+  function positionDropdown(): void {
+    // The dropdown is `position: fixed` (see .map-autocomplete-dropdown in
+    // styles.css) so it escapes the scrollable .map-directions-panel
+    // entirely — anchor it to the input's live viewport rect every time it
+    // opens instead of relying on CSS offset-parent positioning.
+    const rect = input.getBoundingClientRect();
+    dropdown.style.top = `${rect.bottom + 4}px`;
+    dropdown.style.left = `${rect.left}px`;
+    dropdown.style.width = `${rect.width}px`;
   }
 
   function closeDropdown(): void {
@@ -2327,6 +2418,7 @@ function navStepIconType(icon: string): string {
 }
 
 export function updateNavigationUI(summary: NavigationSummary): void {
+  activeNavSummary = summary;
   setText("fromNameDisplay", summary.fromName);
   setText("toNameDisplay", summary.toName);
 
@@ -2370,18 +2462,86 @@ export function updateNavigationUI(summary: NavigationSummary): void {
       toggleBtn.classList.toggle("open", open);
     };
   }
+
+  showNavBottomBar();
+  renderNavBottomBar(0);
 }
 
 export function highlightNavStep(index: number): void {
   const stepsEl = optionalElement<HTMLElement>("navSteps");
-  if (!stepsEl) return;
-  stepsEl.querySelectorAll<HTMLElement>(".nav-step").forEach((el, i) => {
-    const isActive = i === index;
-    el.classList.toggle("active", isActive);
-    if (isActive) {
-      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-  });
+  if (stepsEl) {
+    stepsEl.querySelectorAll<HTMLElement>(".nav-step").forEach((el, i) => {
+      const isActive = i === index;
+      el.classList.toggle("active", isActive);
+      if (isActive) {
+        el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    });
+  }
+  renderNavBottomBar(index);
+}
+
+// ── Compact bottom navigation bar ────────────────────────────────
+function setNavBottomPreviewIcon(playing: boolean): void {
+  const btn = optionalElement<HTMLButtonElement>("navBottomPreviewBtn");
+  const icon = optionalElement<HTMLElement>("navBottomPreviewIcon");
+  const label = optionalElement<HTMLElement>("navBottomPreviewLabel");
+  if (!btn) return;
+  btn.dataset.state = playing ? "playing" : "paused";
+  btn.title = playing ? "Pause preview" : "Preview route";
+  btn.setAttribute("aria-label", btn.title);
+  if (icon) {
+    icon.innerHTML = playing
+      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>`
+      : `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
+  }
+  if (label) label.textContent = playing ? "Pause" : "Preview";
+}
+
+export function showNavBottomBar(): void {
+  const panel = optionalElement<HTMLElement>("mapDirectionsPanel");
+  if (panel) panel.hidden = true;
+  const bar = optionalElement<HTMLElement>("navBottomBar");
+  if (bar) bar.hidden = false;
+  setNavBottomPreviewIcon(false);
+  syncMapToolbarButtonActive();
+}
+
+export function hideNavBottomBar(): void {
+  activeNavSummary = null;
+  const bar = optionalElement<HTMLElement>("navBottomBar");
+  // Only reopen the Map Route card if the bottom bar was actually the thing
+  // showing (i.e. navigation was active) — this also runs from the app's
+  // resting-state message on every boot, which must not force the card open.
+  const wasActive = bar ? !bar.hidden : false;
+  if (bar) bar.hidden = true;
+  if (wasActive) {
+    const panel = optionalElement<HTMLElement>("mapDirectionsPanel");
+    if (panel) panel.hidden = false;
+  }
+  syncMapToolbarButtonActive();
+}
+
+function renderNavBottomBar(index: number): void {
+  const bar = optionalElement<HTMLElement>("navBottomBar");
+  const summary = activeNavSummary;
+  if (!bar || !summary || summary.list.length === 0) return;
+
+  const clampedIndex = Math.max(0, Math.min(index, summary.list.length - 1));
+  const step = summary.list[clampedIndex];
+  bar.dataset.navIcon = navStepIconType(step.icon);
+
+  setText("navBottomIcon", step.icon);
+  setText("navBottomInstruction", step.title);
+  const fromShort = summary.fromName.length > 18 ? `${summary.fromName.slice(0, 18)}…` : summary.fromName;
+  const toShort = summary.toName.length > 18 ? `${summary.toName.slice(0, 18)}…` : summary.toName;
+  setText("navBottomContext", step.primary ?? step.text ?? `${fromShort} → ${toShort}`);
+
+  const fill = optionalElement<HTMLElement>("navBottomProgressFill");
+  if (fill) {
+    const progress = ((clampedIndex + 1) / summary.list.length) * 100;
+    fill.style.width = `${progress}%`;
+  }
 }
 
 export function setNavigationMessage(message: string, clearSteps = true): void {
@@ -2392,6 +2552,7 @@ export function setNavigationMessage(message: string, clearSteps = true): void {
     if (stepsEl) { stepsEl.innerHTML = ""; stepsEl.hidden = true; }
     const toggleBtn = optionalElement<HTMLButtonElement>("toggleDirectionsBtn");
     if (toggleBtn) toggleBtn.hidden = true;
+    hideNavBottomBar();
   }
 }
 
@@ -2440,7 +2601,7 @@ function showChairPopup(chair: ChairModel, selectedFloor: number): void {
   const rawName = chair.chairDisplayName || chair.chairName || "Unknown";
   const isUnknown = rawName.toLowerCase().startsWith("unknown");
   setText("chairUser", rawName);
-  setText("chairId", `CHAIR-${chair.chairIndex ?? "?"}`);
+  setText("chairId", chair.chairSeatId ?? `CHAIR-${chair.chairIndex ?? "?"}`);
   setText(
     "chairFloor",
     selectedFloor === 4 ? "3rd Floor" : selectedFloor === 3 ? "2nd Floor" : "Unknown"

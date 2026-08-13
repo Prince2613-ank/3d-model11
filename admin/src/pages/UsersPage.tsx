@@ -40,7 +40,7 @@ export function UsersPage() {
       }
       setQrLink({
         title: `Seat QR — ${p.display_name || p.email}`,
-        value: buildAssetKioskLink(asset.object_key, floor.floor_number)
+        value: buildAssetKioskLink(asset.seat_id, floor.floor_number)
       });
     } finally {
       setQrLoadingId(null);
@@ -160,7 +160,7 @@ export function UsersPage() {
           title={`Message ${messageTarget.display_name || messageTarget.email}`}
           footer={<><Button variant="secondary" onClick={() => setMessageTarget(null)}>Cancel</Button><Button disabled={!message.trim() || messageMutation.isPending} onClick={() => messageMutation.mutate()}>{messageMutation.isPending ? "Sending…" : "Send message"}</Button></>}
         >
-          <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-3 text-xs text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-200">This message will appear in the employee notification panel and as a live toast.</div>
+          <div className="rounded-xl border border-brand-100 bg-brand-50/70 p-3 text-xs text-brand-700 dark:border-brand-500/20 dark:bg-brand-500/10 dark:text-brand-200">This message will appear in the employee notification panel and as a live toast.</div>
           <div><Label>Subject</Label><Input value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={120} placeholder="Message from administration" /></div>
           <div><Label>Message</Label><Textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={5} maxLength={2000} placeholder="Write your message…" /></div>
           {messageMutation.isError && <p className="text-sm text-rose-500">{(messageMutation.error as Error).message}</p>}

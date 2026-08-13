@@ -155,6 +155,7 @@ let routeFlowMatB: Cesium.Material | null = null;
 let routePathPointsA: Cesium.Cartesian3[] = [];
 let routePathPointsB: Cesium.Cartesian3[] = [];
 let previewAnimRemove: (() => void) | null = null;
+let previewPaused = false;
 let arrivalHudHideTimer: number | null = null;
 let liveNavSteps: Array<{ startDist: number }> = [];
 let liveNavFloorSwitchDistance: number | null = null;
@@ -388,7 +389,6 @@ export function exitNavigation(): void {
   activeDestinationPerson = null;
   setNavigationAllowedFloors(null);
   enableCameraControls();
-  setNavigationMessage("Choose rooms to start navigation.");
   viewer.scene.requestRender();
 }
 
@@ -473,6 +473,7 @@ function bounceDestinationChairIfSeat(): boolean {
 export function flyRoutePreview(): void {
   if (liveNavPath.length < 2) return;
   if (previewAnimRemove) { previewAnimRemove(); previewAnimRemove = null; }
+  previewPaused = false;
 
   disableCameraControls();
   if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
@@ -556,6 +557,10 @@ export function flyRoutePreview(): void {
 
   const onRender = () => {
     const now = performance.now();
+    if (previewPaused) {
+      lastTime = now; // keep dt sane for whenever playback resumes
+      return;
+    }
     const dt = Math.min((now - lastTime) / 1000, 0.1);
     lastTime = now;
     currentS += SPEED_MPS * dt;
@@ -609,6 +614,21 @@ export function flyRoutePreview(): void {
     viewer.scene.postRender.removeEventListener(onRender);
     enableCameraControls();
   };
+}
+
+export function isPreviewActive(): boolean {
+  return previewAnimRemove !== null;
+}
+
+export function isPreviewPaused(): boolean {
+  return previewPaused;
+}
+
+/** Toggles play/pause on the currently running route preview. Returns the new paused state. */
+export function togglePreviewPause(): boolean {
+  if (!previewAnimRemove) return false;
+  previewPaused = !previewPaused;
+  return previewPaused;
 }
 
 export function updateNavigationVisibility(activeFloor: number): void {

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireAdmin } from "../middleware/auth";
+import { requireAdmin, requireAuth } from "../middleware/auth";
 import { asyncHandler } from "../middleware/asyncHandler";
 import { assetController } from "../controllers/assetController";
 
@@ -12,6 +12,8 @@ router.get("/:id/history", requireAdmin, asyncHandler(assetController.history));
 router.get("/:id", asyncHandler(assetController.getById));
 router.post("/", requireAdmin, asyncHandler(assetController.create));
 router.patch("/:id", requireAdmin, asyncHandler(assetController.update));
+router.patch("/:id/assigned-name", requireAuth, asyncHandler(assetController.updateAssignedName));
+router.patch("/:id/user-details", requireAuth, asyncHandler(assetController.updateUserDetails));
 router.patch("/:id/move", requireAdmin, asyncHandler(assetController.move));
 router.delete("/:id", requireAdmin, asyncHandler(assetController.remove));
 

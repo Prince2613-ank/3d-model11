@@ -14,6 +14,8 @@ import { applyChairStatusTint } from "./assetStatus";
 export interface ChairModel extends Cesium.Model {
   chairName?: string;
   chairDisplayName?: string;
+  chairSeatId?: string;
+  chairSeatNumber?: string | null;
   chairIndex?: number;
   chairFloor?: 3 | 4;
   allowPicking: boolean;

@@ -35,11 +35,6 @@ export function RoomsPage() {
     onSuccess: invalidate
   });
 
-  const toggleVisibilityMutation = useMutation({
-    mutationFn: ({ id, isVisible }: { id: string; isVisible: boolean }) => api.patch(`/rooms/${id}/visibility`, { isVisible }),
-    onSuccess: invalidate
-  });
-
   const columns: Column<Room>[] = [
     {
       header: "Room",
@@ -52,20 +47,12 @@ export function RoomsPage() {
     },
     { header: "Department", render: (r) => r.department || "—" },
     { header: "Capacity", render: (r) => r.capacity ?? "—" },
-    { header: "Manager", render: (r) => r.manager_name || "—" },
     { header: "Visible", render: (r) => (r.is_visible ? "Yes" : "Hidden") },
     {
       header: "Actions",
       render: (r) => (
         <div className="flex gap-1.5" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
           <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => { setEditingRoom(r); setIsModalOpen(true); }}>Edit</Button>
-          <Button
-            variant="secondary"
-            className="px-2 py-1 text-xs"
-            onClick={() => toggleVisibilityMutation.mutate({ id: r.id, isVisible: !r.is_visible })}
-          >
-            {r.is_visible ? "Hide" : "Show"}
-          </Button>
           <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => setQrRoom(r)}>QR</Button>
           <Button variant="danger" className="px-2 py-1 text-xs" onClick={() => deleteMutation.mutate(r.id)}>Delete</Button>
         </div>
@@ -117,14 +104,13 @@ export function RoomsPage() {
 function RoomDetailModal({ room, floorName, onClose }: { room: Room; floorName: string; onClose: () => void }) {
   return (
     <Modal isOpen onClose={onClose} title={room.name} size="lg">
-      <section className="overflow-hidden rounded-[22px] bg-gradient-to-br from-slate-950 via-indigo-950 to-indigo-800 p-5 text-white">
-        <div className="flex items-start gap-4"><span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-white/15 bg-white/10 text-2xl">⌂</span><div><p className="text-[10px] font-black uppercase tracking-[.16em] text-cyan-300">Room workspace</p><h3 className="mt-1 text-xl font-black">{room.name}</h3><p className="mt-1 text-xs text-indigo-200/80">{floorName}{room.department ? ` · ${room.department}` : ""}</p></div></div>
+      <section className="overflow-hidden rounded-[22px] bg-gradient-to-br from-slate-950 via-brand-950 to-brand-800 p-5 text-white">
+        <div className="flex items-start gap-4"><span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-white/15 bg-white/10 text-2xl">⌂</span><div><p className="text-[10px] font-black uppercase tracking-[.16em] text-cyan-300">Room workspace</p><h3 className="mt-1 text-xl font-black">{room.name}</h3><p className="mt-1 text-xs text-brand-200/80">{floorName}{room.department ? ` · ${room.department}` : ""}</p></div></div>
       </section>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <RoomFact label="Floor" value={floorName} />
         <RoomFact label="Capacity" value={room.capacity != null ? `${room.capacity} people` : "Not set"} />
-        <RoomFact label="Manager" value={room.manager_name || "Not assigned"} />
         <RoomFact label="Visibility" value={room.is_visible ? "Visible" : "Hidden"} />
       </div>
 
@@ -143,7 +129,6 @@ function RoomFormModal({ floorId, room, onClose, onDone }: { floorId: string; ro
   const [name, setName] = useState(room?.name ?? "");
   const [department, setDepartment] = useState(room?.department ?? "");
   const [capacity, setCapacity] = useState(room?.capacity?.toString() ?? "");
-  const [managerName, setManagerName] = useState(room?.manager_name ?? "");
   const [description, setDescription] = useState(room?.description ?? "");
   const [color, setColor] = useState(room?.color ?? "#6366f1");
 
@@ -153,7 +138,6 @@ function RoomFormModal({ floorId, room, onClose, onDone }: { floorId: string; ro
         name,
         department: department || null,
         capacity: capacity ? parseInt(capacity, 10) : null,
-        managerName: managerName || null,
         description: description || null,
         color
       };
@@ -185,10 +169,6 @@ function RoomFormModal({ floorId, room, onClose, onDone }: { floorId: string; ro
       <div>
         <Label>Capacity</Label>
         <Input type="number" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
-      </div>
-      <div>
-        <Label>Manager</Label>
-        <Input value={managerName} onChange={(e) => setManagerName(e.target.value)} />
       </div>
       <div>
         <Label>Description</Label>

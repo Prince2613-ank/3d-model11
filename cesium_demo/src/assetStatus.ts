@@ -7,6 +7,8 @@ export interface StatusTintableChair {
   chairFloor?: 3 | 4;
   chairIndex?: number;
   chairDisplayName?: string;
+  chairSeatId?: string;
+  chairSeatNumber?: string | null;
   color: Cesium.Color;
 }
 
@@ -45,11 +47,18 @@ export async function applyChairStatusTint(chair: StatusTintableChair): Promise<
   const asset = await fetchChairAsset(chair);
   statusCache.set(key, asset?.live_status ?? null);
   if (asset?.name) chair.chairDisplayName = asset.name;
+  if (asset?.seat_id) chair.chairSeatId = asset.seat_id;
+  if (asset) chair.chairSeatNumber = asset.seat_number;
 
   const color = asset ? STATUS_COLORS[asset.live_status] : Cesium.Color.WHITE;
   baseColors.set(chair, color);
   chair.color = color;
   viewer.scene.requestRender();
+}
+
+/** Reloads asset details for already-loaded chairs after an admin/user edit. */
+export async function refreshChairStatuses(chairs: Iterable<StatusTintableChair>): Promise<void> {
+  await Promise.allSettled(Array.from(chairs, (chair) => applyChairStatusTint(chair)));
 }
 
 export function getCachedChairStatus(chair: StatusTintableChair): AssetDTO["live_status"] | null {

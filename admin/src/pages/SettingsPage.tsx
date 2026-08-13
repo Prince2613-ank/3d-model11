@@ -21,7 +21,7 @@ export function SettingsPage() {
           <div>
             <p className="font-medium text-slate-800 dark:text-slate-100">{profile?.display_name || "—"}</p>
             <p className="text-sm text-slate-500 dark:text-slate-400">{profile?.email}</p>
-            <p className="text-xs uppercase tracking-wide text-indigo-500">{profile?.role}</p>
+            <p className="text-xs uppercase tracking-wide text-brand-500">{profile?.role}</p>
           </div>
         </div>
       </div>

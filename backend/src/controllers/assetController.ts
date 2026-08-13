@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { assetService } from "../services/assetService";
 import { ValidationError } from "../errors";
+import { AssetCategory, AssetLiveStatus } from "../types/domain";
 
 export const assetController = {
   async listByFloor(req: Request, res: Response): Promise<void> {
@@ -36,6 +37,48 @@ export const assetController = {
 
   async update(req: Request, res: Response): Promise<void> {
     const asset = await assetService.update(req.user!, req.params.id, req.body);
+    res.json({ asset });
+  },
+
+  // Deliberately narrow: any signed-in user can rename who's sitting in a
+  // seat from the 3D viewer's chair popup, but only this one field — full
+  // asset edits (category, image, floor, etc.) stay admin-only via update().
+  async updateAssignedName(req: Request, res: Response): Promise<void> {
+    const { assignedToName } = req.body;
+    if (typeof assignedToName !== "string" && assignedToName !== null) {
+      throw new ValidationError("assignedToName must be a string or null");
+    }
+    const asset = await assetService.update(req.user!, req.params.id, { assignedToName });
+    res.json({ asset });
+  },
+
+  // The 3D user panel can update the operational fields displayed in its
+  // editable cards. Physical seat identifiers and placement remain managed by
+  // admins because they are bound to a fixed Cesium model.
+  async updateUserDetails(req: Request, res: Response): Promise<void> {
+    const { assignedToName, name, category, liveStatus, seatId, seatNumber, imageUrl, designation } = req.body;
+    const categories = ["chair", "ac", "projector", "door", "printer", "monitor", "fire_extinguisher", "desk", "elevator", "light", "other"];
+    const statuses = ["ok", "pending", "assigned", "resolved"];
+    if ((assignedToName !== undefined && typeof assignedToName !== "string" && assignedToName !== null)
+      || (category !== undefined && !categories.includes(category))
+      || (liveStatus !== undefined && !statuses.includes(liveStatus))
+      || (name !== undefined && (typeof name !== "string" || !name.trim()))
+      || (seatId !== undefined && (typeof seatId !== "string" || !seatId.trim()))
+      || (seatNumber !== undefined && typeof seatNumber !== "string" && seatNumber !== null)
+      || (imageUrl !== undefined && typeof imageUrl !== "string" && imageUrl !== null)
+      || (designation !== undefined && typeof designation !== "string" && designation !== null)) {
+      throw new ValidationError("Invalid asset details");
+    }
+    const asset = await assetService.update(req.user!, req.params.id, {
+      assignedToName,
+      name,
+      category: category as AssetCategory | undefined,
+      liveStatus: liveStatus as AssetLiveStatus | undefined,
+      seatId: seatId?.trim(),
+      seatNumber: seatNumber?.trim() || null,
+      imageUrl,
+      designation: typeof designation === "string" ? designation.trim() || null : designation
+    });
     res.json({ asset });
   },
 

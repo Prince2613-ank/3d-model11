@@ -47,12 +47,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = await getFreshAccessToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  let response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  // Admin records are edited from several panels. Avoid reusing a stale list
+  // response after a destructive action such as complaint deletion.
+  let response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers, cache: options.cache ?? "no-store" });
   if (response.status === 401 && token) {
     const refreshedToken = await refreshAccessToken();
     if (refreshedToken) {
       headers.set("Authorization", `Bearer ${refreshedToken}`);
-      response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+      response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers, cache: options.cache ?? "no-store" });
     }
   }
 

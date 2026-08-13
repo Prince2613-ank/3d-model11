@@ -1,6 +1,6 @@
 import { api } from "./api";
 import { onAuthChange, type CurrentUser } from "./auth";
-import { registerToolbarPanel, closeOtherToolbarPanels } from "./panelCoordination";
+import { registerToolbarPanel, closeOtherToolbarPanels, registerPanelOpener, openToolbarPanel } from "./panelCoordination";
 
 type ComplaintStatus = "pending" | "assigned" | "resolved" | "rejected";
 
@@ -30,7 +30,6 @@ const FILTERS: { key: FilterKey; label: string }[] = [
 let signedInUser: CurrentUser | null = null;
 let complaints: MyComplaint[] = [];
 let activeFilter: FilterKey = "all";
-let loaded = false;
 
 function element<T extends HTMLElement>(id: string): T {
   const found = document.getElementById(id);
@@ -148,53 +147,52 @@ async function loadMyComplaints(): Promise<void> {
   try {
     const { complaints: fetched } = await api.get<{ complaints: MyComplaint[] }>("/complaints/mine");
     complaints = fetched;
-    loaded = true;
     renderTabs();
     renderList();
   } catch (error) {
     status.hidden = false;
-    status.textContent = "Could not load your complaints. Pull to refresh and try again.";
+    status.replaceChildren();
+    const message = document.createElement("p");
+    message.textContent = "Could not load your complaints.";
+    const retryBtn = document.createElement("button");
+    retryBtn.type = "button";
+    retryBtn.className = "notification-center-status-retry";
+    retryBtn.textContent = "Retry";
+    retryBtn.addEventListener("click", () => void loadMyComplaints());
+    status.append(message, retryBtn);
     console.warn("[myComplaints] Failed to load complaints:", error);
   }
 }
 
 function setPanelOpen(open: boolean): void {
   const panel = element<HTMLElement>("myComplaintsPanel");
-  const button = element<HTMLButtonElement>("myComplaintsBtn");
   panel.hidden = !open;
-  button.setAttribute("aria-expanded", String(open));
-  button.classList.toggle("is-active", open);
   if (open) {
     closeOtherToolbarPanels("myComplaints");
-    if (signedInUser) void loadMyComplaints();
+    const status = element<HTMLElement>("myComplaintsStatus");
+    if (!signedInUser) {
+      status.hidden = false;
+      status.textContent = "Sign in to view your complaints.";
+    } else {
+      void loadMyComplaints();
+    }
   }
 }
 
 function handleAuthChange(user: CurrentUser | null): void {
   signedInUser = user;
-  loaded = false;
   complaints = [];
-  const button = element<HTMLButtonElement>("myComplaintsBtn");
-  button.hidden = !user;
-  if (!user) setPanelOpen(false);
 }
 
 export function initMyComplaints(): void {
-  const button = element<HTMLButtonElement>("myComplaintsBtn");
   const panel = element<HTMLElement>("myComplaintsPanel");
-  const toolbar = document.querySelector<HTMLElement>(".cesium-viewer-toolbar");
-  const notificationBtn = document.getElementById("notificationCenterBtn");
-  if (toolbar && !toolbar.contains(button)) {
-    if (notificationBtn && toolbar.contains(notificationBtn)) toolbar.insertBefore(button, notificationBtn);
-    else toolbar.appendChild(button);
-  }
 
-  button.addEventListener("click", (event) => {
-    event.stopPropagation();
-    setPanelOpen(Boolean(panel.hidden));
-    if (!panel.hidden && !loaded) void loadMyComplaints();
-  });
   panel.addEventListener("click", (event) => event.stopPropagation());
+  element<HTMLButtonElement>("myComplaintsBackBtn").addEventListener("click", (event) => {
+    event.stopPropagation();
+    setPanelOpen(false);
+    openToolbarPanel("notifications");
+  });
   document.addEventListener("click", () => setPanelOpen(false));
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") setPanelOpen(false);
@@ -202,5 +200,6 @@ export function initMyComplaints(): void {
 
   renderTabs();
   registerToolbarPanel("myComplaints", () => setPanelOpen(false));
+  registerPanelOpener("myComplaints", () => setPanelOpen(true));
   onAuthChange(handleAuthChange);
 }

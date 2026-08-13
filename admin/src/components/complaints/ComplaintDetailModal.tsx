@@ -14,11 +14,11 @@ export function ComplaintDetailModal({ complaint, onClose }: { complaint: Compla
 
   return (
     <Modal isOpen onClose={onClose} title="Complaint details" size="xl">
-      <div className="overflow-hidden rounded-[22px] bg-gradient-to-br from-slate-950 via-indigo-950 to-indigo-800 p-5 text-white sm:p-6">
+      <div className="overflow-hidden rounded-[22px] bg-gradient-to-br from-slate-950 via-brand-950 to-brand-800 p-5 text-white sm:p-6">
         <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
           <div className="flex min-w-0 items-center gap-4">
             {complaint.asset_image_url ? <img src={complaint.asset_image_url} alt={complaint.asset_name} className="h-16 w-16 shrink-0 rounded-2xl border border-white/15 object-cover" /> : <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl border border-white/15 bg-white/10 text-2xl font-black">{complaint.asset_category.slice(0, 1).toUpperCase()}</span>}
-            <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[.18em] text-indigo-300">{complaint.asset_category.replaceAll("_", " ")}</p><h3 className="mt-1 truncate text-2xl font-black">{complaint.asset_name}</h3><p className="mt-1 text-sm text-indigo-200">{complaint.issue_type}</p></div>
+            <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[.18em] text-brand-300">{complaint.asset_category.replaceAll("_", " ")}</p><h3 className="mt-1 truncate text-2xl font-black">{complaint.asset_name}</h3><p className="mt-1 text-sm text-brand-200">{complaint.issue_type}</p></div>
           </div>
           <div className="flex gap-2"><PriorityBadge priority={complaint.priority} /><StatusBadge status={complaint.status} /></div>
         </div>
@@ -73,16 +73,16 @@ function dedupeHistory(history: ComplaintHistoryEntry[]): ComplaintHistoryEntry[
 
 function TimelineList({ history }: { history: ComplaintHistoryEntry[] }) {
   return (
-    <div className="space-y-5 border-l-2 border-indigo-100 pl-5 dark:border-indigo-500/20">
+    <div className="space-y-5 border-l-2 border-brand-100 pl-5 dark:border-brand-500/20">
       {history.map((entry, index) => {
         const isLatest = index === history.length - 1;
-        const dotClass = (entry.to_status && TIMELINE_DOT_CLASS[entry.to_status]) || "bg-indigo-500 ring-indigo-50 dark:ring-slate-900";
+        const dotClass = (entry.to_status && TIMELINE_DOT_CLASS[entry.to_status]) || "bg-brand-500 ring-brand-50 dark:ring-slate-900";
         return (
           <div key={entry.id} className="relative">
             <span className={`absolute -left-[26px] top-1 h-2.5 w-2.5 rounded-full ring-4 ${dotClass}`} />
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-xs font-extrabold capitalize text-slate-700 dark:text-slate-200">{entry.to_status ? `${entry.from_status || "New"} → ${entry.to_status}` : "Complaint updated"}</p>
-              {isLatest && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300">Latest</span>}
+              {isLatest && <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-brand-600 dark:bg-brand-500/15 dark:text-brand-300">Latest</span>}
             </div>
             <p className="mt-1 text-[10px] font-semibold text-slate-400">{new Date(entry.created_at).toLocaleString()}</p>
             {entry.note && <p className="mt-1.5 rounded-lg bg-slate-100/80 px-2.5 py-1.5 text-xs leading-5 text-slate-600 dark:bg-white/5 dark:text-slate-300">{entry.note}</p>}

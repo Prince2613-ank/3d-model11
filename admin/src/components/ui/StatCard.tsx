@@ -5,18 +5,18 @@ interface StatCardProps {
   value: string | number;
   hint?: string;
   icon?: string;
-  tone?: "indigo" | "emerald" | "amber" | "rose";
+  tone?: "brand" | "emerald" | "amber" | "rose";
   to?: string;
 }
 
 const TONES = {
-  indigo: "from-indigo-500 to-violet-600 shadow-indigo-500/20",
+  brand: "from-brand-500 to-brand-600 shadow-brand-500/20",
   emerald: "from-emerald-400 to-teal-600 shadow-emerald-500/20",
   amber: "from-amber-400 to-orange-500 shadow-amber-500/20",
   rose: "from-rose-400 to-pink-600 shadow-rose-500/20",
 };
 
-export function StatCard({ label, value, hint, icon = "•", tone = "indigo", to }: StatCardProps) {
+export function StatCard({ label, value, hint, icon = "•", tone = "brand", to }: StatCardProps) {
   const card = (
     <div className="group relative h-full overflow-hidden rounded-[22px] border border-white/80 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,.06)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_40px_rgba(15,23,42,.11)] dark:border-white/10 dark:bg-slate-900">
       <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full bg-slate-100/80 transition-transform duration-500 group-hover:scale-125 dark:bg-white/5" />
@@ -33,5 +33,5 @@ export function StatCard({ label, value, hint, icon = "•", tone = "indigo", to
     </div>
   );
 
-  return to ? <Link to={to} aria-label={`Open ${label}`} className="block rounded-[22px] focus:outline-none focus:ring-2 focus:ring-indigo-500/50">{card}</Link> : card;
+  return to ? <Link to={to} aria-label={`Open ${label}`} className="block rounded-[22px] focus:outline-none focus:ring-2 focus:ring-brand-500/50">{card}</Link> : card;
 }

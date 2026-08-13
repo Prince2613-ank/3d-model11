@@ -18,6 +18,12 @@ export interface AssetInput {
   maintenanceDate?: string | null;
   attachments?: string[];
   assignedToProfileId?: string | null;
+  assignedToName?: string | null;
+  liveStatus?: Asset["live_status"];
+  seatId?: string;
+  seatNumber?: string | null;
+  designation?: string | null;
+  joiningDate?: string | null;
 }
 
 export const assetService = {
@@ -40,6 +46,10 @@ export const assetService = {
   async create(admin: AuthenticatedUser, input: AssetInput): Promise<Asset> {
     const asset = await assetRepository.insert({
       object_key: input.objectKey,
+      seat_id: input.seatId ?? input.objectKey,
+      seat_number: input.seatNumber ?? input.objectKey.split("-").pop() ?? null,
+      designation: input.designation ?? null,
+      joining_date: input.joiningDate ?? null,
       name: input.name,
       category: input.category,
       room_id: input.roomId ?? null,
@@ -51,6 +61,7 @@ export const assetService = {
       maintenance_date: input.maintenanceDate ?? null,
       attachments: JSON.stringify(input.attachments ?? []),
       assigned_to_profile_id: input.assignedToProfileId ?? null,
+      assigned_to_name: input.assignedToName ?? null,
       created_by: admin.id,
       updated_by: admin.id
     });
@@ -90,6 +101,12 @@ export const assetService = {
     if (input.maintenanceDate !== undefined) columns.maintenance_date = input.maintenanceDate;
     if (input.attachments !== undefined) columns.attachments = JSON.stringify(input.attachments);
     if (input.assignedToProfileId !== undefined) columns.assigned_to_profile_id = input.assignedToProfileId;
+    if (input.assignedToName !== undefined) columns.assigned_to_name = input.assignedToName;
+    if (input.liveStatus !== undefined) columns.live_status = input.liveStatus;
+    if (input.seatId !== undefined) columns.seat_id = input.seatId;
+    if (input.seatNumber !== undefined) columns.seat_number = input.seatNumber;
+    if (input.designation !== undefined) columns.designation = input.designation;
+    if (input.joiningDate !== undefined) columns.joining_date = input.joiningDate;
 
     const updated = await assetRepository.update(id, columns);
     if (!updated) throw new NotFoundError("Asset", id);

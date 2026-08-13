@@ -2,6 +2,7 @@ import { Cesium, viewer } from "./viewer";
 import { geo2, geo3, normalizeRoomName } from "./rooms";
 import { loadChairsForFloor, secondFloorChairs, thirdFloorChairs } from "./chairs";
 import { chairObjectKey } from "./assetStatus";
+import { api } from "./api";
 
 export interface KioskTarget {
   type: "room" | "asset";
@@ -58,7 +59,12 @@ function findRoomEntity(roomName: string, floor: 3 | 4): Cesium.Entity | null {
 export async function flyToKioskTarget(target: KioskTarget): Promise<void> {
   if (target.type === "asset") {
     await loadChairsForFloor(target.floor);
-    const chair = findChairByObjectKey(target.value, target.floor);
+    // QR links use the editable Seat ID. Resolve it to the model's permanent
+    // object key before locating the chair in Cesium.
+    const resolvedKey = await api.get<{ asset: { object_key: string } }>(`/assets/object-key/${encodeURIComponent(target.value)}`)
+      .then(({ asset }) => asset.object_key)
+      .catch(() => target.value);
+    const chair = findChairByObjectKey(resolvedKey, target.floor);
     if (!chair?.boundingSphere) return;
     viewer.camera.flyToBoundingSphere(chair.boundingSphere, {
       offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-35), 2.5),

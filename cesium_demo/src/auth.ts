@@ -177,9 +177,12 @@ export async function signInWithGoogle(): Promise<void> {
       redirectTo: `${window.location.origin}/?${OAUTH_POPUP_FLAG}=1`,
       skipBrowserRedirect: true,
       scopes: "https://www.googleapis.com/auth/calendar.events",
+      // "select_account" (not "consent") — Google only re-shows the data-access
+      // permissions screen the first time these scopes are granted; returning
+      // users just pick an account and land straight back in, no forced re-consent.
       queryParams: {
         access_type: "offline",
-        prompt: "consent",
+        prompt: "select_account",
         hd: ALLOWED_DOMAIN
       }
     }

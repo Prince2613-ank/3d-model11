@@ -13,10 +13,10 @@ class AssetRepository extends BaseRepository<Asset> {
 
   async findByObjectKey(objectKey: string): Promise<AssetWithAssignee | null> {
     const { rows } = await pool.query<AssetWithAssignee>(
-      `SELECT a.*, coalesce(p.display_name, p.email) AS assigned_employee_name
+      `SELECT a.*, coalesce(a.assigned_to_name, p.display_name, p.email) AS assigned_employee_name
        FROM assets a
        LEFT JOIN profiles p ON p.id = a.assigned_to_profile_id
-       WHERE a.object_key = $1 AND a.deleted_at IS NULL`,
+       WHERE (a.object_key = $1 OR a.seat_id = $1) AND a.deleted_at IS NULL`,
       [objectKey]
     );
     return rows[0] ?? null;

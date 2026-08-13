@@ -15,6 +15,7 @@ import {
 import { haversine, fmtDistance, fmtDuration } from "./routingService";
 import { startWatchingLocation, stopWatchingLocation } from "./locationService";
 import { getSelectedFloor, openFloorProfessional, onFloorChange } from "../floors";
+import { getFloatingClearDock } from "../ui/floatingDock";
 
 // ── UI state ──────────────────────────────────────────────────────────────────
 let panelOpen         = false;
@@ -42,6 +43,7 @@ let elRouteStatus!:   HTMLElement;
 let elLoading!:       HTMLElement;
 let elEmpty!:         HTMLElement;
 let elCount!:         HTMLElement;
+let elFloatingClear!: HTMLElement;
 
 // Current search center (changes when user picks a location)
 let searchLat = BUILDING_LAT;
@@ -103,6 +105,10 @@ function injectHTML(): void {
   elLoading     = document.getElementById("amLoading")!;
   elEmpty       = document.getElementById("amEmpty")!;
   elCount       = document.getElementById("amCount")!;
+  elFloatingClear = document.getElementById("amFloatingClear")!;
+  // Move into the shared dock so it lines up next to the solar workspace's
+  // own floating clear button instead of owning its own fixed position.
+  getFloatingClearDock().appendChild(elFloatingClear);
 }
 
 function wireEvents(): void {
@@ -173,7 +179,12 @@ function wireEvents(): void {
   document.getElementById("amClearRoute")!.addEventListener("click", () => {
     clearRoute();
     elRouteBar.hidden = true;
+    updateFloatingClear();
   });
+
+  // Floating "clear map" button — shown once the panel is closed while
+  // amenity markers / routes are still left rendered on the map.
+  elFloatingClear.addEventListener("click", clearAll);
 
   // Info card actions
   document.getElementById("amInfoClose")!.addEventListener("click", closeInfoCard);
@@ -200,6 +211,7 @@ function openPanel(): void {
   elNavBtn.setAttribute("title", "Close Nearby Amenities");
   elSearch.focus();
   drawRadiusBorder(searchLat, searchLon, currentRadius);
+  updateFloatingClear();
 }
 function closePanel(): void {
   panelOpen = false;
@@ -209,6 +221,15 @@ function closePanel(): void {
   elNavBtn.setAttribute("title", "Explore Nearby Amenities");
   clearAmenityHighlights();
   clearRadiusBorder();
+  updateFloatingClear();
+}
+
+// Amenity markers / routes are left on the map after the panel closes unless
+// the user explicitly hit Clear — this floating button is the only way to
+// wipe them once the panel itself is gone.
+function updateFloatingClear(): void {
+  const hasTraces = activeCategories.size > 0 || !elRouteBar.hidden;
+  elFloatingClear.hidden = panelOpen || !hasTraces;
 }
 
 // ── Category toggle ───────────────────────────────────────────────────────────
@@ -222,6 +243,7 @@ async function toggleCategory(cat: AmenityKey): Promise<void> {
     clearCategory(cat);
     btn?.classList.remove("am-cat--on");
     renderList();
+    updateFloatingClear();
     return;
   }
 
@@ -257,6 +279,7 @@ async function toggleCategory(cat: AmenityKey): Promise<void> {
   } finally {
     loading.delete(cat);
     if (loading.size === 0) elLoading.hidden = true;
+    updateFloatingClear();
   }
 }
 
@@ -661,6 +684,7 @@ async function navigateTo(am: ParsedAmenity): Promise<void> {
   elRouteBar.hidden   = false;
   elRouteStatus.textContent = "Calculating route…";
   closeInfoCard();
+  updateFloatingClear();
 
   try {
     const result = await renderRoute(fromLat, fromLon, am.lat, am.lon, currentRouteMode);
@@ -706,6 +730,7 @@ function clearAll(): void {
     b.classList.remove("am-cat--on"),
   );
   renderList();
+  updateFloatingClear();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -850,6 +875,12 @@ const HTML = `
     Search on Google for more details
   </a>
 </div>
+
+<!-- Floating "clear map" button — shown once the panel is closed while markers/routes remain on the map -->
+<button id="amFloatingClear" class="am-floating-clear" hidden title="Clear amenity markers and routes from the map">
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+  Clear nearby
+</button>
 `;
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
@@ -1160,10 +1191,31 @@ const CSS = `
 }
 @keyframes am-fade { to { opacity:0; transform:translateX(-50%) translateY(8px); } }
 
+/* Floating "clear map" button (lives in the shared #floatingClearDock, see ui/floatingDock.ts) */
+.am-floating-clear {
+  display: inline-flex; align-items: center; gap: 6px;
+  width: auto; margin: 0;
+  padding: 7px 13px; border-radius: 999px;
+  border: 1px solid rgba(33,150,243,.4);
+  background: linear-gradient(135deg, #2196F3, #1565C0);
+  color: #eaf4ff; font-size: 11px; font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(21,101,192,.35);
+  transition: box-shadow .15s, transform .15s;
+}
+.am-floating-clear svg { width: 12px; height: 12px; flex-shrink: 0; }
+.am-floating-clear[hidden] { display: none !important; }
+.am-floating-clear:hover { box-shadow: 0 10px 24px rgba(21,101,192,.45); }
+.am-floating-clear:active { transform: scale(.96); }
+
 /* Responsive: full-width on mobile */
 @media (max-width: 540px) {
   .am-panel         { width: 100vw; right: -100vw; border-radius: 0; top: 0; max-height: 100dvh; }
   .am-panel--open   { right: 0; }
   .am-info-card     { right: 8px; left: 8px; width: auto; bottom: 70px; }
+}
+@media (max-width: 400px) {
+  .am-floating-clear { padding: 6px 10px; font-size: 10px; gap: 5px; }
 }
 `;
