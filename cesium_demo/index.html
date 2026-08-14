@@ -589,27 +589,14 @@
     </div>
     <div class="camera-card-scroll-shell">
       <div id="cameraPanelBody" class="camera-card-scroll">
-        <div class="camera-coverage-actions" aria-label="Camera coverage controls">
-          <button class="btn" type="button" data-cctv-viewshed="coverage">Show CCTV Coverage</button>
-          <button class="btn" type="button" data-cctv-viewshed="blind">Blind Spots</button>
-          <button class="btn" type="button" data-cctv-viewshed="both">Coverage + Blind Spots</button>
-          <button class="btn danger" type="button" data-cctv-viewshed="clear">Clear Coverage</button>
-        </div>
-        <div class="coverage-legend">
-          <strong>Coverage Legend</strong>
-          <div><span class="legend-swatch covered"></span>Covered by one camera</div>
-          <div><span class="legend-swatch blind"></span>Blind spot / not covered</div>
-          <div><span class="legend-swatch overlap"></span>Overlap coverage</div>
+        <div class="camera-coverage-toggle-row" aria-label="Coverage overlay">
+          <button id="floorCoverageToggle" class="btn" type="button" aria-pressed="false">Coverage</button>
+          <button id="floorBlindToggle" class="btn" type="button" aria-pressed="false">Blind Spot</button>
         </div>
         <div id="cctvViewshedStats" class="camera-coverage-stats"></div>
         <div id="cameraButtons"></div>
       </div>
-      <input id="cameraListSlider" class="camera-list-slider" type="range" min="0" max="0" value="0" step="1" aria-label="Camera controls position" />
     </div>
-  </section>
-
-  <section id="cameraExitCard" class="common-panel" aria-label="Exit camera view" hidden>
-    <button id="cameraViewExitBtn" type="button" disabled>Exit Camera View</button>
   </section>
 
 
@@ -706,16 +693,18 @@
         <span class="asset-popup-avatar-wrap">
           <span id="assetPopupAvatarFallback" class="asset-popup-avatar asset-popup-avatar-fallback">?</span>
           <img id="assetPopupAvatar" class="asset-popup-avatar" alt="" hidden />
-          <button id="assetPopupAvatarEditBtn" type="button" class="asset-popup-avatar-edit-btn" hidden aria-label="Change photo">
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-          <input id="assetPopupPhotoInput" type="file" accept="image/*" hidden />
         </span>
         <span id="assetPopupTitle">Object</span>
       </span>
       <button id="assetPopupCloseBtn" class="panel-close-btn" type="button" aria-label="Close">✕</button>
     </div>
-    <img id="assetPopupImage" class="asset-popup-image" alt="" hidden />
+    <div class="asset-popup-image-wrap">
+      <img id="assetPopupImage" class="asset-popup-image" alt="" hidden />
+      <button id="assetPopupAvatarEditBtn" type="button" class="asset-popup-image-edit-btn" hidden aria-label="Change photo" title="Change photo">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <input id="assetPopupPhotoInput" type="file" accept="image/*" hidden />
+    </div>
     <p class="asset-popup-status">
       <span id="assetPopupStatusDot" class="asset-status-dot"></span>
       <span id="assetPopupStatusText">Unknown</span>
@@ -729,8 +718,8 @@
       </div>
       <div class="asset-detail-editable-cell"><span>Seat ID</span><strong id="assetDetailSeat">—</strong><input id="assetDetailSeatInput" type="text" maxlength="80" hidden /></div>
       <div><span>Floor</span><strong id="assetDetailFloor">—</strong></div>
-      <div class="asset-detail-editable-cell"><span id="assetDetailStatusLabel">Status</span><strong id="assetDetailStatus">—</strong><select id="assetDetailStatusInput" hidden><option value="ok">OK</option><option value="pending">Pending</option><option value="assigned">Assigned</option><option value="resolved">Resolved</option></select></div>
-      <div class="asset-detail-editable-cell"><span>Category</span><strong id="assetDetailCategory">Chair</strong><select id="assetDetailCategoryInput" hidden><option value="chair">Chair</option><option value="ac">AC</option><option value="projector">Projector</option><option value="door">Door</option><option value="printer">Printer</option><option value="monitor">Monitor</option><option value="fire_extinguisher">Fire extinguisher</option><option value="desk">Desk</option><option value="elevator">Elevator</option><option value="light">Light</option><option value="other">Other</option></select></div>
+      <div><span id="assetDetailStatusLabel">Status</span><strong id="assetDetailStatus">—</strong></div>
+      <div><span>Category</span><strong id="assetDetailCategory">Chair</strong></div>
       <div class="asset-detail-editable-cell"><span>Designation</span><strong id="assetDetailDesignation">—</strong><input id="assetDetailDesignationInput" type="text" maxlength="80" hidden /></div>
     </div>
     <div id="assetDetailEditActions" class="asset-detail-employee-edit-row" hidden>

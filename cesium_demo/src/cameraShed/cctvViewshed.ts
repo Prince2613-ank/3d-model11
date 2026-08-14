@@ -1,7 +1,7 @@
 import { Cesium, viewer, ALT_2ND, ALT_3RD } from "../viewer";
 import { CLOSED_ROOMS_BY_FLOOR } from "../config";
 import { geoJsonUrl } from "../rooms";
-import type { CameraModel } from "../models";
+import { models, type CameraModel } from "../models";
 
 export type CctvCoverageStats = {
   coveragePercent: number;
@@ -11,18 +11,28 @@ export type CctvCoverageStats = {
 
 // constants requested
 export const CCTV_MAX_RANGE_METERS = 25;
-export const CCTV_RAY_COUNT = 90;
-export const CCTV_SAMPLE_SPACING_METERS = 0.75;
+export const CCTV_SAMPLE_SPACING_METERS = 1.2;
 export const CCTV_DEBUG_SAMPLE_POINTS = false;
-export const USE_ROOM_POLYGONS_AS_WALLS = true;
-export const IGNORE_SHORT_WALL_SEGMENTS_METERS = 0.7;
-export const DISABLE_WALL_OCCLUSION_FOR_DEBUG = false;
 export const SHOW_BLIND_SPOTS_BY_DEFAULT = false;
 
-// NOTE: For accurate professional viewshed, replace room polygon boundaries
-// with a dedicated walls.geojson containing actual wall segments and door openings.
-// Current room polygons may not represent doors/openings and can over-block visibility.
 export const VIEWSHED_Z_OFFSET_METERS = 0.18;
+
+// Occlusion is now determined by real 3D raycasting against the actual
+// rendered building model (walls, furniture, everything) via
+// scene.pickFromRay — this is literally "what would the camera lens see"
+// rather than a flat 2D wall-polygon approximation. Each ray costs a full
+// offscreen render pass, so:
+//  - CCTV_SAMPLE_SPACING_METERS is coarser than the old 2D-only pass (was
+//    0.75m) to keep total ray count reasonable.
+//  - CCTV_3D_TARGET_HEIGHT_METERS picks a representative "person" height
+//    above the floor to aim rays at, since a sample point isn't otherwise a
+//    real object a ray could land on.
+//  - Work is chunked with CCTV_3D_RAYS_PER_TICK, yielding to the browser
+//    between batches so the tab stays responsive during an analysis run.
+export const CCTV_3D_TARGET_HEIGHT_METERS = 1.2;
+export const CCTV_3D_RAYS_PER_TICK = 24;
+export const CCTV_3D_EYE_NUDGE_METERS = 0.05;
+export const CCTV_3D_HIT_TOLERANCE_METERS = 0.15;
 
 // When true, PTZ cameras without explicit headingMin/headingMax are
 // treated as having full 360° pan capability for coverage purposes.
@@ -167,28 +177,6 @@ function pointInPolygon(point: { x: number; y: number }, polygon: { x: number; y
   return inside;
 }
 
-function segIntersect(a: { x: number; y: number }, b: { x: number; y: number }, c: { x: number; y: number }, d: { x: number; y: number }): { x: number; y: number } | null {
-  const A1 = b.y - a.y;
-  const B1 = a.x - b.x;
-  const C1 = A1 * a.x + B1 * a.y;
-
-  const A2 = d.y - c.y;
-  const B2 = c.x - d.x;
-  const C2 = A2 * c.x + B2 * c.y;
-
-  const denom = A1 * B2 - A2 * B1;
-  if (Math.abs(denom) < 1e-9) return null;
-  const x = (B2 * C1 - B1 * C2) / denom;
-  const y = (A1 * C2 - A2 * C1) / denom;
-
-  const onSeg = (v: { x: number; y: number }, w: { x: number; y: number }, p: { x: number; y: number }) =>
-    (Math.min(v.x, w.x) - 1e-9 <= p.x && p.x <= Math.max(v.x, w.x) + 1e-9) &&
-    (Math.min(v.y, w.y) - 1e-9 <= p.y && p.y <= Math.max(v.y, w.y) + 1e-9);
-
-  if (onSeg(a, b, { x, y }) && onSeg(c, d, { x, y })) return { x, y };
-  return null;
-}
-
 function metersPerDegree(latDeg: number): { mPerDegLat: number; mPerDegLon: number } {
   const latRad = latDeg * Math.PI / 180;
   const mPerDegLat = 111132.92 - 559.82 * Math.cos(2 * latRad) + 1.175 * Math.cos(4 * latRad);
@@ -196,32 +184,10 @@ function metersPerDegree(latDeg: number): { mPerDegLat: number; mPerDegLon: numb
   return { mPerDegLat, mPerDegLon };
 }
 
-async function collectWallSegments(floor: number): Promise<Array<{ x1: number; y1: number; x2: number; y2: number }>> {
-  if (!USE_ROOM_POLYGONS_AS_WALLS) return [];
-  const loaded = await loadFloorPolygonsWithClosedRooms(floor);
-  const rings = loaded.rings;
-  const walls: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
-  if (!rings || rings.length === 0) return walls;
-
-  // compute meters-per-degree using floor center latitude
-  let minLat = Infinity, maxLat = -Infinity;
-  for (const ring of rings) for (const p of ring) { minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat); }
-  const centerLat = (minLat + maxLat) / 2;
-  const { mPerDegLat, mPerDegLon } = metersPerDegree(centerLat);
-
-  for (const ring of rings) {
-    for (let i = 0; i < ring.length; i++) {
-      const a = ring[i];
-      const b = ring[(i + 1) % ring.length];
-      // filter short segments (likely minor polygon artifacts)
-      const dx = (b.lon - a.lon) * mPerDegLon;
-      const dy = (b.lat - a.lat) * mPerDegLat;
-      const segLen = Math.sqrt(dx * dx + dy * dy);
-      if (segLen < IGNORE_SHORT_WALL_SEGMENTS_METERS) continue;
-      walls.push({ x1: a.lon, y1: a.lat, x2: b.lon, y2: b.lat });
-    }
-  }
-  return walls;
+function getFloorBaseAltitude(floor: number): number {
+  if (floor === 3) return ALT_2ND;
+  if (floor === 4) return ALT_3RD;
+  return 0;
 }
 
 function addCellPolygon(lon: number, lat: number, halfLon: number, halfLat: number, color: Cesium.Color, floor: number): Cesium.Entity {
@@ -309,55 +275,59 @@ function isAngleInsidePtzSector(angleDeg: number, sector: { fullCircle: boolean;
   return angle >= start || angle <= end;
 }
 
-function pointVisibleByCamera2D(cameraCfg: any, sample: { lon: number; lat: number }, walls: any[]): boolean {
-  // horizontal check: within horizontal FOV (PTZ sweep) and range
-  const origin = { lon: cameraCfg.lon, lat: cameraCfg.lat, height: cameraCfg.height };
-  const { mPerDegLat, mPerDegLon } = metersPerDegree(origin.lat);
-  const dx = (sample.lon - origin.lon) * mPerDegLon;
-  const dy = (sample.lat - origin.lat) * mPerDegLat;
+/** Cheap prefilter: is this sample within the camera's range and PTZ pan sector at all? Run before the expensive 3D raycast to avoid paying for pairs that can't possibly be visible. */
+function isCandidateForCamera(cameraCfg: any, sample: { lon: number; lat: number }): boolean {
+  const { mPerDegLat, mPerDegLon } = metersPerDegree(cameraCfg.lat);
+  const dx = (sample.lon - cameraCfg.lon) * mPerDegLon;
+  const dy = (sample.lat - cameraCfg.lat) * mPerDegLat;
   const horizDist = Math.sqrt(dx * dx + dy * dy);
   const range = (cameraCfg.maxRangeMeters ?? CCTV_MAX_RANGE_METERS);
   if (horizDist > range) return false;
 
   const angleToPointDeg = (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360; // same convention as heading
-  if (!isBearingWithinPan(cameraCfg, angleToPointDeg)) return false;
+  return isBearingWithinPan(cameraCfg, angleToPointDeg);
+}
 
-  // pitch is not used for 2D floor coverage; skip vertical check (only metadata)
+const scratchRayDirection = new Cesium.Cartesian3();
+const scratchRayOrigin = new Cesium.Cartesian3();
+const scratchNudgeOffset = new Cesium.Cartesian3();
 
-  // wall blocking: optionally skip for debug
-  if (DISABLE_WALL_OCCLUSION_FOR_DEBUG) return true;
+/**
+ * True visibility check: casts a real ray from the camera's eye to the
+ * target point and asks the scene what it actually hits first — the real
+ * rendered building model (walls, furniture, doors, everything), not an
+ * approximation. If the first thing the ray hits is at or beyond the
+ * target's own distance, the target is visible; if something nearer blocks
+ * it, the target is occluded.
+ */
+function isVisibleByRaycast3D(origin: Cesium.Cartesian3, target: Cesium.Cartesian3, objectsToExclude: any[]): boolean {
+  const direction = Cesium.Cartesian3.subtract(target, origin, scratchRayDirection);
+  const targetDistance = Cesium.Cartesian3.magnitude(direction);
+  if (targetDistance < 1e-6) return true;
+  Cesium.Cartesian3.normalize(direction, direction);
 
-  const a = { x: origin.lon, y: origin.lat };
-  const b = { x: sample.lon, y: sample.lat };
-  for (const w of walls) {
-    const intr = segIntersect(a, b, { x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 });
-    if (intr) {
-      // if intersection is very near the sample point, allow it
-      if (Math.abs(intr.x - b.x) < 1e-6 && Math.abs(intr.y - b.y) < 1e-6) continue;
-      // if intersection is extremely near the origin, allow (camera next to wall)
-      if (Math.abs(intr.x - a.x) < 1e-6 && Math.abs(intr.y - a.y) < 1e-6) continue;
-      return false;
-    }
+  // Nudge the ray's start forward slightly so it doesn't immediately
+  // self-intersect the camera's own housing mesh at distance ~0.
+  const nudge = Cesium.Cartesian3.multiplyByScalar(direction, CCTV_3D_EYE_NUDGE_METERS, scratchNudgeOffset);
+  const nudgedOrigin = Cesium.Cartesian3.add(origin, nudge, scratchRayOrigin);
+
+  const ray = new Cesium.Ray(nudgedOrigin, direction);
+  let result: { position?: Cesium.Cartesian3 } | undefined;
+  try {
+    result = (viewer.scene as any).pickFromRay(ray, objectsToExclude);
+  } catch {
+    return true;
   }
+  if (!result || !result.position) return true; // nothing in the way at all
 
-  return true;
+  const hitDistance = Cesium.Cartesian3.distance(nudgedOrigin, result.position);
+  return hitDistance >= targetDistance - CCTV_3D_HIT_TOLERANCE_METERS;
 }
 
-export async function showCameraViewshed(camera: CameraModel, floor: number): Promise<CctvCoverageStats> {
-  if (!camera) return { coveragePercent: 0, blindPercent: 100, overlapPercent: 0 };
-  // Use coverage grid calculation for single camera PTZ coverage
-  clearEntities();
-  const data = await computeCoverageGrid([camera], floor);
-  if (!data) return { coveragePercent: 0, blindPercent: 100, overlapPercent: 0 };
-  renderGridCells(data.samples, data.seenCounts, data.stepLon, data.stepLat, floor, "coverageOnly");
-  viewer.scene.requestRender();
-  return { coveragePercent: data.coveragePercent, blindPercent: data.blindPercent, overlapPercent: data.overlapPercent };
-}
 export type CoverageMode = "coverageOnly" | "blindOnly" | "coverageAndBlind" | "fansOnly";
 
 async function computeCoverageGrid(cameras: CameraModel[], floor: number) {
   if (!cameras || cameras.length === 0) return null;
-  const walls = await collectWallSegments(floor);
   const loaded = await loadFloorPolygonsWithClosedRooms(floor);
   const rings = loaded.rings;
   const closedRooms = loaded.closedRooms;
@@ -430,6 +400,18 @@ async function computeCoverageGrid(cameras: CameraModel[], floor: number) {
       }
     }
 
+    const targetAltitude = getFloorBaseAltitude(floor) + CCTV_3D_TARGET_HEIGHT_METERS;
+    const cameraOrigins = cameras.map((cam) =>
+      Cesium.Cartesian3.fromDegrees(cam.cameraConfig.lon, cam.cameraConfig.lat, cam.cameraConfig.height)
+    );
+    // Real ray-picking should never treat a camera's own housing mesh as an obstruction.
+    const objectsToExclude = models.cameras.filter((c): c is CameraModel => Boolean(c));
+
+    // Cheap prefilter first (range + PTZ pan sector + room constraints) — only
+    // pairs that survive this get the expensive 3D raycast, since each ray is
+    // a full offscreen render pass against the real building model.
+    type Candidate = { sampleIndex: number; cameraIndex: number; target: Cesium.Cartesian3 };
+    const candidates: Candidate[] = [];
     for (let i = 0; i < samples.length; i++) {
       const s = samples[i];
       const sampleRoom = sampleClosedRoomIndex[i];
@@ -448,7 +430,25 @@ async function computeCoverageGrid(cameras: CameraModel[], floor: number) {
           continue;
         }
 
-        if (pointVisibleByCamera2D(cam.cameraConfig, s, walls)) seenCounts[i]++;
+        if (!isCandidateForCamera(cam.cameraConfig, s)) continue;
+
+        candidates.push({
+          sampleIndex: i,
+          cameraIndex: ci,
+          target: Cesium.Cartesian3.fromDegrees(s.lon, s.lat, targetAltitude),
+        });
+      }
+    }
+
+    // Expensive pass: real 3D visibility via scene raycasting against the
+    // actual rendered model, chunked so the tab stays responsive.
+    for (let k = 0; k < candidates.length; k++) {
+      const { sampleIndex, cameraIndex, target } = candidates[k];
+      if (isVisibleByRaycast3D(cameraOrigins[cameraIndex], target, objectsToExclude)) {
+        seenCounts[sampleIndex]++;
+      }
+      if (k % CCTV_3D_RAYS_PER_TICK === CCTV_3D_RAYS_PER_TICK - 1) {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       }
     }
 
@@ -464,7 +464,7 @@ async function computeCoverageGrid(cameras: CameraModel[], floor: number) {
   const blindPercent = Math.round(((samples.length - covered) / samples.length) * 10000) / 100;
   const overlapPercent = Math.round((overlap / samples.length) * 10000) / 100;
 
-  return { rings, walls, samples, seenCounts, stepLon, stepLat, coveragePercent, blindPercent, overlapPercent };
+  return { rings, samples, seenCounts, stepLon, stepLat, coveragePercent, blindPercent, overlapPercent };
 }
 
 function renderGridCells(samples: { lon: number; lat: number }[], seenCounts: number[], stepLon: number, stepLat: number, floor: number, mode: CoverageMode) {
@@ -497,30 +497,21 @@ function renderGridCells(samples: { lon: number; lat: number }[], seenCounts: nu
   }
 }
 
-export async function showCoverageOnly(cameras: CameraModel[], floor: number): Promise<CctvCoverageStats> {
+/**
+ * Renders a coverage/blind-spot overlay for the given camera(s) — pass a
+ * single camera for a per-camera-window view, or a floor's whole camera
+ * list for a floor-wide view. `mode` picks what's drawn: coverage cells
+ * only, blind cells only, or both together.
+ */
+export async function showCoverage(
+  cameras: CameraModel[],
+  floor: number,
+  mode: "coverageOnly" | "blindOnly" | "coverageAndBlind"
+): Promise<CctvCoverageStats> {
   clearEntities();
   const data = await computeCoverageGrid(cameras, floor);
   if (!data) return { coveragePercent: 0, blindPercent: 100, overlapPercent: 0 };
-  renderGridCells(data.samples, data.seenCounts, data.stepLon, data.stepLat, floor, "coverageOnly");
+  renderGridCells(data.samples, data.seenCounts, data.stepLon, data.stepLat, floor, mode);
   viewer.scene.requestRender();
   return { coveragePercent: data.coveragePercent, blindPercent: data.blindPercent, overlapPercent: data.overlapPercent };
 }
-
-export async function showBlindSpots(cameras: CameraModel[], floor: number): Promise<CctvCoverageStats> {
-  clearEntities();
-  const data = await computeCoverageGrid(cameras, floor);
-  if (!data) return { coveragePercent: 0, blindPercent: 100, overlapPercent: 0 };
-  renderGridCells(data.samples, data.seenCounts, data.stepLon, data.stepLat, floor, "blindOnly");
-  viewer.scene.requestRender();
-  return { coveragePercent: data.coveragePercent, blindPercent: data.blindPercent, overlapPercent: data.overlapPercent };
-}
-
-export async function showCoverageAndBlindSpots(cameras: CameraModel[], floor: number): Promise<CctvCoverageStats> {
-  clearEntities();
-  const data = await computeCoverageGrid(cameras, floor);
-  if (!data) return { coveragePercent: 0, blindPercent: 100, overlapPercent: 0 };
-  renderGridCells(data.samples, data.seenCounts, data.stepLon, data.stepLat, floor, "coverageAndBlind");
-  viewer.scene.requestRender();
-  return { coveragePercent: data.coveragePercent, blindPercent: data.blindPercent, overlapPercent: data.overlapPercent };
-}
-// Camera Fans mode removed — fans are not exposed as a separate display anymore.

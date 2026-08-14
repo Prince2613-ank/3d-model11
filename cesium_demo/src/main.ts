@@ -1,6 +1,7 @@
 import "./styles.css";
 import { Cesium, viewer, ALT_2ND, ALT_3RD } from "./viewer";
 import { loadModels } from "./models";
+import { AUTH_EXPIRED_EVENT } from "./api";
 import { getInitialFloorFromUrl, getSelectedFloor, hasPersistedFloorState, initSmartFloorCamera, openFloorProfessional, preloadFloor, showFloor } from "./floors";
 import { getNavigableRoomNames, loadRooms } from "./rooms";
 import { getNavigablePersonNames, chairNavPoints, loadChairsForFloor, thirdFloorChairs, secondFloorChairs, findChairByFuzzyName } from "./chairs";
@@ -63,12 +64,23 @@ import {
   setEnterBuildingFloorSwitchCallback,
   installSeatViewDebug,
   installArrivalViewTuner,
+  bindFloorCoverageToggles,
 } from "./ui";
 import { createBooking, cancelBooking, getCurrentEvents, showToast, fetchGlobalEvents, matchRoomName, currentUserEmail } from "./booking";
 import { initAssistant, handleAssistantQuery, type MarkerPoint } from "./assistant";
 import { initAmenities } from "./amenities/index";
 import { mountSolarWorkspace } from "./solar-react/mount";
 import { isKioskMode, getKioskTargetFromUrl, flyToKioskTarget, type KioskTarget } from "./kiosk";
+import { getCameraDebugDefaultView } from "./cameraDebug";
+
+// Fired by api.ts when a request is still 401 after a fresh-token retry —
+// the session is genuinely expired/revoked (or the backend's 24h inactivity
+// rule kicked in), not a transient hiccup. api.ts already signs the user out;
+// this just surfaces it. Sign-in here is optional/contextual (no dedicated
+// login route), so clearing the session already reverts the UI correctly.
+window.addEventListener(AUTH_EXPIRED_EVENT, () => {
+  showToast("Your session expired. Please sign in again.", "error");
+});
 
 // Guard: if WebGL context is lost (GPU OOM, driver reset), show spinner and reload
 // instead of letting Cesium freeze with "Rendering has stopped."
@@ -198,6 +210,7 @@ async function bootstrap(): Promise<void> {
     exitNavigation,
   });
   bindCctvPanel();
+  bindFloorCoverageToggles();
   initAssetPopup();
   installMapDirectionsControl();
 
@@ -229,19 +242,19 @@ async function bootstrap(): Promise<void> {
   const modelLoad = loadModels();
 
   const isMobile = window.innerWidth < 768;
+  const defaultCameraView = getCameraDebugDefaultView(isMobile);
   viewer.camera.setView({
     destination: Cesium.Cartesian3.fromDegrees(
-      isMobile ? 77.133683 : 77.133783,
-      28.670903,
-      isMobile ? 95.0 : 81.51
+      defaultCameraView.longitude,
+      defaultCameraView.latitude,
+      defaultCameraView.altitude
     ),
     orientation: {
-      heading: Cesium.Math.toRadians(342.04),
-      pitch: Cesium.Math.toRadians(-84.94),
-      roll: 0,
+      heading: Cesium.Math.toRadians(defaultCameraView.heading),
+      pitch: Cesium.Math.toRadians(defaultCameraView.pitch),
+      roll: Cesium.Math.toRadians(defaultCameraView.roll),
     },
   });
-
   if (isResuming) {
     document.getElementById("onboardingSplash")?.remove();
     showFloorSpinner(`Loading ${FLOOR_LABELS[initialFloor] ?? "workspace"}…`);

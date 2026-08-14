@@ -1,6 +1,16 @@
 import { useState } from "react";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth, SESSION_EXPIRED_MESSAGE_KEY } from "../contexts/AuthContext";
 import heroImage from "../assets/digital-twin-hero.png";
+
+function consumeSessionExpiredMessage(): string {
+  try {
+    const message = window.sessionStorage.getItem(SESSION_EXPIRED_MESSAGE_KEY);
+    if (message) window.sessionStorage.removeItem(SESSION_EXPIRED_MESSAGE_KEY);
+    return message ?? "";
+  } catch {
+    return "";
+  }
+}
 
 const steps = [
   { eyebrow: "Live visibility", title: "See the whole building", description: "Explore floors, rooms and employee seats through one living digital twin.", items: ["Live floor status", "Employee seat health", "Room availability"], icon: "◇" },
@@ -22,7 +32,7 @@ export function LoginPage() {
   const { signInWithGoogle } = useAuth();
   const [step, setStep] = useState(0);
   const [signingIn, setSigningIn] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(consumeSessionExpiredMessage);
   const active = steps[step];
 
   const startSignIn = async () => {

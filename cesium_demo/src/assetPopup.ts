@@ -93,6 +93,7 @@ export async function openAssetPopup(chair: ChairModel, floor: 3 | 4): Promise<v
   statusDot.dataset.status = "unknown";
   statusText.textContent = "Loading…";
   description.textContent = "";
+  description.hidden = false;
   image.hidden = true;
   unregistered.hidden = true;
   const tooltip = document.getElementById("tooltip");
@@ -138,12 +139,12 @@ async function refreshActiveAsset(): Promise<void> {
     chair.chairSeatNumber = asset.seat_number;
     el<HTMLElement>("assetDetailEmployee").textContent = asset.assigned_employee_name || asset.name;
     el<HTMLElement>("assetDetailSeat").textContent = asset.seat_id;
-    el<HTMLButtonElement>("assetPopupEditBtn").hidden = !getCurrentUser() || el<HTMLElement>("assetPopupDetails").hidden;
-    // The photo can be changed straight from the header at any time, not just
-    // in "Edit details" mode — a change there saves immediately (see
-    // handleAvatarPhotoSelected), so it doesn't need to wait on the rest of
-    // the form.
-    el<HTMLButtonElement>("assetPopupAvatarEditBtn").hidden = !getCurrentUser();
+    const detailsShown = !el<HTMLElement>("assetPopupDetails").hidden;
+    el<HTMLButtonElement>("assetPopupEditBtn").hidden = !detailsShown;
+    // This branch only runs outside edit mode (see the `isEditingDetails`
+    // guard above) — the photo pencil only shows once edit mode is entered
+    // (see setDetailsEditMode), so it stays hidden here.
+    el<HTMLButtonElement>("assetPopupAvatarEditBtn").hidden = true;
     el<HTMLElement>("assetDetailStatus").textContent = statusLabel(asset.live_status);
     el<HTMLElement>("assetDetailStatusLabel").textContent = categoryStatusLabel(asset.category);
     el<HTMLElement>("assetDetailCategory").textContent = asset.category.replaceAll("_", " ");
@@ -153,7 +154,7 @@ async function refreshActiveAsset(): Promise<void> {
     // Collapsed view leads with the designation (job title) rather than the
     // seat/chair number — the number is still available in the Details grid.
     description.textContent = asset.designation
-      ? asset.designation
+      ? `Designation: ${asset.designation}`
       : asset.category === "chair"
         ? `${asset.name}'s chair`
         : asset.description || "No description provided.";
@@ -183,7 +184,14 @@ function setDetailsEditMode(editing: boolean): void {
   details.querySelectorAll<HTMLElement>(".asset-detail-editable-cell strong").forEach((node) => { node.hidden = editing; });
   details.querySelectorAll<HTMLElement>(".asset-detail-editable-cell input, .asset-detail-editable-cell select").forEach((node) => { node.hidden = !editing; });
   el<HTMLElement>("assetDetailEditActions").hidden = !editing;
-  el<HTMLButtonElement>("assetPopupEditBtn").hidden = !activeAssetId || !getCurrentUser() || editing || details.hidden;
+  el<HTMLButtonElement>("assetPopupEditBtn").hidden = !activeAssetId || editing || details.hidden;
+  // The photo pencil only makes sense once the rest of the form is editable —
+  // tied to edit mode itself rather than just "Details" being expanded.
+  el<HTMLButtonElement>("assetPopupAvatarEditBtn").hidden = !editing;
+  // Hide Details / Raise Complaint don't apply mid-edit — only Save/Cancel
+  // should be actionable while the form is open.
+  el<HTMLButtonElement>("assetPopupDetailsBtn").hidden = editing;
+  el<HTMLButtonElement>("assetPopupComplaintBtn").hidden = editing;
   if (!editing) {
     if (activeAsset) setAvatarDisplay(activeAsset.assigned_employee_name || activeAsset.name, activeAsset.image_url);
     return;
@@ -192,13 +200,15 @@ function setDetailsEditMode(editing: boolean): void {
   pendingImageUrl = activeAsset.image_url ?? null;
   el<HTMLInputElement>("assetDetailEmployeeInput").value = activeAsset.assigned_employee_name || activeAsset.name;
   el<HTMLInputElement>("assetDetailSeatInput").value = activeAsset.seat_id;
-  el<HTMLSelectElement>("assetDetailStatusInput").value = activeAsset.live_status;
-  el<HTMLSelectElement>("assetDetailCategoryInput").value = activeAsset.category;
   el<HTMLInputElement>("assetDetailDesignationInput").value = activeAsset.designation || "";
 }
 
 async function handleAvatarPhotoSelected(file: File | undefined): Promise<void> {
   if (!file || uploadingPhoto || !activeAssetId) return;
+  if (!getCurrentUser()) {
+    showToast("Please sign in to change the photo.", "error");
+    return;
+  }
   const cropped = await openPhotoCrop(file);
   if (!cropped) return; // user cancelled the crop step
 
@@ -228,6 +238,10 @@ async function handleAvatarPhotoSelected(file: File | undefined): Promise<void> 
 
 async function saveDetails(): Promise<void> {
   if (!activeAssetId) return;
+  if (!getCurrentUser()) {
+    showToast("Please sign in to save your changes.", "error");
+    return;
+  }
   const saveBtn = el<HTMLButtonElement>("assetDetailSaveBtn");
   saveBtn.disabled = true;
   try {
@@ -236,8 +250,10 @@ async function saveDetails(): Promise<void> {
       name: el<HTMLInputElement>("assetDetailEmployeeInput").value.trim(),
       seatId: el<HTMLInputElement>("assetDetailSeatInput").value.trim(),
       designation: el<HTMLInputElement>("assetDetailDesignationInput").value.trim() || null,
-      liveStatus: el<HTMLSelectElement>("assetDetailStatusInput").value,
-      category: el<HTMLSelectElement>("assetDetailCategoryInput").value,
+      // Status and category are intentionally left out of this employee-facing
+      // edit form — status only changes automatically through the complaint
+      // lifecycle, and category is fixed for a seat's asset type, not a free
+      // choice a signed-in employee should be able to flip.
       imageUrl: pendingImageUrl
     });
     if (activeAssetId !== asset.id) return;
@@ -261,9 +277,14 @@ export function initAssetPopup(): void {
     const button = el<HTMLButtonElement>("assetPopupDetailsBtn");
     const willOpen = details.hidden;
     details.hidden = !willOpen;
+    // The designation line is only useful on the collapsed card — once
+    // Details is open, the "Designation" grid cell already covers it.
+    el<HTMLElement>("assetPopupDescription").hidden = willOpen;
     button.textContent = willOpen ? "Hide Details" : "Details";
     button.setAttribute("aria-expanded", String(willOpen));
-    el<HTMLButtonElement>("assetPopupEditBtn").hidden = !willOpen || !activeAssetId || !getCurrentUser();
+    el<HTMLButtonElement>("assetPopupEditBtn").hidden = !willOpen || !activeAssetId;
+    // Closing Details also exits edit mode (see below), which already hides
+    // the photo pencil — nothing extra to do for it when opening.
     if (!willOpen) setDetailsEditMode(false);
   });
 
