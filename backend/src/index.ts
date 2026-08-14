@@ -19,7 +19,7 @@ import announcementsRouter from "./routes/announcements";
 import usersRouter from "./routes/users";
 import activityLogRouter from "./routes/activityLog";
 import statsRouter from "./routes/stats";
-import { pool } from "./db/client";
+import { pool, closePool } from "./db/client";
 import { attachUser } from "./middleware/auth";
 import { errorHandler } from "./middleware/errorHandler";
 
@@ -92,7 +92,38 @@ app.use("/api/stats", statsRouter);
 
 app.use(errorHandler);
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`[server] running on http://localhost:${PORT}`);
   console.log(`[server] health → http://localhost:${PORT}/api/health`);
 });
+
+// Render sends SIGTERM to the outgoing instance during a deploy/restart.
+// Without this, the pg pool's connections stay open against Supabase's
+// session-mode pooler until they idle-timeout server-side, and a burst of
+// deploys can accumulate enough lingering connections to hit the pooler's
+// client cap (EMAXCONNSESSION). Stop accepting new HTTP connections first,
+// then close the pool once in-flight requests finish.
+let shuttingDown = false;
+function shutdown(signal: string): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[server] ${signal} received, shutting down gracefully…`);
+
+  const forceExitTimer = setTimeout(() => {
+    console.error("[server] shutdown timed out, forcing exit");
+    process.exit(1);
+  }, 10_000);
+  forceExitTimer.unref();
+
+  server.close(() => {
+    closePool()
+      .catch((err) => console.error("[server] error closing db pool:", (err as Error).message))
+      .finally(() => {
+        clearTimeout(forceExitTimer);
+        process.exit(0);
+      });
+  });
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

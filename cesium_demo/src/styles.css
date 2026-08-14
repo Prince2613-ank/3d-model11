@@ -3965,7 +3965,7 @@ body {
   right: 12px;
   z-index: 10003;
   width: min(272px, calc(100vw - 24px));
-  max-height: calc(100vh - 88px);
+  max-height: calc(100vh - 130px);
   overflow-y: auto;
   padding: 12px;
   border-radius: 16px;
@@ -3973,6 +3973,29 @@ body {
   background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
   box-shadow: 0 20px 48px rgba(14, 28, 54, 0.26), 0 0 0 1px rgba(15, 23, 42, 0.03);
   box-sizing: border-box;
+  /* Thin, inset scrollbar instead of the browser's default square-edged bar
+     — that default one visually punched a flat notch through the card's
+     rounded top-right corner once the panel got tall enough to scroll. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(26, 87, 214, 0.32) transparent;
+}
+
+.map-directions-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.map-directions-panel::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 14px 2px;
+}
+
+.map-directions-panel::-webkit-scrollbar-thumb {
+  background: rgba(26, 87, 214, 0.32);
+  border-radius: 999px;
+}
+
+.map-directions-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(26, 87, 214, 0.5);
 }
 
 @media (max-width: 480px) {
@@ -4264,7 +4287,7 @@ body {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 15px;
   padding-left: 16px;
 }
 
@@ -4457,6 +4480,15 @@ body {
    set (e.g. Clear Route showing up before any route has been drawn). */
 .map-clear-route-btn[hidden],
 .map-toggle-directions-btn[hidden] {
+  display: none !important;
+}
+
+/* The compact bottom nav bar (see .nav-bottom-bar below) has its own
+   Preview/Exit controls — if the full Map Route card gets manually reopened
+   via the toolbar icon while that bar is active, hide these two so they
+   don't sit there as redundant duplicates. */
+body.nav-bottom-bar-active #flyPreviewBtn,
+body.nav-bottom-bar-active #exitNavBtn {
   display: none !important;
 }
 
@@ -4767,46 +4799,6 @@ body {
   display: flex !important;
 }
 
-#cameraExitCard {
-  position: fixed;
-  top: 278px;
-  right: 16px;
-  left: auto;
-  width: 300px !important;
-  z-index: 10003;
-  display: none;
-  padding: 0 !important;
-  background: transparent !important;
-  border: 0 !important;
-  box-shadow: none;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-#cameraExitCard[hidden] {
-  display: none !important;
-}
-
-body.camera-view-active #cameraExitCard {
-  display: block;
-}
-
-#cameraViewExitBtn {
-  width: 100%;
-  min-height: 42px;
-  border: 1px solid rgba(229, 57, 53, 0.74);
-  border-radius: 8px;
-  background: #b73a36;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-#cameraViewExitBtn:hover {
-  background: #a8322f;
-}
-
 .camera-panel-header {
   display: flex;
   align-items: center;
@@ -4865,16 +4857,14 @@ body.camera-view-active #cameraExitCard {
 }
 
 .camera-card-scroll-shell {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 18px;
-  gap: 8px;
-  align-items: stretch;
+  display: flex;
   min-height: 0;
   flex: 1 1 auto;
   height: 100%;
 }
 
 .camera-card-scroll {
+  flex: 1 1 auto;
   min-height: 0;
   height: 100%;
   overflow-y: auto;
@@ -4900,14 +4890,6 @@ body.camera-view-active #cameraExitCard {
 #cameraButtons {
   display: grid;
   gap: 7px;
-}
-
-.camera-list-slider {
-  width: 18px;
-  min-height: 100%;
-  writing-mode: vertical-lr;
-  direction: rtl;
-  accent-color: #1a57d6;
 }
 
 #cameraButtons .camera-coverage-row {
@@ -4940,84 +4922,39 @@ body.camera-view-active #cameraExitCard {
   color: #1a3ea8;
 }
 
-.camera-coverage-actions {
+.camera-coverage-toggle-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 6px;
   flex: 0 0 auto;
 }
 
-.camera-coverage-actions .btn {
+.camera-coverage-toggle-row .btn {
   width: 100%;
-  min-height: 52px;
-  padding: 8px 8px;
+  min-height: 32px;
   white-space: normal;
   line-height: 1.2;
 }
 
-.camera-coverage-actions .btn.active {
+.camera-coverage-toggle-row .btn.active {
   background: #1a57d6;
   border-color: rgba(143, 214, 255, 0.9);
   color: #fff;
 }
 
-.camera-coverage-actions .btn.danger {
-  background: #ff333d;
-  border-color: #ff333d;
-  color: #fff;
-}
-
-.coverage-legend {
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  border: 1px solid #d6dee9;
-  border-radius: 8px;
-  background: rgba(248, 251, 255, 0.9);
-  color: #111827;
-  font-size: 14px;
-  flex: 0 0 auto;
-}
-
-.coverage-legend strong {
-  display: block;
-  margin-bottom: 8px;
-}
-
-.coverage-legend div {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 6px;
-}
-
-.legend-swatch {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  flex: 0 0 auto;
-}
-
-.legend-swatch.covered {
-  background: #4caf50;
-}
-
-.legend-swatch.blind {
-  background: #ff333d;
-}
-
-.legend-swatch.overlap {
-  background: #17bfd5;
-}
-
 .camera-coverage-stats {
-  min-height: 18px;
-  margin-bottom: 8px;
+  min-height: 0;
+  margin-bottom: 4px;
   color: #0b3d91;
   font-size: 13px;
   font-weight: 700;
   text-align: center;
   flex: 0 0 auto;
+}
+
+.camera-coverage-stats:empty {
+  margin-bottom: 0;
 }
 
 .panel {
@@ -5190,7 +5127,6 @@ body.solar-workspace-active #bookingPanel {
 }
 
 body.floor-loading-active .user-profile-header,
-body.floor-loading-active #cameraExitCard,
 body.floor-loading-active #cameraPanel,
 body.floor-loading-active #cctvPanel,
 body.floor-loading-active #bookingPanel,
@@ -5481,23 +5417,6 @@ body.floor-loading-active #toastContainer {
   gap: 8px;
 }
 
-.asset-popup-avatar-edit-btn {
-  position: absolute;
-  bottom: -2px;
-  right: -2px;
-  width: 15px;
-  height: 15px;
-  padding: 0;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  background: #1a57d6;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
 #panelCloseBtn,
 .panel-close-btn {
   width: auto !important;
@@ -5776,6 +5695,24 @@ body.floor-loading-active #toastContainer {
 #chairPopup {
   top: 80px;
   z-index: 9999;
+  width: 260px !important;
+  padding: 12px !important;
+  border-radius: 14px !important;
+}
+
+#chairPopup h3 {
+  margin-bottom: 8px;
+  font-size: 17px;
+}
+
+#chairPopup p {
+  margin: 8px 0;
+  font-size: 14px;
+}
+
+#chairPopup button {
+  padding: 8px 10px;
+  font-size: 13px;
 }
 
 .nav-container {
@@ -6144,7 +6081,7 @@ body.floor-loading-active #toastContainer {
   transform: none;
   width: 186px;
   z-index: 1100;
-  display: none !important;
+  display: none;
   padding: 14px;
   background: rgba(14, 17, 26, 0.92);
   border-radius: 14px;
@@ -7111,20 +7048,6 @@ body.camera-view-active .nearby-nav-btn {
     -webkit-overflow-scrolling: touch;
   }
 
-  #cameraExitCard {
-    top: auto;
-    right: 10px;
-    bottom: min(500px, calc(100vh - 64px));
-    left: 10px;
-    width: auto !important;
-    padding: 0 !important;
-  }
-
-  #cameraViewExitBtn {
-    min-height: 38px;
-    font-size: 12px;
-  }
-
   #cameraPanel h3 {
     font-size: 14px;
   }
@@ -7153,33 +7076,21 @@ body.camera-view-active .nearby-nav-btn {
     gap: 6px;
   }
 
-  .camera-coverage-actions {
-    gap: 8px;
-    margin-bottom: 10px;
-  }
-
-  .camera-coverage-actions .btn {
-    min-height: 46px;
-    padding: 7px 6px;
-    font-size: 11px;
-  }
-
-  .coverage-legend {
-    margin-bottom: 10px;
-    padding: 8px 10px;
-    font-size: 12px;
-  }
-
-  .coverage-legend div {
-    gap: 8px;
-    margin-top: 5px;
-  }
-
   #cameraButtons .btn {
     height: 28px;
     padding: 5px 7px !important;
     font-size: 10px;
     line-height: 1.1;
+  }
+
+  .camera-coverage-toggle-row {
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+
+  .camera-coverage-toggle-row .btn {
+    min-height: 30px;
+    font-size: 11px;
   }
 }
 
@@ -8298,24 +8209,61 @@ body.camera-view-active .nearby-nav-btn {
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 1200;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.asset-popup-image-wrap {
+  position: relative;
+  width: 100%;
+  min-height: 140px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  margin-bottom: 10px;
+  overflow: hidden;
 }
 
 .asset-popup-image {
+  display: block;
   width: 100%;
   height: 140px;
   object-fit: contain;
   background: #f1f5f9;
-  border-radius: 10px;
-  margin-bottom: 10px;
+}
+
+.asset-popup-image-edit-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #1a57d6;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+  transition: background 0.15s, transform 0.15s;
+}
+
+.asset-popup-image-edit-btn:hover {
+  background: #16a34a;
+  transform: scale(1.06);
+}
+
+.asset-popup-image-edit-btn[hidden] {
+  display: none !important;
 }
 
 .asset-popup-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  margin: 0 0 8px;
+  /* Redundant with the "Chair status" cell in the details grid below —
+     hidden rather than removed from the DOM so the existing loading/error
+     state logic in assetPopup.ts doesn't need touching. */
+  display: none;
 }
 
 .asset-status-dot {
@@ -8332,9 +8280,17 @@ body.camera-view-active .nearby-nav-btn {
 .asset-status-dot[data-status="resolved"] { background: #2e7d32; }
 
 .asset-popup-description {
-  font-size: 13px;
-  color: #444;
+  /* Only shown on the collapsed card (before "Details" is expanded) — see
+     the assetPopupDetailsBtn click handler in assetPopup.ts. */
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.1px;
+  color: #334155;
   margin: 0 0 10px;
+}
+
+.asset-popup-description[hidden] {
+  display: none !important;
 }
 
 .asset-popup-details {
@@ -8372,14 +8328,16 @@ body.camera-view-active .nearby-nav-btn {
 }
 .asset-detail-editable-cell input,
 .asset-detail-editable-cell select {
+  box-sizing: border-box;
   width: 100%;
-  height: 28px;
+  max-width: 100%;
+  height: 26px;
   padding: 0 6px;
   border: 1px solid rgba(26, 87, 214, .35);
   border-radius: 6px;
   color: #1a202c;
   font: inherit;
-  font-size: 12px;
+  font-size: 11.5px;
   background: #fff;
 }
 .asset-detail-editable-cell input:focus,
@@ -8611,7 +8569,6 @@ body.kiosk-mode #notificationDetailModal,
 body.kiosk-mode #bookingPanel,
 body.kiosk-mode #roomDetailsCard,
 body.kiosk-mode #cameraPanel,
-body.kiosk-mode #cameraExitCard,
 body.kiosk-mode #assistantFab,
 body.kiosk-mode #assistantPanel,
 body.kiosk-mode #complaintFormPopup,
@@ -8647,6 +8604,64 @@ body.kiosk-mode .cesium-baseLayerPicker-dropDown {
   width: auto !important;
   margin: 0 !important;
   pointer-events: auto;
+}
+
+/* Developer camera tuning: kept separate from the end-user CCTV controls. */
+.camera-debug-open-btn {
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
+  z-index: 10020;
+  padding: 8px 11px;
+  border: 1px solid #94a3b8;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, .92);
+  color: #fff;
+  font: 700 12px/1.1 system-ui, sans-serif;
+  cursor: pointer;
+}
+.camera-debug-card {
+  position: fixed;
+  left: 14px;
+  bottom: 56px;
+  z-index: 10021;
+  width: min(340px, calc(100vw - 28px));
+  max-height: min(620px, calc(100vh - 80px));
+  overflow: auto;
+  padding: 13px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .97);
+  color: #0f172a;
+  box-shadow: 0 16px 42px rgba(15, 23, 42, .28);
+  box-sizing: border-box;
+  font: 12px/1.3 system-ui, sans-serif;
+}
+.camera-debug-card[hidden] { display: none; }
+.camera-debug-card header { display: flex; align-items: center; justify-content: space-between; font-size: 15px; }
+.camera-debug-card header button { border: 0; border-radius: 6px; background: #e2e8f0; color: #334155; font-size: 20px; line-height: 22px; width: 25px; cursor: pointer; }
+.camera-debug-note { margin: 7px 0; color: #64748b; font-size: 11px; }
+.camera-debug-live { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 8px; border-radius: 8px; background: #eff6ff; }
+.camera-debug-live span { display: flex; justify-content: space-between; gap: 7px; color: #475569; }
+.camera-debug-live output { color: #0f172a; font-family: ui-monospace, monospace; font-size: 10px; }
+.camera-debug-nudge { display: grid; grid-template-columns: 1fr repeat(4, 26px); gap: 4px; align-items: center; margin-top: 8px; }
+.camera-debug-nudge span { color: #475569; font-size: 10px; font-weight: 800; }
+.camera-debug-nudge button { width: 26px; height: 24px; padding: 0; border: 1px solid #93c5fd; border-radius: 5px; background: #eff6ff; color: #1d4ed8; font-size: 15px; font-weight: 800; cursor: pointer; }
+.camera-debug-nudge button:hover { background: #dbeafe; }
+.camera-debug-nudge-height { grid-template-columns: 1fr 1fr 1fr; }
+.camera-debug-nudge-height button { width: auto; padding: 0 6px; font-size: 10px; white-space: nowrap; }
+.camera-debug-card details { margin-top: 9px; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+.camera-debug-card summary { cursor: pointer; color: #1d4ed8; font-weight: 800; }
+.camera-debug-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 8px; }
+.camera-debug-grid label { color: #475569; font-size: 10px; font-weight: 700; }
+.camera-debug-grid input { display: block; width: 100%; margin-top: 2px; padding: 5px 6px; border: 1px solid #cbd5e1; border-radius: 5px; box-sizing: border-box; color: #0f172a; font: 11px ui-monospace, monospace; }
+.camera-debug-actions { display: flex; gap: 6px; margin-top: 8px; }
+.camera-debug-actions button { flex: 1; padding: 6px; border: 0; border-radius: 6px; background: #2563eb; color: #fff; font: 700 10px system-ui, sans-serif; cursor: pointer; }
+.camera-debug-actions button:last-child { background: #475569; }
+@media (max-width: 540px) { .camera-debug-open-btn { bottom: 74px; } .camera-debug-card { bottom: 116px; } }
+body.nav-bottom-bar-active .camera-debug-open-btn,
+body.nav-bottom-bar-active .camera-debug-card {
+  display: none;
 }
 @media (max-width: 540px) {
   .floating-clear-dock {

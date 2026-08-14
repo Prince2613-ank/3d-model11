@@ -132,6 +132,10 @@ export type CameraConfig = {
   headingMax?: number;
   pitchMin?: number;
   pitchMax?: number;
+  /** Lowest the eye may be nudged via "Sit down", in meters above the ellipsoid. */
+  heightMin?: number;
+  /** Highest the eye may be nudged via "Stand up", in meters above the ellipsoid. */
+  heightMax?: number;
   fovDeg?: number;
   maxRangeMeters?: number;
   eyeOffsetMeters?: number;
@@ -454,11 +458,23 @@ function configureCameraModel(camera: CameraModel, index: number, floor: number)
       fovDeg: 55,
       eyeOffsetMeters: 0
     },
-    { lon: 77.133660, lat: 28.670871, height: 9.86, heading: 359.90, pitch: -60.75, fovDeg: 55, eyeOffsetMeters: 0 },
-    { lon: 77.133629, lat: 28.670932, height: 9.13, heading: 64.73, pitch: -79.38 },
-    { lon: 77.133595, lat: 28.670980, height: 8.00, heading: 7, pitch: -61 },
-    { lon: 77.133654, lat: 28.671010, height: 11.30, heading: 179.47, pitch: -50.29 },
-    { lon: 77.133730, lat: 28.670906, height: 8.50, heading: 2.29, pitch: -33.10, fovDeg: 55, eyeOffsetMeters: 0 }
+    {
+      lon: 77.133660,
+      lat: 28.670871,
+      height: 9.36,
+      heading: 18.5,
+      pitch: -53.75,
+      headingMin: 353,
+      headingMax: 28,
+      pitchMin: -70,
+      pitchMax: -42,
+      fovDeg: 55,
+      eyeOffsetMeters: 0,
+    },
+    { lon: 77.133629, lat: 28.670932, height: 8.93, heading: 73.13, pitch: -85, headingMin: 60, headingMax: 99, pitchMax: -71 },
+    { lon: 77.133595, lat: 28.670980, height: 8.00, heading: 7, pitch: -61, headingMin: 349, headingMax: 29, pitchMax: -40 },
+    { lon: 77.133654, lat: 28.671009, height: 9.40, heading: 179.47, pitch: -51.29, headingMin: 175, headingMax: 184, pitchMin: -60, pitchMax: -44 },
+    { lon: 77.133730, lat: 28.670906, height: 8.50, heading: 2.29, pitch: -33.10, headingMax: 15, pitchMin: -39, pitchMax: -23, fovDeg: 55, eyeOffsetMeters: 0 }
   ];
 
   const configs3rdFloor: CameraConfig[] = [
@@ -474,7 +490,16 @@ function configureCameraModel(camera: CameraModel, index: number, floor: number)
       pitchMax: -10,
       fovDeg: 120
     },
-    { lon: 77.133668, lat: 28.670870, height: ALT_3RD + 1.8, heading: 8, pitch: -32 },
+    {
+      lon: 77.133668,
+      lat: 28.670870,
+      height: ALT_3RD + 1.8,
+      heading: 8,
+      pitch: -32,
+      headingMin: 318,
+      headingMax: 3,
+      pitchMax: -22,
+    },
     {
       lon: 77.13370575798822,
       lat: 28.67090204621658,
@@ -724,6 +749,8 @@ let cctvHeadingMinDeg: number | null = null;
 let cctvHeadingMaxDeg: number | null = null;
 let cctvPitchMinDeg = CCTV_PITCH_MIN;
 let cctvPitchMaxDeg = CCTV_PITCH_MAX;
+let cctvHeightMinMeters: number | null = null;
+let cctvHeightMaxMeters: number | null = null;
 let cctvFovRad = CCTV_FOV_RAD;
 let onCctvStateChange: ((h: number, p: number) => void) | null = null;
 let cctvCameraModel: CameraModel | null = null;
@@ -775,8 +802,18 @@ function applyCctvCamera(): void {
 function clampCctvHeading(heading: number): number {
   const normalized = ((heading % 360) + 360) % 360;
   if (cctvHeadingMinDeg === null || cctvHeadingMaxDeg === null) return normalized;
-  if (cctvHeadingMinDeg === cctvHeadingMaxDeg) return cctvHeadingMinDeg;
-  return Math.max(cctvHeadingMinDeg, Math.min(cctvHeadingMaxDeg, normalized));
+  const min = cctvHeadingMinDeg;
+  const max = cctvHeadingMaxDeg;
+  if (min === max) return min;
+
+  // When min > max, the allowed arc wraps through the 0°/360° boundary
+  // (e.g. min 318, max 3 means the camera may sweep 318°→360°→3°).
+  const wraps = min > max;
+  const inRange = wraps ? (normalized >= min || normalized <= max) : (normalized >= min && normalized <= max);
+  if (inRange) return normalized;
+
+  const angularDistance = (a: number, b: number): number => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
+  return angularDistance(normalized, min) <= angularDistance(normalized, max) ? min : max;
 }
 
 export function enterCctvMode(
@@ -793,6 +830,8 @@ export function enterCctvMode(
   cctvHeadingMaxDeg = config.headingMax ?? null;
   cctvPitchMinDeg = config.pitchMin ?? CCTV_PITCH_MIN;
   cctvPitchMaxDeg = config.pitchMax ?? CCTV_PITCH_MAX;
+  cctvHeightMinMeters = config.heightMin ?? null;
+  cctvHeightMaxMeters = config.heightMax ?? null;
   cctvFovRad = Cesium.Math.toRadians(config.fovDeg ?? 85);
   cctvHeadingDeg = clampCctvHeading(config.heading);
   cctvPitchDeg = Math.max(cctvPitchMinDeg, Math.min(cctvPitchMaxDeg, config.pitch));
@@ -867,6 +906,8 @@ export function exitCctvMode(): void {
   cctvHeadingMaxDeg = null;
   cctvPitchMinDeg = CCTV_PITCH_MIN;
   cctvPitchMaxDeg = CCTV_PITCH_MAX;
+  cctvHeightMinMeters = null;
+  cctvHeightMaxMeters = null;
   cctvFovRad = CCTV_FOV_RAD;
   cctvDefaultPosition = null;
   cctvDefaultHeadingDeg = 0;
@@ -902,6 +943,31 @@ export function setCctvHeading(deltaDeg: number): void {
 export function setCctvPitch(deltaDeg: number): void {
   if (!cctvActive || !cctvReady) return;
   cctvPitchDeg = Math.max(cctvPitchMinDeg, Math.min(cctvPitchMaxDeg, cctvPitchDeg + deltaDeg));
+  applyCctvCamera();
+}
+
+/** Moves the active CCTV eye in its current screen plane for view tuning. */
+export function moveCctvCamera(horizontalMeters: number, verticalMeters: number): void {
+  if (!cctvActive || !cctvReady || !cctvPosition) return;
+  const horizontal = Cesium.Cartesian3.multiplyByScalar(viewer.camera.rightWC, horizontalMeters, new Cesium.Cartesian3());
+  const vertical = Cesium.Cartesian3.multiplyByScalar(viewer.camera.upWC, verticalMeters, new Cesium.Cartesian3());
+  Cesium.Cartesian3.add(cctvPosition, horizontal, cctvPosition);
+  Cesium.Cartesian3.add(cctvPosition, vertical, cctvPosition);
+  applyCctvCamera();
+}
+
+/** Raises/lowers the active CCTV eye in place (world-vertical), keeping heading/pitch fixed. */
+export function moveCctvHeight(deltaMeters: number): void {
+  if (!cctvActive || !cctvReady || !cctvPosition) return;
+  const up = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(cctvPosition, new Cesium.Cartesian3());
+  const offset = Cesium.Cartesian3.multiplyByScalar(up, deltaMeters, new Cesium.Cartesian3());
+  const candidate = Cesium.Cartesian3.add(cctvPosition, offset, new Cesium.Cartesian3());
+  if (cctvHeightMinMeters !== null || cctvHeightMaxMeters !== null) {
+    const height = Cesium.Cartographic.fromCartesian(candidate).height;
+    if (cctvHeightMinMeters !== null && height < cctvHeightMinMeters) return;
+    if (cctvHeightMaxMeters !== null && height > cctvHeightMaxMeters) return;
+  }
+  cctvPosition = candidate;
   applyCctvCamera();
 }
 

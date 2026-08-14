@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
-import { api } from "../lib/api";
+import { api, AUTH_EXPIRED_EVENT } from "../lib/api";
 import type { Profile } from "../types/domain";
 
 const PROFILE_POLL_INTERVAL_MS = 2 * 60 * 1000;
@@ -11,6 +11,7 @@ const PROFILE_POLL_INTERVAL_MS = 2 * 60 * 1000;
 const PROFILE_CACHE_KEY = "digital-twin-admin-profile";
 const GOOGLE_TOKEN_CACHE_KEY = "digital-twin-admin-google-calendar-token";
 const GOOGLE_TOKEN_LIFETIME_MS = 50 * 60 * 1000;
+export const SESSION_EXPIRED_MESSAGE_KEY = "digital-twin-admin-session-expired-message";
 
 function cacheGoogleToken(token: string | null): void {
   if (!token) {
@@ -90,6 +91,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       subscription.subscription.unsubscribe();
     };
+  }, []);
+
+  // api.ts dispatches this when a request is still 401 after a fresh-token
+  // retry (session expired/revoked, or the backend's 24h inactivity rule).
+  // The actual sign-out already happened there; this just leaves a message
+  // for the login screen to show once the SIGNED_OUT listener above clears
+  // session/profile state and ProtectedRoute swaps in <LoginPage />.
+  useEffect(() => {
+    const onAuthExpired = () => {
+      try { window.sessionStorage.setItem(SESSION_EXPIRED_MESSAGE_KEY, "Your session expired. Please log in again."); } catch { /* ignore */ }
+    };
+    window.addEventListener(AUTH_EXPIRED_EVENT, onAuthExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onAuthExpired);
   }, []);
 
   // Fetches /me and applies the result. `silent` skips the loading spinner —

@@ -24,12 +24,10 @@ import { getLiveRoom } from "./rooms";
 import { openComplaintForm } from "./complaintForm";
 import { FLOOR_CAMERAS } from "./config";
 import { isPreviewActive, togglePreviewPause } from "./navigation";
+import { isCameraDebugOpen } from "./cameraDebug";
 import {
   clearCctvViewshed,
-  showBlindSpots,
-  showCameraViewshed,
-  showCoverageAndBlindSpots,
-  showCoverageOnly,
+  showCoverage,
   type CctvCoverageStats,
 } from "./cameraShed/cctvViewshed";
 
@@ -1280,6 +1278,20 @@ export function installMapDirectionsControl(): void {
       pendingWorldRouteNavigation = null;
 
       if (pending) {
+        // Re-select the indoor destination from the authoritative roomPOI
+        // (not the raw text the user typed) right before starting indoor
+        // nav. If the room isn't in the indoor map data, the "toRoom" select
+        // would otherwise silently stay on whatever it was previously set
+        // to — which defaults to the alphabetically-first room — sending
+        // navigation to the wrong place instead of failing loudly.
+        const matched = selectIndoorRoom("toRoom", pending.roomPOI.name, pending.roomPOI.floorLabel);
+        selectIndoorRoom("fromRoom", "Entrance", "2nd"); // physical building entrance is always on 2nd floor
+        if (!matched) {
+          showToast(`"${pending.roomPOI.name}" isn't set up for indoor navigation yet.`, "error");
+          panel.hidden = false;
+          return;
+        }
+
         await orchestrateCameraForRoute(pending.route, pending.roomPOI, pending.destinationLabel);
         setNavigationMessage("Arrived outside. Starting indoor navigation from Entrance.", false);
         await enterBuildingAndStartIndoorNavigation(pending.roomPOI.floor);
@@ -1355,22 +1367,26 @@ export function installMapDirectionsControl(): void {
           ? { route, roomPOI, destinationLabel: destination }
           : null;
 
-        if (roomPOI && autoStartIndoorNav) {
-          autoStartIndoorNav = false;
-          indoorNavBtn?.click();
-        }
-
         if (roomPOI?.positionApproximate) {
           showToast(`Note: ${roomPOI.name} door position is approximate — verify on site.`, "error");
         }
 
-        await orchestrateCameraForRoute(route, null, destination);
-        setNavigationMessage(
-          roomPOI
-            ? "Full outdoor route shown. Press Start Indoor Navigation to begin camera navigation."
-            : "Outdoor route shown on map.",
-          false
-        );
+        if (roomPOI && autoStartIndoorNav) {
+          // indoorNavBtn's own handler drives the camera for this case
+          // (using the correct roomPOI) — running the generic camera call
+          // below at the same time would race it and produce a janky
+          // double-handoff.
+          autoStartIndoorNav = false;
+          indoorNavBtn?.click();
+        } else {
+          await orchestrateCameraForRoute(route, null, destination);
+          setNavigationMessage(
+            roomPOI
+              ? "Full outdoor route shown. Press Start Indoor Navigation to begin camera navigation."
+              : "Outdoor route shown on map.",
+            false
+          );
+        }
       } catch (error) {
         console.error("Failed to show outdoor route:", error);
         showToast("Could not load outdoor route.", "error");
@@ -1648,9 +1664,7 @@ let loadingMessageTimer: number | null = null;
 let loadingOverlayDepth = 0;
 let cameraControlsLocked = false;
 let cameraViewWarningShownAt = 0;
-type CctvViewshedMode = "camera" | "coverage" | "blind" | "both";
 let activeCctvCamera: CameraModel | null = null;
-let activeCctvViewshedMode: CctvViewshedMode = "camera";
 let cctvViewshedUiToken = 0;
 let activeCameraControlFloor: number | null = null;
 let cameraPanelUserOpen = false;
@@ -1700,8 +1714,6 @@ function syncCameraPanelVisibility(): void {
     panel.style.pointerEvents = isAvailable ? "auto" : "none";
     panel.style.opacity = isAvailable ? "1" : "0.5";
   }
-
-  if (showPanel) requestAnimationFrame(syncCameraListSlider);
 }
 
 function showExitCameraViewToast(): void {
@@ -1763,11 +1775,6 @@ export function enableCameraControls(): void {
 function setCameraViewControlsLocked(locked: boolean): void {
   document.body.classList.toggle("camera-view-active", locked);
   document.body.classList.remove("side-panel-open");
-
-  const exitCard = optionalElement<HTMLElement>("cameraExitCard");
-  const exitButton = optionalElement<HTMLButtonElement>("cameraViewExitBtn");
-  if (exitCard) exitCard.hidden = !locked;
-  if (exitButton) exitButton.disabled = !locked;
 
   const hamburger = optionalElement<HTMLButtonElement>("hamburgerMenu");
   if (hamburger) {
@@ -2048,10 +2055,15 @@ export function bindUiControls(callbacks: UiCallbacks): void {
 
   optionalElement<HTMLButtonElement>("exitNavBtn")?.addEventListener("click", () => {
     callbacks.exitNavigation();
+    hideNavBottomBar();
   });
 
   optionalElement<HTMLButtonElement>("navBottomCloseBtn")?.addEventListener("click", () => {
+    // exitNavigation() only clears the route/camera state — it doesn't know
+    // about the bottom bar at all, so without this the bar (or a blank
+    // screen) was left behind instead of the Map Route card reopening.
     callbacks.exitNavigation();
+    hideNavBottomBar();
   });
 
   optionalElement<HTMLButtonElement>("navBottomPreviewBtn")?.addEventListener("click", () => {
@@ -2504,6 +2516,11 @@ export function showNavBottomBar(): void {
   const bar = optionalElement<HTMLElement>("navBottomBar");
   if (bar) bar.hidden = false;
   setNavBottomPreviewIcon(false);
+  // The compact bar has its own Preview/Exit controls — if the user manually
+  // reopens the full Map Route card via the toolbar icon while it's active
+  // (panel.hidden above doesn't stop that), its Preview Route / Exit
+  // Navigation buttons would just be redundant duplicates of those.
+  document.body.classList.add("nav-bottom-bar-active");
   syncMapToolbarButtonActive();
 }
 
@@ -2515,6 +2532,7 @@ export function hideNavBottomBar(): void {
   // resting-state message on every boot, which must not force the card open.
   const wasActive = bar ? !bar.hidden : false;
   if (bar) bar.hidden = true;
+  document.body.classList.remove("nav-bottom-bar-active");
   if (wasActive) {
     const panel = optionalElement<HTMLElement>("mapDirectionsPanel");
     if (panel) panel.hidden = false;
@@ -2790,40 +2808,42 @@ function setViewshedStatus(stats: CctvCoverageStats | null): void {
     : "";
 }
 
-function syncViewshedModeButtons(): void {
-  document.querySelectorAll<HTMLButtonElement>("[data-cctv-viewshed]").forEach((button) => {
-    const isActive = button.dataset.cctvViewshed === activeCctvViewshedMode;
-    button.classList.toggle("active", isActive);
-    button.setAttribute("aria-pressed", String(isActive));
-  });
+function toCoverageMode(showCoverageLayer: boolean, showBlindLayer: boolean): "coverageOnly" | "blindOnly" | "coverageAndBlind" | null {
+  if (showCoverageLayer && showBlindLayer) return "coverageAndBlind";
+  if (showCoverageLayer) return "coverageOnly";
+  if (showBlindLayer) return "blindOnly";
+  return null;
 }
 
-async function renderActiveCctvViewshed(): Promise<void> {
-  const token = ++cctvViewshedUiToken;
-  syncViewshedModeButtons();
+// ── Coverage overlay: a single "Coverage" / "Blind Spot" toggle pair lives
+// in the Camera Controls panel. If a camera view is currently open, they
+// show that camera's own footprint; otherwise they show every camera on
+// the active floor combined. ───────────────────────────────────────────
+let coverageOverlayOn = false;
+let blindOverlayOn = false;
 
-  const camera = activeCctvCamera;
+function getOverlayCameras(): CameraModel[] {
+  return activeCctvCamera ? [activeCctvCamera] : getActiveFloorCameras();
+}
+
+function syncCoverageToggleButtons(): void {
+  const covBtn = optionalElement<HTMLButtonElement>("floorCoverageToggle");
+  const blindBtn = optionalElement<HTMLButtonElement>("floorBlindToggle");
+  if (covBtn) { covBtn.classList.toggle("active", coverageOverlayOn); covBtn.setAttribute("aria-pressed", String(coverageOverlayOn)); }
+  if (blindBtn) { blindBtn.classList.toggle("active", blindOverlayOn); blindBtn.setAttribute("aria-pressed", String(blindOverlayOn)); }
+}
+
+async function renderCoverageOverlay(): Promise<void> {
+  const token = ++cctvViewshedUiToken;
   const floor = getActiveViewshedFloor();
-  if (!floor) {
+  const mode = toCoverageMode(coverageOverlayOn, blindOverlayOn);
+  if (!floor || !mode) {
     clearCctvViewshed();
     setViewshedStatus(null);
     return;
   }
   try {
-    const floorCameras = getActiveFloorCameras();
-    let stats: CctvCoverageStats;
-    if (activeCctvViewshedMode === "coverage") {
-      stats = await showCoverageOnly(floorCameras, floor);
-    } else if (activeCctvViewshedMode === "blind") {
-      stats = await showBlindSpots(floorCameras, floor);
-    } else if (activeCctvViewshedMode === "both") {
-      stats = await showCoverageAndBlindSpots(floorCameras, floor);
-    } else if (camera) {
-      stats = await showCameraViewshed(camera, floor);
-    } else {
-      stats = await showCoverageOnly(floorCameras, floor);
-    }
-
+    const stats = await showCoverage(getOverlayCameras(), floor, mode);
     if (token === cctvViewshedUiToken) setViewshedStatus(stats);
   } catch (error) {
     console.warn("[CCTV Viewshed] Failed to render:", error);
@@ -2831,38 +2851,34 @@ async function renderActiveCctvViewshed(): Promise<void> {
   }
 }
 
+function setCoverageToggle(layer: "coverage" | "blind", enabled: boolean): void {
+  if (layer === "coverage") coverageOverlayOn = enabled;
+  else blindOverlayOn = enabled;
+  syncCoverageToggleButtons();
+  void renderCoverageOverlay();
+}
+
+function resetCoverageToggles(): void {
+  coverageOverlayOn = false;
+  blindOverlayOn = false;
+  syncCoverageToggleButtons();
+}
+
+export function bindFloorCoverageToggles(): void {
+  const covBtn = optionalElement<HTMLButtonElement>("floorCoverageToggle");
+  const blindBtn = optionalElement<HTMLButtonElement>("floorBlindToggle");
+  if (!covBtn || !blindBtn || covBtn.dataset.bound === "1") return;
+  covBtn.dataset.bound = "1";
+  covBtn.addEventListener("click", () => setCoverageToggle("coverage", !coverageOverlayOn));
+  blindBtn.addEventListener("click", () => setCoverageToggle("blind", !blindOverlayOn));
+}
+
 function clearActiveCctvViewshed(): void {
   cctvViewshedUiToken += 1;
   activeCctvCamera = null;
-  activeCctvViewshedMode = "camera";
+  resetCoverageToggles();
   clearCctvViewshed();
   setViewshedStatus(null);
-  syncViewshedModeButtons();
-}
-
-function syncCameraListSlider(): void {
-  const list = optionalElement<HTMLElement>("cameraPanelBody");
-  const slider = optionalElement<HTMLInputElement>("cameraListSlider");
-  if (!list || !slider) return;
-
-  const maxScroll = Math.max(0, list.scrollHeight - list.clientHeight);
-  slider.max = String(Math.ceil(maxScroll));
-  slider.value = String(Math.min(Math.ceil(list.scrollTop), maxScroll));
-  slider.hidden = maxScroll <= 1;
-  slider.disabled = maxScroll <= 1;
-}
-
-function bindCameraListSlider(): void {
-  const list = optionalElement<HTMLElement>("cameraPanelBody");
-  const slider = optionalElement<HTMLInputElement>("cameraListSlider");
-  if (!list || !slider || slider.dataset.bound === "1") return;
-
-  slider.dataset.bound = "1";
-  slider.addEventListener("input", () => {
-    list.scrollTop = Number(slider.value);
-  });
-  list.addEventListener("scroll", syncCameraListSlider, { passive: true });
-  window.addEventListener("resize", syncCameraListSlider);
 }
 
 function syncCameraPanelToggle(): void {
@@ -2887,7 +2903,6 @@ function bindCameraPanelToggle(): void {
     toggle.addEventListener("click", () => {
       panel.classList.toggle("camera-panel-minimized");
       syncCameraPanelToggle();
-      requestAnimationFrame(syncCameraListSlider);
     });
   }
 
@@ -2898,19 +2913,13 @@ function setDynamicButtonText(button: HTMLButtonElement, label: string): void {
   button.textContent = label;
   button.title = label;
   button.setAttribute("aria-label", label);
-
-  const compactSize =
-    label.length > 22 ? "9px" :
-    label.length > 16 ? "10px" :
-    label.length > 12 ? "11px" :
-    label.length > 9 ? "12px" :
-    "13px";
-  button.style.fontSize = compactSize;
 }
 
 export function showCctvPanel(heading: number, pitch: number): void {
   setText("cctvHeadingDisplay", `${Math.round(heading)}°`);
   setText("cctvPitchDisplay", `${Math.round(pitch)}°`);
+  const panel = optionalElement<HTMLElement>("cctvPanel");
+  if (panel) panel.style.display = "block";
 }
 
 export function hideCctvPanel(): void {
@@ -2946,7 +2955,6 @@ export function bindCctvPanel(): void {
   const downBtn = optionalElement<HTMLButtonElement>("cctvDown");
   const defaultBtn = optionalElement<HTMLButtonElement>("cctvDefault");
   const exitBtn = optionalElement<HTMLButtonElement>("cctvExit");
-  const cameraViewExitBtn = optionalElement<HTMLButtonElement>("cameraViewExitBtn");
   if (!leftBtn || !rightBtn || !upBtn || !downBtn || !defaultBtn || !exitBtn) return;
 
   bindHoldButton(leftBtn, () => setCctvHeading(-0.6));
@@ -2954,23 +2962,9 @@ export function bindCctvPanel(): void {
   bindHoldButton(upBtn, () => setCctvPitch(0.5));
   bindHoldButton(downBtn, () => setCctvPitch(-0.5));
   defaultBtn.addEventListener("click", resetCctvDefaultView);
-  document.querySelectorAll<HTMLButtonElement>("[data-cctv-viewshed]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const mode = button.dataset.cctvViewshed;
-      if (mode === "clear") {
-        clearActiveCctvViewshed();
-        return;
-      }
-      if (mode !== "camera" && mode !== "coverage" && mode !== "blind" && mode !== "both") return;
-      if (mode === activeCctvViewshedMode) return;
-      activeCctvViewshedMode = mode;
-      void renderActiveCctvViewshed();
-    });
-  });
   viewer.scene.preRender.addEventListener(updateCctvDebugInfo);
 
   exitBtn.addEventListener("click", exitCameraView);
-  cameraViewExitBtn?.addEventListener("click", exitCameraView);
 }
 
 // ── Camera presets ────────────────────────────────────────────────
@@ -2989,7 +2983,7 @@ export function openCameraView(camera: CameraModel): void {
   }, camera);
   setCameraViewControlsLocked(true);
   showCctvPanel(camera.cameraConfig.heading, camera.cameraConfig.pitch);
-  void renderActiveCctvViewshed();
+  void renderCoverageOverlay();
 
   // Sync UI highlight
   const container = document.getElementById("cameraButtons");
@@ -3008,10 +3002,12 @@ export function renderCameraControls(floor: number): void {
   if (!panel || !container) return;
 
   bindCameraPanelToggle();
-  bindCameraListSlider();
   const nextCameraControlFloor = floor === 3 || floor === 4 ? floor : null;
   if (activeCameraControlFloor !== nextCameraControlFloor) {
     cameraPanelUserOpen = false;
+    resetCoverageToggles();
+    clearCctvViewshed();
+    setViewshedStatus(null);
   }
   activeCameraControlFloor = nextCameraControlFloor;
   const cameras = (FLOOR_CAMERAS[floor] || []).filter((camera) => camera.showInControls !== false);
@@ -3020,15 +3016,11 @@ export function renderCameraControls(floor: number): void {
     activeCameraControlFloor = null;
     cameraPanelUserOpen = false;
     syncCameraPanelVisibility();
-    syncCameraListSlider();
     return;
   }
 
   container.innerHTML = "";
   cameras.forEach((cam) => {
-    const row = document.createElement("div");
-    row.className = "camera-coverage-row";
-
     const btn = document.createElement("button");
     btn.className = "btn";
     btn.type = "button";
@@ -3053,32 +3045,8 @@ export function renderCameraControls(floor: number): void {
         btn.disabled = false;
       }
     };
-    const coverageBtn = document.createElement("button");
-    coverageBtn.className = "btn";
-    coverageBtn.type = "button";
-    setDynamicButtonText(coverageBtn, "Coverage");
-    coverageBtn.disabled = cameraControlsLocked;
-    coverageBtn.onclick = async () => {
-      if (cameraControlsLocked) return;
-      coverageBtn.disabled = true;
-      try {
-        await ensureFloorModelLoaded(floor);
-        const model = getCameraByName(cam.name, floor);
-        if (!model) {
-          showToast("Camera model is not ready yet.", "error");
-          return;
-        }
-        activeCctvCamera = model;
-        activeCctvViewshedMode = "camera";
-        void renderActiveCctvViewshed();
-      } finally {
-        coverageBtn.disabled = false;
-      }
-    };
 
-    row.appendChild(btn);
-    row.appendChild(coverageBtn);
-    container.appendChild(row);
+    container.appendChild(btn);
   });
 
   syncCameraPanelVisibility();
@@ -3528,29 +3496,70 @@ export function installSceneInteractions(
   sceneCallbacks: SceneCallbacks = {}
 ): void {
   const warnIfCctvAction = (event?: Event): void => {
-    if (!isCctvActive()) return;
+    if (!isCctvActive() || isCameraDebugOpen()) return;
     event?.preventDefault();
     event?.stopPropagation();
     showExitCameraViewToast();
   };
 
   const canvas = viewer.scene.canvas;
-  canvas.addEventListener("pointerdown", warnIfCctvAction, { capture: true });
+
+  // Debug-card drag-to-look: while tuning a CCTV camera's view with the
+  // Camera Debug card open, dragging on the canvas rotates heading/pitch in
+  // place (via the same clamped setCctvHeading/setCctvPitch the d-pad uses)
+  // instead of letting Cesium's stock orbit controller touch the camera —
+  // that controller expects a visible globe/terrain to orbit around, which
+  // CCTV mode hides, so it can't be relied on here.
+  let debugLookPointerId: number | null = null;
+  let debugLookLastX = 0;
+  let debugLookLastY = 0;
+  const HEADING_DEG_PER_PX = 0.15;
+  const PITCH_DEG_PER_PX = 0.15;
+
+  canvas.addEventListener("pointerdown", (event: PointerEvent) => {
+    if (isCctvActive() && isCameraDebugOpen()) {
+      debugLookPointerId = event.pointerId;
+      debugLookLastX = event.clientX;
+      debugLookLastY = event.clientY;
+      canvas.setPointerCapture(event.pointerId);
+      event.preventDefault();
+      return;
+    }
+    warnIfCctvAction(event);
+  }, { capture: true });
   canvas.addEventListener("touchstart", warnIfCctvAction, { capture: true, passive: false });
   canvas.addEventListener("wheel", warnIfCctvAction, { capture: true, passive: false });
   canvas.addEventListener("dblclick", warnIfCctvAction, { capture: true });
   canvas.addEventListener("contextmenu", warnIfCctvAction, { capture: true });
   canvas.addEventListener("pointermove", (event: PointerEvent) => {
+    if (debugLookPointerId !== null && event.pointerId === debugLookPointerId) {
+      const dx = event.clientX - debugLookLastX;
+      const dy = event.clientY - debugLookLastY;
+      debugLookLastX = event.clientX;
+      debugLookLastY = event.clientY;
+      if (dx) setCctvHeading(dx * HEADING_DEG_PER_PX);
+      if (dy) setCctvPitch(-dy * PITCH_DEG_PER_PX);
+      event.preventDefault();
+      return;
+    }
     if (event.buttons) warnIfCctvAction(event);
   }, { capture: true });
+  const endDebugLook = (event: PointerEvent): void => {
+    if (debugLookPointerId !== null && event.pointerId === debugLookPointerId) {
+      canvas.releasePointerCapture(event.pointerId);
+      debugLookPointerId = null;
+    }
+  };
+  canvas.addEventListener("pointerup", endDebugLook, { capture: true });
+  canvas.addEventListener("pointercancel", endDebugLook, { capture: true });
 
   viewer.screenSpaceEventHandler.setInputAction(() => {
-    if (isCctvActive()) showExitCameraViewToast();
+    if (isCctvActive() && !isCameraDebugOpen()) showExitCameraViewToast();
   }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
 
   viewer.screenSpaceEventHandler.setInputAction((click: { position: Cesium.Cartesian2 }) => {
     if (isCctvActive()) {
-      showExitCameraViewToast();
+      if (!isCameraDebugOpen()) showExitCameraViewToast();
       return;
     }
 
