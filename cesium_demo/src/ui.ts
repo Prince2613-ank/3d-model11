@@ -1058,6 +1058,11 @@ export function setEnterBuildingFloorSwitchCallback(
 }
 
 async function enterBuildingAndStartIndoorNavigation(_targetFloor: number): Promise<void> {
+  // The outdoor flythrough's own top banner (playOutdoorRouteCamera's
+  // "Arrived outside" HUD) has no auto-hide of its own — without this it
+  // stays on screen indefinitely once indoor navigation's bottom bar takes
+  // over, making a successful handoff look stuck instead of finished.
+  hideNavigationHud();
   optionalElement<HTMLElement>("enterBuildingPrompt")?.setAttribute("hidden", "");
   optionalElement<HTMLElement>("mapDirectionsPanel")?.setAttribute("hidden", "");
 
@@ -1066,8 +1071,32 @@ async function enterBuildingAndStartIndoorNavigation(_targetFloor: number): Prom
   indoorNavReadyToStart = true;
   if (fromSel?.value && toSel?.value) {
     optionalElement<HTMLButtonElement>("startNavBtn")?.click();
+    void autoStartIndoorPreviewWhenReady();
   } else {
     setNavigationMessage("Inside the building. Select your room and start navigation.", false);
+  }
+}
+
+/**
+ * Mirrors the outdoor flythrough: once arriving from an outdoor route
+ * auto-starts indoor navigation, also auto-start its camera preview
+ * walkthrough — otherwise the journey stops at a static "press Preview"
+ * card instead of continuing to play out on its own. startNavBtn's click
+ * kicks off route setup asynchronously without exposing a promise here, so
+ * poll briefly for the bottom nav bar (and its Preview button) to actually
+ * appear before clicking it — clicking too early would be a no-op.
+ */
+async function autoStartIndoorPreviewWhenReady(): Promise<void> {
+  const bar = optionalElement<HTMLElement>("navBottomBar");
+  const previewBtn = optionalElement<HTMLButtonElement>("navBottomPreviewBtn");
+  if (!bar || !previewBtn) return;
+
+  for (let attempts = 0; attempts < 40; attempts += 1) { // ~10s cutoff
+    if (!bar.hidden && !previewBtn.hidden && !previewBtn.disabled) {
+      previewBtn.click();
+      return;
+    }
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 250));
   }
 }
 
@@ -1325,6 +1354,13 @@ export function installMapDirectionsControl(): void {
         showToast("Room location not configured. Contact admin to add door coordinates.", "error");
         return;
       }
+
+      // Any route ending at a real indoor room should continue straight into
+      // indoor navigation once the outdoor leg reaches the entrance — not
+      // just when the user came in through the "Start Indoor Navigation"
+      // button. "Show Route" alone used to leave the user stranded outside
+      // needing a second manual click.
+      if (roomPOI) autoStartIndoorNav = true;
 
       routeButton.disabled = true;
       routeButton.textContent = "Finding Route…";
@@ -2042,9 +2078,10 @@ export function bindUiControls(callbacks: UiCallbacks): void {
     const originIsRoom = isKnownDropdownRoom(originVal);
     const destIsRoom = isKnownDropdownRoom(destVal);
 
-    // Outdoor → Indoor: show outdoor route then auto-start indoor nav
+    // Outdoor → Indoor: show outdoor route, which now always auto-starts
+    // indoor nav on arrival when the destination resolves to a real room
+    // (see the showGoogleRouteBtn handler).
     if (!originIsRoom && destIsRoom) {
-      autoStartIndoorNav = true;
       optionalElement<HTMLButtonElement>("showGoogleRouteBtn")?.click();
       return;
     }

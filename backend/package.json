@@ -10,7 +10,8 @@
     "migrate:down": "node -r dotenv/config ./node_modules/node-pg-migrate/bin/node-pg-migrate down -m src/db/migrations --migration-file-language js",
     "migrate:create": "node-pg-migrate create -m src/db/migrations --migration-file-language js",
     "seed": "node scripts/seed-digital-twin.js",
-    "set-admin": "node scripts/set-admin.js"
+    "set-admin": "node scripts/set-admin.js",
+    "clear-asset-photos": "node scripts/clear-asset-photos.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

@@ -161,6 +161,13 @@ async function refreshActiveAsset(): Promise<void> {
     if (asset.image_url) {
       image.src = asset.image_url;
       image.hidden = false;
+    } else {
+      // No branch here previously — if this popup was reused for a
+      // different chair without a full re-open (e.g. refreshActiveAsset
+      // firing again after a save), an employee with no photo could keep
+      // showing whichever chair's photo was displayed last.
+      image.hidden = true;
+      image.removeAttribute("src");
     }
     setAvatarDisplay(asset.assigned_employee_name || asset.name, asset.image_url);
   } catch (error) {
