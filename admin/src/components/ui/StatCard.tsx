@@ -10,28 +10,26 @@ interface StatCardProps {
 }
 
 const TONES = {
-  brand: "from-brand-500 to-brand-600 shadow-brand-500/20",
-  emerald: "from-emerald-400 to-teal-600 shadow-emerald-500/20",
-  amber: "from-amber-400 to-orange-500 shadow-amber-500/20",
-  rose: "from-rose-400 to-pink-600 shadow-rose-500/20",
+  brand: "bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300",
+  emerald: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300",
+  amber: "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300",
+  rose: "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-300",
 };
 
 export function StatCard({ label, value, hint, icon = "•", tone = "brand", to }: StatCardProps) {
   const card = (
-    <div className="group relative h-full overflow-hidden rounded-[22px] border border-white/80 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,.06)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_40px_rgba(15,23,42,.11)] dark:border-white/10 dark:bg-slate-900">
-      <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full bg-slate-100/80 transition-transform duration-500 group-hover:scale-125 dark:bg-white/5" />
+    <div className="group relative h-full overflow-hidden rounded-xl border border-slate-200/80 bg-white p-4 shadow-[0_1px_2px_0_rgba(0,0,0,0.03)] transition-all duration-200 hover:border-slate-300 dark:border-white/5 dark:bg-slate-900 dark:hover:border-white/10">
       <div className="relative flex items-start justify-between">
         <div>
-          <p className="text-[12px] font-bold uppercase tracking-[.12em] text-slate-400">{label}</p>
-          <p className="mt-3 text-[32px] font-black tracking-tight text-slate-900 dark:text-white">{value}</p>
-          {hint && <p className="mt-1 text-xs font-medium text-slate-400">{hint}</p>}
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
+          <p className="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">{value}</p>
+          {hint && <p className="mt-1 text-xs font-semibold text-slate-400">{hint}</p>}
         </div>
-        <div className={`grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br text-lg text-white shadow-lg ${TONES[tone]}`}>{icon}</div>
+        <div className={`grid h-9 w-9 place-items-center rounded-lg text-sm font-bold ${TONES[tone]}`}>{icon}</div>
       </div>
-      <div className={`absolute bottom-0 left-0 h-1 w-full bg-gradient-to-r ${TONES[tone].split(" shadow")[0]}`} />
-      {to && <span className="absolute bottom-4 right-5 translate-x-2 text-sm font-black text-slate-300 opacity-0 transition group-hover:translate-x-0 group-hover:opacity-100 dark:text-slate-600">→</span>}
+      {to && <span className="absolute bottom-3 right-4 translate-x-1 text-sm font-bold text-slate-300 opacity-0 transition group-hover:translate-x-0 group-hover:opacity-100 dark:text-slate-600">→</span>}
     </div>
   );
 
-  return to ? <Link to={to} aria-label={`Open ${label}`} className="block rounded-[22px] focus:outline-none focus:ring-2 focus:ring-brand-500/50">{card}</Link> : card;
+  return to ? <Link to={to} aria-label={`Open ${label}`} className="block rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/50">{card}</Link> : card;
 }

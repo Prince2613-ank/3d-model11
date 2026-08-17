@@ -68,36 +68,66 @@ export function BookingsPage() {
 
   if (!token) {
     return (
-      <div className="space-y-4">
-        <h1 className="hidden text-xl font-semibold text-slate-900 dark:text-slate-100 sm:block">Bookings</h1>
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 px-6 py-12 text-center dark:border-white/10 dark:bg-slate-900/60">
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200/60 pb-5 dark:border-white/10">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white">Bookings</h2>
+            <p className="text-xs text-slate-500 mt-1">Reserve, check availability, and manage facility room bookings.</p>
+          </div>
+        </div>
+        <div className="rounded-xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center dark:border-white/10 dark:bg-slate-900/60">
           <p className="mb-4 text-sm font-semibold text-slate-500">
-            Connect Google Calendar to view room bookings and their details.
+            Connect Google Calendar to view room bookings and details.
           </p>
-          <Button onClick={() => void handleConnect()} disabled={connecting}>
+          <Button onClick={() => void handleConnect()} disabled={connecting} className="h-9 text-xs">
             {connecting ? "Redirecting…" : "Connect Google Calendar"}
           </Button>
-          <p className="mt-4 text-xs text-slate-400">This workspace is read-only.</p>
+          <p className="mt-4 text-[11px] text-slate-400">This workspace is currently read-only.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="hidden text-xl font-semibold text-slate-900 dark:text-slate-100 sm:block">Bookings</h1>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:bg-white/10 dark:text-slate-300">
-            View only
-          </span>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200/60 pb-5 dark:border-white/10">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white">Bookings</h2>
+            <span className="rounded bg-slate-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:bg-white/10 dark:text-slate-300">
+              View only
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 mt-1">Calendar integrations and resource reservation records.</p>
         </div>
-        <Input type="date" className="w-full sm:w-56" value={date} onChange={(event) => setDate(event.target.value)} />
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => {
+              const d = new Date(date);
+              d.setDate(d.getDate() - 1);
+              setDate(toDateInputValue(d));
+            }}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300"
+          >
+            ←
+          </button>
+          <Input type="date" className="h-9 text-xs w-full sm:w-48" value={date} onChange={(event) => setDate(event.target.value)} />
+          <button 
+            onClick={() => {
+              const d = new Date(date);
+              d.setDate(d.getDate() + 1);
+              setDate(toDateInputValue(d));
+            }}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300"
+          >
+            →
+          </button>
+        </div>
       </div>
 
       {isError && (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-600 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
-          {(error as Error).message} — this usually means the signed-in Google account cannot read the room calendars.
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-600 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
+          {(error as Error).message} — signed-in account requires read access to room calendars.
         </div>
       )}
 
@@ -106,7 +136,7 @@ export function BookingsPage() {
         rows={bookings ?? []}
         keyField={(booking) => `${booking.calendarId}:${booking.id}`}
         isLoading={isLoading}
-        emptyMessage="No bookings for this day."
+        emptyMessage="No bookings found for this day."
       />
     </div>
   );

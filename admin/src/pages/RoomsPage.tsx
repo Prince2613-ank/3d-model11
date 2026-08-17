@@ -40,8 +40,8 @@ export function RoomsPage() {
       header: "Room",
       render: (r) => (
         <div className="flex items-center gap-2">
-          {r.color && <span className="h-3 w-3 rounded-full" style={{ backgroundColor: r.color }} />}
-          <span className="font-medium text-slate-800 dark:text-slate-100">{r.name}</span>
+          {r.color && <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: r.color }} />}
+          <span className="font-semibold text-slate-800 dark:text-slate-100">{r.name}</span>
         </div>
       )
     },
@@ -52,28 +52,32 @@ export function RoomsPage() {
       header: "Actions",
       render: (r) => (
         <div className="flex gap-1.5" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-          <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => { setEditingRoom(r); setIsModalOpen(true); }}>Edit</Button>
-          <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => setQrRoom(r)}>QR</Button>
-          <Button variant="danger" className="px-2 py-1 text-xs" onClick={() => deleteMutation.mutate(r.id)}>Delete</Button>
+          <Button variant="secondary" className="px-2.5 py-1 text-xs" onClick={() => { setEditingRoom(r); setIsModalOpen(true); }}>Edit</Button>
+          <Button variant="secondary" className="px-2.5 py-1 text-xs" onClick={() => setQrRoom(r)}>QR</Button>
+          <Button variant="danger" className="px-2.5 py-1 text-xs" onClick={() => deleteMutation.mutate(r.id)}>Delete</Button>
         </div>
       )
     }
   ];
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="hidden text-xl font-semibold text-slate-900 dark:text-slate-100 sm:block">Rooms</h1>
-        <Button className="w-full sm:w-auto" onClick={() => { setEditingRoom(null); setIsModalOpen(true); }} disabled={!effectiveFloorId}>
-          + New Room
-        </Button>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200/60 pb-5 dark:border-white/10">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Rooms</h2>
+          <p className="text-xs text-slate-500 mt-1">Manage workspace rooms, department allocations, capacities, and visual parameters.</p>
+        </div>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <Select className="w-full sm:w-64 h-9 text-xs" value={effectiveFloorId} onChange={(e) => setFloorId(e.target.value)}>
+            {(floors ?? []).map((f) => (
+              <option key={f.id} value={f.id}>{f.building_name} — {f.name}</option>
+            ))}
+          </Select>
+          <Button className="w-full sm:w-auto h-9 text-xs" onClick={() => { setEditingRoom(null); setIsModalOpen(true); }} disabled={!effectiveFloorId}>
+            + New Room
+          </Button>
+        </div>
       </div>
-
-      <Select className="w-full sm:w-72" value={effectiveFloorId} onChange={(e) => setFloorId(e.target.value)}>
-        {(floors ?? []).map((f) => (
-          <option key={f.id} value={f.id}>{f.building_name} — {f.name}</option>
-        ))}
-      </Select>
 
       <DataTable columns={columns} rows={data?.rooms ?? []} keyField={(r) => r.id} isLoading={isLoading} emptyMessage="No rooms on this floor yet." onRowClick={setSelectedRoom} />
 
@@ -104,8 +108,15 @@ export function RoomsPage() {
 function RoomDetailModal({ room, floorName, onClose }: { room: Room; floorName: string; onClose: () => void }) {
   return (
     <Modal isOpen onClose={onClose} title={room.name} size="lg">
-      <section className="overflow-hidden rounded-[22px] bg-gradient-to-br from-slate-950 via-brand-950 to-brand-800 p-5 text-white">
-        <div className="flex items-start gap-4"><span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-white/15 bg-white/10 text-2xl">⌂</span><div><p className="text-[10px] font-black uppercase tracking-[.16em] text-cyan-300">Room workspace</p><h3 className="mt-1 text-xl font-black">{room.name}</h3><p className="mt-1 text-xs text-brand-200/80">{floorName}{room.department ? ` · ${room.department}` : ""}</p></div></div>
+      <section className="overflow-hidden rounded-xl border border-slate-100 bg-slate-50 p-4 text-slate-800 dark:border-white/5 dark:bg-white/5 dark:text-white">
+        <div className="flex items-center gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-500/10 text-brand-600 text-lg dark:bg-brand-500/20 dark:text-brand-300">⌂</span>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Room workspace</p>
+            <h3 className="text-sm font-bold">{room.name}</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{floorName}{room.department ? ` · ${room.department}` : ""}</p>
+          </div>
+        </div>
       </section>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -114,12 +125,12 @@ function RoomDetailModal({ room, floorName, onClose }: { room: Room; floorName: 
         <RoomFact label="Visibility" value={room.is_visible ? "Visible" : "Hidden"} />
       </div>
 
-      {room.description && <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600 dark:border-white/10 dark:bg-white/[.03] dark:text-slate-300">{room.description}</div>}
-      {(room.images?.length ?? 0) > 0 && <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{room.images.map((image) => <a key={image} href={image} target="_blank" rel="noreferrer" className="aspect-[4/3] overflow-hidden rounded-xl bg-slate-100"><img src={image} alt={room.name} className="h-full w-full object-cover transition hover:scale-105" /></a>)}</div>}
-
+      {room.description && <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs leading-relaxed text-slate-600 dark:border-white/10 dark:bg-white/[.03] dark:text-slate-300">{room.description}</div>}
+      {(room.images?.length ?? 0) > 0 && <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{room.images.map((image) => <a key={image} href={image} target="_blank" rel="noreferrer" className="aspect-[4/3] overflow-hidden rounded-xl bg-slate-100 dark:bg-white/5"><img src={image} alt={room.name} className="h-full w-full object-cover transition hover:scale-105" /></a>)}</div>}
     </Modal>
   );
 }
+
 
 function RoomFact({ label, value }: { label: string; value: string }) {
   return <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[.03]"><p className="text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</p><p className="mt-1 break-words text-xs font-bold text-slate-700 dark:text-slate-200">{value}</p></div>;

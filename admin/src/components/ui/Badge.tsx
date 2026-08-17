@@ -1,16 +1,16 @@
 const STATUS_CLASSES: Record<string, string> = {
-  pending: "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300",
-  assigned: "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300",
-  resolved: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300",
-  rejected: "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300",
-  ok: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
+  pending: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300 border border-amber-200/40 dark:border-amber-500/20",
+  assigned: "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300 border border-blue-200/40 dark:border-blue-500/20",
+  resolved: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300 border border-emerald-200/40 dark:border-emerald-500/20",
+  rejected: "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300 border border-rose-200/40 dark:border-rose-500/20",
+  ok: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300 border border-emerald-200/40 dark:border-emerald-500/20"
 };
 
 const PRIORITY_CLASSES: Record<string, string> = {
-  low: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
-  medium: "bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300",
-  high: "bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300",
-  critical: "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300"
+  low: "bg-slate-50 text-slate-600 dark:bg-white/5 dark:text-slate-300 border border-slate-200/40 dark:border-white/10",
+  medium: "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300 border border-blue-200/40 dark:border-blue-500/20",
+  high: "bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300 border border-orange-200/40 dark:border-orange-500/20",
+  critical: "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300 border border-rose-200/40 dark:border-rose-500/20"
 };
 
 function Badge({ label, classes }: { label: string; classes: string }) {

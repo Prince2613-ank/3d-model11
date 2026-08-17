@@ -7,7 +7,6 @@ import { Skeleton } from "../components/ui/Skeleton";
 type Period = "today" | "7days" | "30days" | "all";
 type IconName = "login" | "change" | "people" | "clock" | "search" | "filter" | "chevron";
 
-const panel = "min-w-0 overflow-hidden rounded-[22px] border border-slate-200/80 bg-white shadow-[0_8px_30px_rgba(15,23,42,.055)] dark:border-white/10 dark:bg-slate-900";
 
 export function ReportsPage() {
   const [period, setPeriod] = useState<Period>("7days");
@@ -46,41 +45,39 @@ export function ReportsPage() {
   }, [periodEntries]);
 
   return (
-    <div className="space-y-3 pb-8">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500 dark:bg-brand-400" />
-          <p className="text-[10px] font-black uppercase tracking-[.18em] text-slate-400">Audit intelligence</p>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200/60 pb-5 dark:border-white/10">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Reports & Insights</h2>
+          <p className="text-xs text-slate-500 mt-1">Audit log records of user sessions, seat assignments, and room configurations.</p>
         </div>
-        <PeriodPicker value={period} onChange={setPeriod} />
-      </div>
-      <div>
-        <h1 className="text-xl font-black tracking-tight text-black dark:text-white sm:text-2xl">Reports that explain what happened.</h1>
-        <p className="mt-1 max-w-2xl text-xs leading-6 text-slate-400">See who signed in, what they changed, which record was affected, and the exact time it happened.</p>
+        <div className="flex items-center gap-2">
+          <PeriodPicker value={period} onChange={setPeriod} />
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Metric label="Total sign-ins" value={insights.logins} note={`${insights.people} unique ${insights.people === 1 ? "person" : "people"}`} icon="login" loading={isLoading} />
         <Metric label="People active" value={insights.people} note="Verified identities" icon="people" loading={isLoading} />
         <Metric label="Actions performed" value={insights.changes} note="Excludes sign-ins" icon="change" loading={isLoading} />
         <Metric label="Records affected" value={insights.affected} note="Unique workspace items" icon="clock" loading={isLoading} />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[.72fr_1.28fr]">
-        <section className={`${panel} p-5`}>
-          <div className="mb-4"><h2 className="text-base font-black text-black dark:text-white">Sign-in frequency</h2><p className="mt-1 text-xs text-slate-400">Who logged in and how many times</p></div>
-          {isLoading ? <Skeleton className="h-64 rounded-2xl" /> : insights.actors.length === 0 ? <Empty label="No sign-ins in this period" /> : <div className="space-y-3">{insights.actors.slice(0, 8).map((actor, index) => {
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1.8fr]">
+        <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-slate-900">
+          <div className="mb-4"><h2 className="text-sm font-bold text-slate-900 dark:text-white">Sign-in frequency</h2><p className="text-[11px] text-slate-400">Total session check-ins by employee</p></div>
+          {isLoading ? <Skeleton className="h-64 rounded-xl" /> : insights.actors.length === 0 ? <Empty label="No sign-ins in this period" /> : <div className="space-y-3">{insights.actors.slice(0, 8).map((actor, index) => {
             const max = insights.actors[0]?.count || 1;
-            return <div key={actor.email} className="rounded-2xl bg-slate-50 p-3.5 dark:bg-white/[.035]"><div className="flex items-center gap-3"><Avatar name={actor.name} index={index} /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-3"><p className="truncate text-sm font-extrabold text-black dark:text-slate-100">{actor.name}</p><span className="shrink-0 rounded-lg bg-brand-100 px-2 py-1 text-[10px] font-black text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">{actor.count}×</span></div><p className="truncate text-[11px] text-slate-400">{actor.email}</p></div></div><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200/70 dark:bg-white/5"><div className="h-full rounded-full bg-gradient-to-r from-brand-400 to-brand-600" style={{ width: `${Math.max((actor.count / max) * 100, 8)}%` }} /></div><p className="mt-2 text-[10px] font-semibold text-slate-400">Last seen {formatRelative(actor.last)}</p></div>;
+            return <div key={actor.email} className="rounded-xl bg-slate-50 p-3.5 dark:bg-white/[.02]"><div className="flex items-center gap-3"><Avatar name={actor.name} index={index} /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-3"><p className="truncate text-xs font-bold text-slate-800 dark:text-slate-100">{actor.name}</p><span className="shrink-0 rounded bg-brand-50 px-2 py-0.5 text-[10px] font-bold text-brand-600 dark:bg-brand-500/10 dark:text-brand-300">{actor.count}×</span></div><p className="truncate text-[10px] text-slate-400">{actor.email}</p></div></div><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200/50 dark:bg-white/5"><div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.max((actor.count / max) * 100, 8)}%` }} /></div><p className="mt-2 text-[10px] font-semibold text-slate-400">Last seen {formatRelative(actor.last)}</p></div>;
           })}</div>}
         </section>
 
-        <section className={`${panel} overflow-hidden`}>
-          <div className="border-b border-slate-100 p-5 dark:border-white/5"><div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-base font-black text-black dark:text-white">Activity timeline</h2><p className="mt-1 text-xs text-slate-400">Every action in plain language</p></div><span className="text-[11px] font-bold text-slate-400">Showing {filtered.length} of {periodEntries.length}</span></div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_180px]"><label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 dark:border-white/10 dark:bg-white/[.035]"><Icon name="search" className="h-4 w-4 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search person, action or affected item…" className="min-w-0 flex-1 bg-transparent py-2.5 text-xs text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-100" /></label><label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 dark:border-white/10 dark:bg-white/[.035]"><Icon name="filter" className="h-4 w-4 text-slate-400" /><select value={actionFilter} onChange={(event) => setActionFilter(event.target.value)} className="min-w-0 flex-1 bg-transparent py-2.5 text-xs font-bold text-slate-600 outline-none dark:text-slate-200"><option value="all">All activity</option><option value="login">Sign-ins</option><option value="create">Created</option><option value="update">Changed</option><option value="delete">Deleted</option></select></label></div>
+        <section className="rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900 overflow-hidden">
+          <div className="border-b border-slate-100 p-5 dark:border-white/5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-sm font-bold text-slate-900 dark:text-white">Activity timeline</h2><p className="text-[11px] text-slate-400">Audit logs of all administrative modifications</p></div><span className="text-[10px] font-bold text-slate-400">Showing {filtered.length} of {periodEntries.length}</span></div>
+            <div className="mt-4 flex flex-col sm:flex-row gap-2"><label className="flex flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 dark:border-white/10 dark:bg-white/[.02]"><Icon name="search" className="h-4 w-4 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search person, action or affected item…" className="min-w-0 flex-1 bg-transparent py-2 text-xs text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-100" /></label><label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 dark:border-white/10 dark:bg-white/[.02]"><Icon name="filter" className="h-4 w-4 text-slate-400" /><select value={actionFilter} onChange={(event) => setActionFilter(event.target.value)} className="min-w-0 bg-transparent py-2 text-xs font-semibold text-slate-600 outline-none dark:text-slate-200"><option value="all">All activity</option><option value="login">Sign-ins</option><option value="create">Created</option><option value="update">Changed</option><option value="delete">Deleted</option></select></label></div>
           </div>
           <div className="max-h-[640px] overflow-y-auto">
-            {isLoading ? <div className="space-y-3 p-5">{Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-20 rounded-2xl" />)}</div> : filtered.length === 0 ? <div className="p-5"><Empty label="No activity matches these filters" /></div> : filtered.map((entry) => <ActivityRow key={entry.id} entry={entry} open={expanded === entry.id} onToggle={() => setExpanded(expanded === entry.id ? null : entry.id)} />)}
+            {isLoading ? <div className="space-y-3 p-5">{Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-20 rounded-xl" />)}</div> : filtered.length === 0 ? <div className="p-5"><Empty label="No activity matches these filters" /></div> : filtered.map((entry) => <ActivityRow key={entry.id} entry={entry} open={expanded === entry.id} onToggle={() => setExpanded(expanded === entry.id ? null : entry.id)} />)}
           </div>
         </section>
       </div>
@@ -90,11 +87,32 @@ export function ReportsPage() {
 
 function PeriodPicker({ value, onChange }: { value: Period; onChange: (period: Period) => void }) {
   const options: { value: Period; label: string }[] = [{ value: "today", label: "Today" }, { value: "7days", label: "7 days" }, { value: "30days", label: "30 days" }, { value: "all", label: "All time" }];
-  return <div className="flex rounded-xl border border-slate-200 bg-white p-1 dark:border-white/10 dark:bg-white/5">{options.map((option) => <button key={option.value} onClick={() => onChange(option.value)} className={`rounded-lg px-3 py-2 text-[10px] font-black transition sm:px-4 ${value === option.value ? "bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-md" : "text-slate-500 hover:text-black dark:text-slate-400 dark:hover:text-white"}`}>{option.label}</button>)}</div>;
+  return <div className="flex rounded-lg border border-slate-200 bg-white p-1 dark:border-white/10 dark:bg-slate-900">{options.map((option) => <button key={option.value} onClick={() => onChange(option.value)} className={`rounded px-3 py-1.5 text-xs font-semibold transition ${value === option.value ? "bg-slate-100 text-slate-900 dark:bg-white/5 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"}`}>{option.label}</button>)}</div>;
 }
 
 function Metric({ label, value, note, icon, loading }: { label: string; value: number; note: string; icon: IconName; loading: boolean }) {
-  return <article className={`${panel} relative p-4 sm:p-5`}><div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-brand-400 to-brand-600" /><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[.14em] text-slate-400">{label}</p>{loading ? <Skeleton className="mt-3 h-9 w-16" /> : <p className="mt-2 text-2xl font-black text-black dark:text-white sm:text-3xl">{value.toLocaleString()}</p>}<p className="mt-1 text-[11px] text-slate-400">{note}</p></div><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-lg"><Icon name={icon} className="h-5 w-5" /></span></div></article>;
+  const iconTones = {
+    login: "bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300",
+    people: "bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300",
+    change: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300",
+    clock: "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-300",
+    search: "bg-slate-50 text-slate-600 dark:bg-white/5 dark:text-slate-300",
+    filter: "bg-slate-50 text-slate-600 dark:bg-white/5 dark:text-slate-300",
+    chevron: "bg-slate-50 text-slate-600 dark:bg-white/5 dark:text-slate-300",
+  };
+
+  return (
+    <article className="group relative flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)] dark:border-white/10 dark:bg-slate-900">
+      <div className="flex items-start justify-between">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
+        <span className={`grid h-8 w-8 place-items-center rounded-lg ${iconTones[icon] || "bg-slate-50 text-slate-600"}`}><Icon name={icon} className="h-4 w-4" /></span>
+      </div>
+      <div className="mt-2.5">
+        {loading ? <Skeleton className="h-8 w-16" /> : <h4 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">{value.toLocaleString()}</h4>}
+        <p className="text-[10px] text-slate-400 mt-1">{note}</p>
+      </div>
+    </article>
+  );
 }
 
 function ActivityRow({ entry, open, onToggle }: { entry: ActivityLogEntry; open: boolean; onToggle: () => void }) {

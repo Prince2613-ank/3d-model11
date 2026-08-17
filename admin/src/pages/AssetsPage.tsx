@@ -88,19 +88,23 @@ export function AssetsPage() {
   ];
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="hidden text-xl font-semibold text-slate-900 dark:text-slate-100 sm:block">Employees</h1>
-        <Button className="w-full sm:w-auto" onClick={() => { setEditingAsset(null); setIsModalOpen(true); }} disabled={!effectiveFloorId}>
-          + New Employee Item
-        </Button>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200/60 pb-5 dark:border-white/10">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Employees</h2>
+          <p className="text-xs text-slate-500 mt-1">Manage employee seat allocations, designations, active occupancy status, and profiles.</p>
+        </div>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <Select className="w-full sm:w-64 h-9 text-xs" value={effectiveFloorId} onChange={(e) => setFloorId(e.target.value)}>
+            {(floors ?? []).map((f) => (
+              <option key={f.id} value={f.id}>{f.building_name} — {f.name}</option>
+            ))}
+          </Select>
+          <Button className="w-full sm:w-auto h-9 text-xs" onClick={() => { setEditingAsset(null); setIsModalOpen(true); }} disabled={!effectiveFloorId}>
+            + New Employee Item
+          </Button>
+        </div>
       </div>
-
-      <Select className="w-full sm:w-72" value={effectiveFloorId} onChange={(e) => setFloorId(e.target.value)}>
-        {(floors ?? []).map((f) => (
-          <option key={f.id} value={f.id}>{f.building_name} — {f.name}</option>
-        ))}
-      </Select>
 
       <DataTable columns={columns} rows={data?.assets ?? []} keyField={(a) => a.id} isLoading={isLoading} emptyMessage="No employee items on this floor yet." />
 
