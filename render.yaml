@@ -2,7 +2,7 @@ services:
   - type: web
     name: cesium-demo
     runtime: static
-    buildCommand: cd cesium_demo && npm ci && npm run build
+    buildCommand: git lfs pull && cd cesium_demo && npm ci && npm run build
     staticPublishPath: cesium_demo/dist
     headers:
       # Content-hashed bundles/models (dist/assets/*-<hash>.ext) — safe to cache forever
