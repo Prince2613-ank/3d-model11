@@ -16,7 +16,9 @@ function handleAuthExpired(): void {
   if (handlingAuthExpiry) return;
   handlingAuthExpiry = true;
   window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT));
-  void supabase.auth.signOut().finally(() => { handlingAuthExpiry = false; });
+  // "local" scope — must not revoke every other device signed into this
+  // account (the default "global" scope would).
+  void supabase.auth.signOut({ scope: "local" }).finally(() => { handlingAuthExpiry = false; });
 }
 
 // ── Client-side inactivity deadline ─────────────────────────────────────

@@ -84,6 +84,10 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      # Comma-separated allowlist of the only email(s) allowed admin access.
+      # Falls back to prince.raj@flodataanalytics.com if unset.
+      - key: ADMIN_ALLOWED_EMAILS
+        sync: false
       - key: ADMIN_PANEL_URL
         sync: false
       - key: USER_PANEL_URL

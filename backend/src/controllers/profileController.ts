@@ -13,6 +13,11 @@ export const profileController = {
     const profile = await profileRepository.findById(req.user!.id);
     if (!profile) { res.status(404).json({ error: "Profile not found" }); return; }
 
+    // req.user.role is already the allowlist-checked value (see attachUser)
+    // — use it here too so a stray "admin" left in the `role` column can't
+    // make the frontend render admin UI for an account that isn't allowed it.
+    profile.role = req.user!.role;
+
     await Promise.all([
       profileRepository.touchLastLogin(req.user!.id),
       activityLogRepository.record({

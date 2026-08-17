@@ -198,7 +198,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
     window.localStorage.removeItem(PROFILE_CACHE_KEY);
     cacheGoogleToken(null);
-    await supabase.auth.signOut();
+    // "local" scope — the default ("global") revokes every device signed
+    // into this account, so a rejected-account sign-out here (ProtectedRoute)
+    // or an auth-expired sign-out (api.ts) would otherwise silently log the
+    // real admin out of their other sessions too.
+    await supabase.auth.signOut({ scope: "local" });
   };
 
   return (
