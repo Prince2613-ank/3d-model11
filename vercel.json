@@ -1,4 +1,4 @@
 {
-  "buildCommand": "git lfs pull && cd cesium_demo && npm ci && npm run build",
+  "buildCommand": "(git remote set-url origin https://github.com/Prince2613-ank/3d-model11.git || git remote add origin https://github.com/Prince2613-ank/3d-model11.git) && git lfs pull && cd cesium_demo && npm ci && npm run build",
   "outputDirectory": "cesium_demo/dist"
 }
