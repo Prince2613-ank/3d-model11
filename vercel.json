@@ -1,0 +1,4 @@
+{
+  "buildCommand": "cd cesium_demo && npm ci && npm run build",
+  "outputDirectory": "cesium_demo/dist"
+}
