@@ -63,12 +63,14 @@ export function Topbar() {
   const { theme, toggleTheme } = useTheme();
   const { pathname } = useLocation();
   const [isBellOpen, setIsBellOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [bellRect, setBellRect] = useState<DOMRect | null>(null);
   const [detail, setDetail] = useState<Notification | null>(null);
   const [complaint, setComplaint] = useState<Complaint | null>(null);
   const [history, setHistory] = useState<ComplaintHistoryEntry[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
   const notificationPanelRef = useRef<HTMLDivElement>(null);
   const { data: unread } = useUnreadNotificationCount(true);
   const { data: notifData } = useNotifications(isBellOpen);
@@ -81,6 +83,9 @@ export function Topbar() {
       const target = event.target as Node;
       if (!bellRef.current?.contains(target) && !notificationPanelRef.current?.contains(target)) {
         setIsBellOpen(false);
+      }
+      if (!profileRef.current?.contains(target)) {
+        setIsProfileOpen(false);
       }
     };
     document.addEventListener("mousedown", close);
@@ -120,41 +125,53 @@ export function Topbar() {
   };
 
   return (
-    <header className="relative z-30 flex h-[68px] shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 dark:border-white/10 dark:bg-slate-950 sm:h-[82px] sm:px-6 lg:px-8">
+    <header className="relative z-30 flex h-[76px] shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 dark:border-white/10 dark:bg-slate-950 sm:px-6 lg:px-8">
       <div className="min-w-0">
-        <h1 className="truncate text-[15px] font-semibold tracking-tight text-slate-900 dark:text-white sm:text-lg">
-          {pathname === "/"
-            ? `${timeOfDayGreeting()}, ${(profile?.display_name || "Admin").split(" ")[0]} 👋`
-            : TITLES[pathname]}
-        </h1>
+        {pathname === "/" ? (
+          <div>
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Command Centre</p>
+            <h1 className="truncate text-base font-semibold tracking-tight text-slate-900 dark:text-white sm:text-lg">
+              {timeOfDayGreeting()}, {(profile?.display_name || "Admin").split(" ")[0]} 👋
+            </h1>
+          </div>
+        ) : (
+          <div>
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Workspace</p>
+            <h1 className="truncate text-base font-semibold tracking-tight text-slate-900 dark:text-white sm:text-lg">
+              {TITLES[pathname] || "Flodata Admin"}
+            </h1>
+          </div>
+        )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
-        <button onClick={toggleTheme} className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-brand-300 hover:text-brand-600 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 sm:h-10 sm:w-10" aria-label="Toggle theme">
-          {theme === "dark" ? <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.41M17.66 6.34l1.41-1.41"/></svg> : <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/></svg>}
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+        {/* Theme Toggle */}
+        <button onClick={toggleTheme} className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/5" aria-label="Toggle theme">
+          {theme === "dark" ? <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.41M17.66 6.34l1.41-1.41"/></svg> : <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/></svg>}
         </button>
 
+        {/* Notifications */}
         <div className="relative" ref={bellRef}>
           <button
             onClick={() => {
               if (!isBellOpen && bellRef.current) setBellRect(bellRef.current.getBoundingClientRect());
               setIsBellOpen((open) => !open);
             }}
-            className={`relative grid h-9 w-9 place-items-center rounded-lg border bg-white transition dark:bg-slate-900 sm:h-10 sm:w-10 ${isBellOpen ? "border-brand-300 text-brand-600" : "border-slate-200 text-slate-500 hover:border-brand-300 hover:text-brand-600 dark:border-white/10 dark:text-slate-300"}`}
+            className={`relative grid h-9 w-9 place-items-center rounded-lg border bg-white transition dark:bg-slate-900 ${isBellOpen ? "border-brand-300 text-brand-600" : "border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"}`}
             aria-label="Notifications"
           >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
-            {!!unread?.count && <span className="absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full border-2 border-white bg-rose-500 px-1 text-[9px] font-black text-white dark:border-slate-950">{unread.count > 99 ? "99+" : unread.count}</span>}
+            <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
+            {!!unread?.count && <span className="absolute -right-1 -top-1 grid h-4.5 min-w-4.5 place-items-center rounded-full border border-white bg-rose-500 px-1 text-[8px] font-bold text-white dark:border-slate-950">{unread.count > 99 ? "99+" : unread.count}</span>}
           </button>
 
           {isBellOpen && bellRect && createPortal((
             <div
               ref={notificationPanelRef}
-              className="fixed z-[60] w-[min(370px,calc(100vw-24px))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900"
-              style={{ top: bellRect.bottom + 12, left: notificationPanelLeft(bellRect) }}
+              className="fixed z-[60] w-[min(370px,calc(100vw-24px))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-white/10 dark:bg-slate-900"
+              style={{ top: bellRect.bottom + 8, left: notificationPanelLeft(bellRect) }}
             >
               <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-white/10 dark:bg-white/5">
-                <div><p className="text-sm font-extrabold text-slate-900 dark:text-white">Notifications</p><p className="text-[11px] text-slate-400">Live operational updates</p></div>
+                <div><p className="text-xs font-bold text-slate-900 dark:text-white">Notifications</p><p className="text-[10px] text-slate-400">Live operational updates</p></div>
                 {(unread?.count ?? 0) > 0 ? (
                   <button
                     onClick={async () => {
@@ -162,22 +179,22 @@ export function Topbar() {
                       try { await markAllRead(); } finally { setMarkingAllRead(false); }
                     }}
                     disabled={markingAllRead}
-                    className="shrink-0 rounded-full bg-brand-600 px-2.5 py-1 text-[10px] font-bold text-white transition hover:bg-brand-700 disabled:opacity-60"
+                    className="shrink-0 rounded bg-brand-600 px-2 py-1 text-[10px] font-bold text-white transition hover:bg-brand-700 disabled:opacity-60"
                   >
                     {markingAllRead ? "Marking…" : "Mark all read"}
                   </button>
                 ) : (
-                  <span className="shrink-0 rounded-full bg-brand-50 px-2.5 py-1 text-[10px] font-bold text-brand-600 dark:bg-brand-500/15 dark:text-brand-300">0 unread</span>
+                  <span className="shrink-0 rounded bg-brand-50 px-2 py-0.5 text-[10px] font-bold text-brand-600 dark:bg-brand-500/15 dark:text-brand-300">0 unread</span>
                 )}
               </div>
-              <div className="max-h-[430px] overflow-y-auto p-2">
-                {(notifData?.notifications ?? []).length === 0 && <div className="px-3 py-10 text-center"><div className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-full bg-slate-100 text-slate-400 dark:bg-white/5"><svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/></svg></div><p className="text-sm font-semibold text-slate-500">You are all caught up</p></div>}
+              <div className="max-h-[380px] overflow-y-auto p-2">
+                {(notifData?.notifications ?? []).length === 0 && <div className="px-3 py-10 text-center"><div className="mx-auto mb-3 grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-400 dark:bg-white/5"><svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/></svg></div><p className="text-xs font-semibold text-slate-500">You are all caught up</p></div>}
                 {notifData?.notifications.map((n) => (
-                  <button key={n.id} onClick={() => void openDetail(n)} className={`relative block w-full rounded-xl px-3 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-white/5 ${n.is_read ? "opacity-60" : ""}`}>
-                    {!n.is_read && <span className="absolute right-3 top-4 h-2 w-2 rounded-full bg-brand-500"/>}
-                    <p className="pr-5 text-sm font-bold text-slate-800 dark:text-slate-100">{n.title}</p>
-                    {n.body && <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500 dark:text-slate-400">{n.body}</p>}
-                    <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">{timeAgo(n.created_at)}</p>
+                  <button key={n.id} onClick={() => void openDetail(n)} className={`relative block w-full rounded-lg px-3 py-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-white/5 ${n.is_read ? "opacity-60" : ""}`}>
+                    {!n.is_read && <span className="absolute right-3 top-4.5 h-1.5 w-1.5 rounded-full bg-brand-500"/>}
+                    <p className="pr-5 text-xs font-semibold text-slate-800 dark:text-slate-100">{n.title}</p>
+                    {n.body && <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">{n.body}</p>}
+                    <p className="mt-1.5 text-[9px] font-semibold uppercase tracking-wider text-slate-400">{timeAgo(n.created_at)}</p>
                   </button>
                 ))}
               </div>
@@ -185,10 +202,44 @@ export function Topbar() {
           ), document.body)}
         </div>
 
-        <div className="ml-0.5 flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white p-1 dark:border-white/10 dark:bg-slate-900 sm:ml-1 sm:py-1.5 sm:pl-1.5 sm:pr-3">
-          {profile?.avatar_url ? <img src={profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover sm:h-9 sm:w-9" /> : <div className="grid h-8 w-8 place-items-center rounded-full bg-brand-600 text-xs font-bold text-white sm:h-9 sm:w-9">{(profile?.display_name || profile?.email || "?").slice(0, 1).toUpperCase()}</div>}
-          <div className="hidden max-w-36 sm:block"><p className="truncate text-xs font-bold text-slate-800 dark:text-white">{profile?.display_name || profile?.email}</p><p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500">Administrator</p></div>
-          <button onClick={signOut} className="hidden rounded-lg px-2 py-1 text-[11px] font-bold text-slate-400 transition hover:bg-rose-50 hover:text-rose-500 lg:block">Sign out</button>
+        {/* Profile Dropdown */}
+        <div className="relative" ref={profileRef}>
+          <button
+            onClick={() => setIsProfileOpen(!isProfileOpen)}
+            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-1 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-white/5 transition"
+          >
+            {profile?.avatar_url ? (
+              <img src={profile.avatar_url} alt="" className="h-7 w-7 rounded-md object-cover" />
+            ) : (
+              <div className="grid h-7 w-7 place-items-center rounded-md bg-brand-600 text-xs font-bold text-white">
+                {(profile?.display_name || profile?.email || "?").slice(0, 1).toUpperCase()}
+              </div>
+            )}
+            <span className="hidden sm:inline-block text-xs font-semibold text-slate-800 dark:text-slate-200 max-w-24 truncate pl-0.5">
+              {(profile?.display_name || profile?.email || "").split(" ")[0]}
+            </span>
+            <svg viewBox="0 0 24 24" className="h-3 w-3 text-slate-400 mr-1" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+
+          {isProfileOpen && (
+            <div className="absolute right-0 mt-1.5 w-48 rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-white/10 dark:bg-slate-900">
+              <div className="px-3 py-2 border-b border-slate-100 dark:border-white/5">
+                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{profile?.display_name || profile?.email}</p>
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Administrator</p>
+              </div>
+              <div className="p-1">
+                <button
+                  onClick={() => {
+                    setIsProfileOpen(false);
+                    signOut();
+                  }}
+                  className="w-full text-left rounded-lg px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10"
+                >
+                  Sign out
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

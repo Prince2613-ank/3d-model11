@@ -146,9 +146,16 @@ export function UsersPage() {
   ];
 
   return (
-    <div className="space-y-4">
-      <h1 className="hidden text-xl font-semibold text-slate-900 dark:text-slate-100 sm:block">Users</h1>
-      <Input className="w-full sm:w-72" placeholder="Search by name or email…" value={search} onChange={(e) => setSearch(e.target.value)} />
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200/60 pb-5 dark:border-white/10">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Users</h2>
+          <p className="text-xs text-slate-500 mt-1">Manage system administrators, employee access levels, credentials, and notification services.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Input className="w-full sm:w-64 h-9 text-xs" placeholder="Search by name or email…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+      </div>
       <DataTable columns={columns} rows={data?.profiles ?? []} keyField={(p) => p.id} isLoading={isLoading} emptyMessage="No users found." />
 
       {sentMessage && <div className="fixed right-4 top-24 z-[130] flex items-center gap-3 rounded-2xl border border-emerald-200 bg-white/95 px-4 py-3 text-sm font-bold text-emerald-700 shadow-[0_18px_60px_rgba(15,23,42,.18)] backdrop-blur dark:border-emerald-500/25 dark:bg-slate-900/95 dark:text-emerald-300"><span className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-100 dark:bg-emerald-500/15">✓</span>{sentMessage}</div>}

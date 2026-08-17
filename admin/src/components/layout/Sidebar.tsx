@@ -2,17 +2,39 @@ import { NavLink } from "react-router-dom";
 
 export type IconName = "dashboard" | "rooms" | "assets" | "complaints" | "users" | "announcements" | "reports" | "settings" | "bookings";
 
-export const NAV_ITEMS: { to: string; label: string; icon: IconName; end?: boolean }[] = [
-  { to: "/", label: "Dashboard", icon: "dashboard", end: true },
-  { to: "/rooms", label: "Rooms", icon: "rooms" },
-  { to: "/bookings", label: "Bookings", icon: "bookings" },
-  { to: "/assets", label: "Employees", icon: "assets" },
-  { to: "/complaints", label: "Complaints", icon: "complaints" },
-  { to: "/users", label: "Users", icon: "users" },
-  { to: "/announcements", label: "Announcements", icon: "announcements" },
-  { to: "/reports", label: "Reports", icon: "reports" },
-  { to: "/settings", label: "Settings", icon: "settings" },
+export const SECTIONS: { title: string; items: { to: string; label: string; icon: IconName; end?: boolean }[] }[] = [
+  {
+    title: "Command Centre",
+    items: [
+      { to: "/", label: "Dashboard", icon: "dashboard", end: true },
+      { to: "/rooms", label: "Rooms", icon: "rooms" },
+      { to: "/bookings", label: "Bookings", icon: "bookings" },
+      { to: "/assets", label: "Employees", icon: "assets" },
+      { to: "/complaints", label: "Complaints", icon: "complaints" },
+      { to: "/users", label: "Users", icon: "users" },
+    ]
+  },
+  {
+    title: "Communication",
+    items: [
+      { to: "/announcements", label: "Announcements", icon: "announcements" },
+    ]
+  },
+  {
+    title: "Insights",
+    items: [
+      { to: "/reports", label: "Reports", icon: "reports" },
+    ]
+  },
+  {
+    title: "System",
+    items: [
+      { to: "/settings", label: "Settings", icon: "settings" },
+    ]
+  }
 ];
+
+export const NAV_ITEMS: { to: string; label: string; icon: IconName; end?: boolean }[] = SECTIONS.flatMap((sec) => sec.items);
 
 const PATHS: Record<IconName, React.ReactNode> = {
   dashboard: <><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></>,
@@ -27,32 +49,44 @@ const PATHS: Record<IconName, React.ReactNode> = {
 };
 
 export function NavIcon({ name }: { name: IconName }) {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[19px] w-[19px]">{PATHS[name]}</svg>;
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">{PATHS[name]}</svg>;
 }
 
 export function Sidebar() {
   return (
-    <aside className="relative z-20 hidden w-[76px] shrink-0 flex-col border-r border-slate-200 bg-white text-black md:flex lg:w-[278px] dark:border-white/10 dark:bg-slate-950 dark:text-white">
-      <div className="flex h-[82px] items-center justify-center border-b border-slate-200 px-4 lg:justify-start lg:px-7 dark:border-white/10">
-        <div className="min-w-0 text-center lg:text-left">
-          <p className="truncate text-[16px] font-bold tracking-[.06em] text-black dark:text-white">FLODATA</p>
-          <p className="mt-0.5 hidden text-[10px] font-semibold uppercase tracking-[.16em] text-slate-500 lg:block dark:text-slate-500">Admin Panel</p>
+    <aside className="relative z-20 hidden w-[76px] shrink-0 flex-col border-r border-slate-200 bg-white text-slate-900 md:flex lg:w-[260px] dark:border-white/10 dark:bg-slate-950 dark:text-slate-100">
+      <div className="flex h-[76px] items-center justify-center border-b border-slate-200 px-4 lg:justify-start lg:px-6 dark:border-white/10">
+        <div className="min-w-0 lg:pl-1">
+          <p className="text-[15px] font-bold tracking-[.08em] text-slate-900 dark:text-white">FLODATA</p>
+          <p className="mt-0.5 hidden text-[10px] font-semibold tracking-wider text-slate-400 lg:block">Admin Workspace</p>
         </div>
       </div>
-      <div className="hidden px-7 pb-2 pt-6 text-[10px] font-semibold uppercase tracking-[.16em] text-slate-500 lg:block dark:text-slate-500">Command centre</div>
-      <nav className="flex-1 space-y-1 px-3 py-5 lg:py-1">
-        {NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            title={item.label}
-            className={({ isActive }) => `flex h-11 items-center justify-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors lg:justify-start ${isActive ? "bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-md" : "text-black hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white"}`}
-          >
-            {({ isActive }) => <><span className={isActive ? "text-white" : "text-black dark:text-slate-300"}><NavIcon name={item.icon}/></span><span className="hidden lg:block">{item.label}</span></>}
-          </NavLink>
+      <div className="flex-1 overflow-y-auto py-4">
+        {SECTIONS.map((sec) => (
+          <div key={sec.title} className="mb-5">
+            <div className="hidden px-6 pb-2 text-[10px] font-bold uppercase tracking-[.14em] text-slate-400 lg:block">{sec.title}</div>
+            <nav className="space-y-1 px-3">
+              {sec.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  title={item.label}
+                  className={({ isActive }) => `relative flex h-10 items-center justify-center gap-3 rounded-lg px-3 text-sm font-medium transition-all duration-150 lg:justify-start ${isActive ? "bg-slate-100 text-slate-900 dark:bg-white/5 dark:text-white font-semibold" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.02] dark:hover:text-white"}`}
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && <span className="absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r bg-brand-500" />}
+                      <span className={isActive ? "text-brand-500" : "text-slate-400 group-hover:text-slate-900 dark:text-slate-500 dark:group-hover:text-white"}><NavIcon name={item.icon}/></span>
+                      <span className="hidden lg:block">{item.label}</span>
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </nav>
+          </div>
         ))}
-      </nav>
+      </div>
     </aside>
   );
 }

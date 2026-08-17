@@ -55,10 +55,15 @@ export function AnnouncementsPage() {
   ];
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="hidden text-xl font-semibold text-slate-900 dark:text-slate-100 sm:block">Announcements</h1>
-        <Button className="w-full sm:w-auto" onClick={() => { setEditing(null); setIsModalOpen(true); }}>+ New Announcement</Button>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200/60 pb-5 dark:border-white/10">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Announcements</h2>
+          <p className="text-xs text-slate-500 mt-1">Broadcast notifications, drills, holiday closures, and service updates to the workspace.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button className="w-full sm:w-auto h-9 text-xs" onClick={() => { setEditing(null); setIsModalOpen(true); }}>+ New Announcement</Button>
+        </div>
       </div>
 
       <DataTable columns={columns} rows={data?.announcements ?? []} keyField={(a) => a.id} isLoading={isLoading} emptyMessage="No announcements yet." />

@@ -138,14 +138,17 @@ export function ComplaintsPage() {
   ];
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="hidden text-xl font-semibold text-slate-900 dark:text-slate-100 sm:block">Complaints</h1>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200/60 pb-5 dark:border-white/10">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Complaints</h2>
+          <p className="text-xs text-slate-500 mt-1">Track, prioritize, assign, and resolve workplace maintenance and service issues.</p>
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-3 rounded-2xl border border-slate-200 bg-white/70 p-4 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/60">
+      <div className="flex flex-wrap gap-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-slate-900">
         <Select
-          className="w-full sm:w-40"
+          className="w-full sm:w-40 text-xs h-9"
           value={filters.status}
           onChange={(e) => { setFilters((f) => ({ ...f, status: e.target.value as ComplaintStatus | "" })); setPage(1); }}
         >
@@ -156,7 +159,7 @@ export function ComplaintsPage() {
           <option value="rejected">Rejected</option>
         </Select>
         <Select
-          className="w-full sm:w-40"
+          className="w-full sm:w-40 text-xs h-9"
           value={filters.priority}
           onChange={(e) => { setFilters((f) => ({ ...f, priority: e.target.value as ComplaintPriority | "" })); setPage(1); }}
         >
@@ -167,7 +170,7 @@ export function ComplaintsPage() {
           <option value="critical">Critical</option>
         </Select>
         <Input
-          className="w-full sm:w-64"
+          className="w-full sm:w-64 text-xs h-9"
           placeholder="Search reporter, description…"
           value={filters.search}
           onChange={(e) => { setFilters((f) => ({ ...f, search: e.target.value })); setPage(1); }}
