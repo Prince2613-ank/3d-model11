@@ -35,6 +35,10 @@ export const assetService = {
     return assetRepository.listByAssignedProfile(profileId);
   },
 
+  async listDeletedByFloor(floorId: string): Promise<Asset[]> {
+    return assetRepository.listDeletedByFloor(floorId);
+  },
+
   async getById(id: string): Promise<Asset | null> {
     return assetRepository.findById(id);
   },
@@ -180,6 +184,27 @@ export const assetService = {
     ]);
 
     return deleted;
+  },
+
+  async restore(admin: AuthenticatedUser, id: string): Promise<Asset> {
+    const existing = await assetRepository.findById(id, true);
+    if (!existing || !existing.deleted_at) throw new NotFoundError("Asset", id);
+
+    const restored = await assetRepository.restore(id);
+    if (!restored) throw new NotFoundError("Asset", id);
+
+    await Promise.all([
+      assetHistoryRepository.record({ assetId: id, action: "restored", changedBy: admin.id, newValues: restored }),
+      activityLogRepository.record({
+        actorId: admin.id,
+        actorRole: admin.role,
+        action: "asset_restored",
+        entityType: "asset",
+        entityId: id
+      })
+    ]);
+
+    return restored;
   },
 
   async history(assetId: string) {

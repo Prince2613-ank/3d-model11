@@ -14,6 +14,11 @@ export const assetController = {
     res.json({ assets });
   },
 
+  async listDeletedByFloor(req: Request, res: Response): Promise<void> {
+    const assets = await assetService.listDeletedByFloor(req.params.floorId);
+    res.json({ assets });
+  },
+
   async getById(req: Request, res: Response): Promise<void> {
     const asset = await assetService.getById(req.params.id);
     if (!asset) { res.status(404).json({ error: "Asset not found" }); return; }
@@ -92,6 +97,11 @@ export const assetController = {
   async remove(req: Request, res: Response): Promise<void> {
     await assetService.remove(req.user!, req.params.id);
     res.status(204).send();
+  },
+
+  async restore(req: Request, res: Response): Promise<void> {
+    const asset = await assetService.restore(req.user!, req.params.id);
+    res.json({ asset });
   },
 
   async history(req: Request, res: Response): Promise<void> {

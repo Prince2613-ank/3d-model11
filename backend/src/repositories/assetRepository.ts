@@ -35,6 +35,14 @@ class AssetRepository extends BaseRepository<Asset> {
     return rows;
   }
 
+  async listDeletedByFloor(floorId: string): Promise<Asset[]> {
+    const { rows } = await pool.query<Asset>(
+      "SELECT * FROM assets WHERE floor_id = $1 AND deleted_at IS NOT NULL ORDER BY deleted_at DESC",
+      [floorId]
+    );
+    return rows;
+  }
+
   async listByAssignedProfile(profileId: string): Promise<Asset[]> {
     const { rows } = await pool.query<Asset>(
       "SELECT * FROM assets WHERE assigned_to_profile_id = $1 AND deleted_at IS NULL ORDER BY name ASC",
