@@ -85,10 +85,10 @@ export function DashboardPage() {
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Open complaints" value={data?.openComplaints ?? 0} detail="8 active in queue" trend="↑ 12% vs last week" trendType="up" icon="alert" to="/complaints" loading={statsQuery.isLoading}/>
-        <KpiCard label="Resolved today" value={data?.resolvedToday ?? 0} detail={`${completionRate}% of today's workload`} trend="↑ 18% vs yesterday" trendType="up" icon="check" to="/complaints?status=resolved" loading={statsQuery.isLoading}/>
-        <KpiCard label="Avg. resolution" value={data?.avgResolutionHours != null ? `${data.avgResolutionHours.toFixed(1)}h` : "—"} detail="Across resolved cases" trend="↓ 1.4h vs last week" trendType="down" icon="clock" to="/reports" loading={statsQuery.isLoading}/>
-        <KpiCard label="Affected floors" value={data?.topFloors.length ?? 0} detail={data?.topFloors[0] ? `${data.topFloors[0].floor_name} needs attention` : "All floors clear"} trend="No change" trendType="neutral" icon="floor" to="/complaints" loading={statsQuery.isLoading}/>
+        <KpiCard label="Open complaints" value={data?.openComplaints ?? 0} icon="alert" to="/complaints" loading={statsQuery.isLoading}/>
+        <KpiCard label="Resolved today" value={data?.resolvedToday ?? 0} detail={totalToday ? `${completionRate}% of today's workload` : undefined} icon="check" to="/complaints?status=resolved" loading={statsQuery.isLoading}/>
+        <KpiCard label="Avg. resolution" value={data?.avgResolutionHours != null ? `${data.avgResolutionHours.toFixed(1)}h` : "—"} detail={data?.avgResolutionHours != null ? "Across resolved cases" : undefined} icon="clock" to="/reports" loading={statsQuery.isLoading}/>
+        <KpiCard label="Affected floors" value={data?.topFloors.length ?? 0} detail={data?.topFloors[0] ? `${data.topFloors[0].floor_name} needs attention` : "All floors clear"} icon="floor" to="/complaints" loading={statsQuery.isLoading}/>
       </div>
 
       {/* Middle section: Chart + Floor pressure */}
@@ -223,14 +223,8 @@ export function DashboardPage() {
   );
 }
 
-function KpiCard({ label, value, detail, trend, trendType, icon, to, loading }: { label: string; value: string | number; detail: string; trend: string; trendType: "up" | "down" | "neutral"; icon: "alert" | "check" | "clock" | "floor"; to: string; loading: boolean }) {
+function KpiCard({ label, value, detail, icon, to, loading }: { label: string; value: string | number; detail?: string; icon: "alert" | "check" | "clock" | "floor"; to: string; loading: boolean }) {
   if (loading) return <Skeleton className="h-24 rounded-xl"/>;
-
-  const trendColors = {
-    up: "text-emerald-600 dark:text-emerald-400",
-    down: "text-rose-600 dark:text-rose-400",
-    neutral: "text-slate-400"
-  };
 
   return (
     <Link to={to} className="group relative flex flex-col justify-between rounded-xl border border-slate-200/80 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:border-slate-300 dark:border-white/5 dark:bg-slate-900 dark:hover:border-white/10 transition-all duration-150">
@@ -240,11 +234,7 @@ function KpiCard({ label, value, detail, trend, trendType, icon, to, loading }: 
       </div>
       <div className="mt-2.5">
         <h4 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">{value}</h4>
-        <div className="flex items-center gap-1.5 mt-1">
-          <span className={`text-[10px] font-bold ${trendColors[trendType]}`}>{trend}</span>
-          <span className="text-[10px] text-slate-400">•</span>
-          <span className="text-[10px] text-slate-400 truncate max-w-[120px]">{detail}</span>
-        </div>
+        {detail && <p className="mt-1 text-[10px] text-slate-400 truncate">{detail}</p>}
       </div>
     </Link>
   );

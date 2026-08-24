@@ -26,6 +26,7 @@ export function AssetsPage() {
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [viewingAsset, setViewingAsset] = useState<Asset | null>(null);
   const [qrAsset, setQrAsset] = useState<Asset | null>(null);
+  const [showDeleted, setShowDeleted] = useState(false);
   const queryClient = useQueryClient();
 
   const effectiveFloorId = floorId || floors?.[0]?.id || "";
@@ -40,10 +41,24 @@ export function AssetsPage() {
     refetchInterval: 8_000
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["assets", effectiveFloorId] });
+  const { data: deletedData } = useQuery({
+    queryKey: ["assets", effectiveFloorId, "deleted"],
+    queryFn: () => api.get<{ assets: Asset[] }>(`/assets/floor/${effectiveFloorId}/deleted`),
+    enabled: !!effectiveFloorId && showDeleted
+  });
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["assets", effectiveFloorId] });
+    queryClient.invalidateQueries({ queryKey: ["assets", effectiveFloorId, "deleted"] });
+  };
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/assets/${id}`),
+    onSuccess: invalidate
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: (id: string) => api.patch(`/assets/${id}/restore`, {}),
     onSuccess: invalidate
   });
 
@@ -107,6 +122,41 @@ export function AssetsPage() {
       </div>
 
       <DataTable columns={columns} rows={data?.assets ?? []} keyField={(a) => a.id} isLoading={isLoading} emptyMessage="No employee items on this floor yet." />
+
+      <div className="flex flex-col gap-3">
+        <button
+          type="button"
+          onClick={() => setShowDeleted((v) => !v)}
+          className="self-start text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+        >
+          {showDeleted ? "Hide" : "Show"} deleted employee items
+        </button>
+        {showDeleted && (
+          <DataTable
+            columns={[
+              { header: "Employee item", render: (a) => a.name },
+              { header: "Seat ID", render: (a) => <code className="text-xs">{a.seat_id}</code> },
+              { header: "Deleted", render: (a) => (a.deleted_at ? new Date(a.deleted_at).toLocaleString() : "—") },
+              {
+                header: "Actions",
+                render: (a) => (
+                  <Button
+                    variant="secondary"
+                    className="px-2 py-1 text-xs"
+                    onClick={() => restoreMutation.mutate(a.id)}
+                    disabled={restoreMutation.isPending}
+                  >
+                    Restore
+                  </Button>
+                )
+              }
+            ]}
+            rows={deletedData?.assets ?? []}
+            keyField={(a) => a.id}
+            emptyMessage="No deleted employee items on this floor."
+          />
+        )}
+      </div>
 
       {viewingAsset && (
         <EmployeeDetailModal

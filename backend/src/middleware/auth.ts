@@ -19,6 +19,22 @@ function extractBearerToken(req: Request): string | null {
   return header.slice("Bearer ".length).trim() || null;
 }
 
+// Admin access is restricted to a fixed allowlist regardless of what a
+// profile's `role` column says in the database — this is the actual
+// authorization boundary, not just a default. Configurable via env
+// (comma-separated) so a second admin can be added without a code change;
+// falls back to the one current admin if unset.
+const ADMIN_ALLOWED_EMAILS = new Set(
+  (process.env.ADMIN_ALLOWED_EMAILS || "prince.raj@flodataanalytics.com")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+export function isAllowedAdminEmail(email: string): boolean {
+  return ADMIN_ALLOWED_EMAILS.has(email.trim().toLowerCase());
+}
+
 // Supabase access tokens carry a `session_id` claim that stays constant across
 // silent token refreshes of one sign-in, and changes whenever the user goes
 // through a brand-new sign-in flow. Already-verified by supabaseAuth.auth.getUser
@@ -102,11 +118,17 @@ export async function attachUser(req: Request, _res: Response, next: NextFunctio
 
     if (!rows[0].is_active) { next(); return; }
 
+    // The `role` column can say "admin" (e.g. left over from before the
+    // allowlist existed, or someone flipping it via the Users page) without
+    // that account actually being allowed admin access — the allowlist above
+    // is what's authoritative, so downgrade here rather than trust the column.
+    const role = rows[0].role === "admin" && !isAllowedAdminEmail(data.user.email ?? "") ? "user" : rows[0].role;
+
     req.user = {
       id: data.user.id,
       email: data.user.email ?? "",
       displayName: rows[0].display_name,
-      role: rows[0].role
+      role
     };
   } catch (err) {
     console.error("[auth] token verification failed:", (err as Error).message);
